@@ -1,6 +1,6 @@
 # One project task. The same conversation when you return.
 
-**Codex Desk v0.1.0a15** — find a saved conversation, read its tool evidence, give it one next task, then return to the same native thread.
+**Codex Desk** — find a saved conversation, read its tool evidence, give it one next task, then return to the same native thread.
 
 ![Five-panel Codex Desk walkthrough: exact project and title search, saved MCP success and deliberate failure, an unsent verification task, same-session return, and optional reviewed handoff](images/task-walkthrough.png)
 
@@ -8,20 +8,9 @@
 
 ## Install and open
 
-Requires **Python 3.11+** and a complete, configured [Codex CLI](https://developers.openai.com/codex/cli). In the shell you will use for Desk:
+Requires **Python 3.11+** and a complete, configured [Codex CLI](https://developers.openai.com/codex/cli). Check `codex --version` in the shell you will use for Desk.
 
-```sh
-python3 --version
-codex --version
-mkdir -p "$HOME/codex-desk-install"
-cd "$HOME/codex-desk-install"
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
-codex-desk
-```
-
-Open the printed loopback URL, normally **http://127.0.0.1:8787**. [Windows PowerShell and 中文 first-project guide](first-project.zh-CN.md).
+Follow the [maintained installer](../README.md#install-the-preview), choosing **Linux/macOS/WSL** or **Windows PowerShell** commands. It creates an isolated installation and installs the current published preview without Git. Launch Desk, then open its printed loopback URL, normally **http://127.0.0.1:8787**. [中文 first-project guide](first-project.zh-CN.md).
 
 ## A 90-second walkthrough
 

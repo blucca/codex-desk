@@ -2,7 +2,7 @@
 
 [五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
 
-适用于 **v0.1.0a15**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+适用于当前预览版。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
 
@@ -12,32 +12,9 @@
 
 准备 **Python 3.11+** 和完整的 **Codex CLI**。先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。当前原生集成已在 **Linux / Codex CLI 0.171.0** 上运行验证。
 
-先确认下面的 Python 版本输出为 3.11 或更高，再在独立的安装目录创建虚拟环境；网页中选择实际项目目录。发布包安装不需要 Git。
+先在同一终端确认 `python3 --version`（Windows 用 `py -3 --version`）为 3.11 或更高，且 `codex --version` 可用。
 
-**Linux / macOS / WSL：**
-
-```sh
-python3 --version
-codex --version
-mkdir -p "$HOME/codex-desk-install"
-cd "$HOME/codex-desk-install"
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
-codex-desk
-```
-
-**Windows PowerShell：**
-
-```powershell
-py -3 --version
-codex --version
-New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
-Set-Location "$HOME\codex-desk-install"
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
-.\.venv\Scripts\codex-desk.exe
-```
+按[维护中的安装步骤](../README.md#install-the-preview)选择 **Linux/macOS/WSL** 或 **Windows PowerShell** 命令，在独立安装目录创建虚拟环境、安装当前已发布预览包并启动 Desk。发布包安装不需要 Git；网页中再选择实际项目目录。安装包地址以该页面为准。
 
 Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打印的完整地址。需要指定 Codex 启动器或手动打开浏览器时，可用 `codex-desk --codex /path/to/codex --no-browser`。
 
