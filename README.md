@@ -2,7 +2,11 @@
 
 A local project workbench for native Codex: reopen a project, continue its actual conversation, and see the provider, command results, failures and native usage together.
 
-## Development preview
+![Native MCP results in Codex Desk](docs/workflow.png)
+
+*Own synthetic MCP example: text and structured results, a deliberate tool failure, and the reopened conversation.*
+
+## Install the preview
 
 Requires Python 3.11+ and an existing complete Codex CLI installation. [Install and sign in to Codex CLI](https://developers.openai.com/codex/cli) first, then check `codex --version` in the shell you will use for Desk. The current native integration was exercised with CLI **0.171.0 on Linux**.
 
@@ -11,7 +15,7 @@ Requires Python 3.11+ and an existing complete Codex CLI installation. [Install 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a6
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
 codex-desk
 ```
 
@@ -19,17 +23,19 @@ codex-desk
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a6
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
-Or run from source without installation:
+The release wheel installs without Git. To run from a downloaded or cloned source directory:
 
 ```sh
 python3 -m codex_desk.server
 ```
 
-The server prints `http://127.0.0.1:8787` and opens it in your browser. Select an existing project folder and either your current Codex settings or a provider-only `NAME.config.toml` in your Codex home. Native file profiles have distinct IDs from current settings, including a file profile named `default`; older stored profile names remain readable. Use **Add API provider** to save a new provider profile from your existing API key, base URL and model. Run a task. Close the browser, reopen it, and continue the same native conversation. Restarting Desk reattaches completed native conversations; native Codex only writes an unused blank thread's rollout after its first turn, so an unused blank workspace may get a fresh thread on reopening.
+The server prints `http://127.0.0.1:8787` and opens it in your browser. Choose **Open a project**, enter its folder, and select your current Codex settings or a retained provider profile. **Find existing sessions** lists the saved conversations for that project: resume the one you want, or explicitly **Start new conversation**. You can also browse all native history from the sidebar.
+
+Use **Add API provider** to save a provider profile from your existing API key, base URL and model. Native file profiles have distinct IDs from current settings, including a file named `default`. Restarting Desk resumes saved conversations; native Codex writes a blank thread's rollout after its first turn, so an unused blank workspace may get a fresh thread on reopening.
 
 ```sh
 codex-desk --codex /path/to/codex --no-browser
@@ -42,34 +48,32 @@ Existing keys remain in your Codex configuration or inherited process environmen
 
 The workbench saves project/profile/native-thread bindings and activity in a local SQLite file (`~/.local/state/codex-desk/desk.sqlite3` by default). Activity includes your task text and local command output. It is not sent to a hosted Desk service.
 
-## First project loop
+## Bring your existing work
 
-1. Open a project you already work on. Keep **Current Codex settings** for the first task.
-2. Ask: “Find this project's verification command, run it, and report the exact pass/failure result. Do not edit files.” Approve the native command if asked.
-3. Close the browser. Reopen Desk and the same named session: the command, output and conversation are still there. Give it your next project task.
-4. For an intentional provider switch, choose **Continue with another provider**. Review the actual tool evidence, write the next goal, and select your other profile. This starts a separate native thread; it leaves the original conversation intact.
+1. Choose **Open a project** → enter your project folder → **Find existing sessions**. Keep **Current Codex settings** for the first resume.
+2. Resume your saved conversation. Check its prior messages, command output and tool results before sending anything.
+3. Give it one small next task, such as “Find this project's verification command, run it, and report the exact pass/failure result. Do not edit files.” Approve the native command if asked.
+4. Close the browser, reopen Desk and choose the same named session. Continue from its actual saved history.
 
-Already use MCP tools in Codex? Desk inherits those settings and shows their text/structured results and failures. Tool evidence is included in the reviewed handoff; media and embedded resources are represented without fetching external content.
+For a fresh task, choose **Start new conversation** instead of resuming an existing one.
 
-## Current vertical slice
+### When changing provider
 
-- Project-bound provider choice and persistent, named workspace list; importing the same native conversation/profile reopens its existing workspace.
-- First-task titles and editable session names, synced through native `thread/name/set` for saved conversations. Blank-workspace names stay local until the first turn persists.
-- Native `thread/start`, `thread/resume`, `turn/start` and interruption. Failed opens can be retried with the existing native thread/profile.
-- Project-isolated unsent task drafts while navigating within the page; a late response from another session leaves the current draft and approvals intact. Drafts live in page memory until submitted or the page is closed.
-- Live native task, command, answer, failure and usage events.
-- Readable MCP calls, arguments, progress, text/structured results and failures; imported dynamic-tool evidence.
-- Media/resource descriptors instead of expanded binary payloads; application-private MCP metadata is excluded from the handoff.
-- One-time native command/file-change approval decisions.
-- Native questions with selectable answers or private text input.
-- Work/Plan mode choice with the native planning protocol; mode selection survives reload and Work explicitly exits a previous Plan mode.
-- Browse and read existing native history, including actual command output and exits.
-- Review/edit a visible-evidence handoff, choose an existing provider profile, and start a new native conversation with an explicit next task.
-- Last reported cumulative thread usage; cached input is not added to total input.
+Choose **Continue with another provider** in an open session, or **Review handoff** beside a saved conversation. Review the visible messages, commands, file changes and MCP results; state the next goal and select the target profile. Desk starts a **distinct native thread** with that reviewed text, leaving the original rollout intact. Reading a handoff does not run a model turn or attempt compaction through the old provider. Encrypted reasoning is not replayed into the new thread.
 
-Dedicated MCP forms, provider editing, model catalogs and platform packaging remain implementation work. Existing history resumes with the current selected Codex settings; a handoff starts a distinct native thread using the chosen profile. Unsupported native interactions have an explicit stop path. Closing the **browser** does not stop its backend task; stopping the **Desk server** terminates its owned app-server processes. This preview does not attach to an already-running desktop backend.
+This is useful when the old provider is unavailable and you want to carry useful task evidence into a fresh conversation. The target profile must name the endpoint/model you intend to use. Same-thread resume uses the current selected settings.
 
-Provider choice stays with you. The Add Provider form includes optional, explicitly labeled CometAPI and 88API affiliate account links; using them can earn Blucca a commission. The client uses the profile you select.
+## Daily workbench
+
+- Named project sessions, saved native history and same-thread reopen.
+- Native tasks, command/file approvals, questions, interruption and Work/Plan modes.
+- Live command output, edits, MCP text/structured results, failures and latest cumulative native thread usage.
+- Project-bound unsent drafts while switching sessions in the page.
+- Reviewed provider handoffs with visible tool evidence; media/resource descriptors without external fetching.
+
+The ordinary workbench owns its app-server processes. Closing the browser leaves its backend task running; stopping the Desk server terminates its owned app-servers. An already-running Desktop backend is inspected separately below.
+
+Provider choice stays with you. The Add Provider form includes optional, explicitly labeled CometAPI and 88API affiliate account links; using them can earn Blucca a commission.
 
 ## Feedback
 
@@ -91,9 +95,10 @@ The optional browser regression checks use controlled two-project responses, wit
 python3 -m pip install playwright
 python3 -m playwright install chromium
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_navigation.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_onboarding.py
 ```
 
-They cover a slow older open, rapid duplicate submission, switching projects while a turn/approval response is pending, unsent drafts, and retrying a failed open. Set `DESK_CHROMIUM` to use an existing Chromium executable.
+The onboarding check covers project-filtered native history, explicit existing/new choice, failed catalog recovery and stale folder/dialog responses. The navigation check covers a slow older open, rapid duplicate submission, switching projects while a turn/approval response is pending, unsent drafts, and retrying a failed open. Set `DESK_CHROMIUM` to use an existing Chromium executable.
 
 ## License
 

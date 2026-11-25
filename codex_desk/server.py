@@ -46,10 +46,15 @@ class Desk:
         if not row:
             raise ValueError('Select an existing Codex profile')
         return row['id']
-    def create(self, cwd, profile, name=None):
+    def project_path(self, cwd):
+        if not cwd:
+            raise ValueError("Select a project directory")
         path = Path(cwd).expanduser().resolve(strict=True)
         if not path.is_dir():
             raise ValueError("Select a project directory")
+        return path
+    def create(self, cwd, profile, name=None):
+        path = self.project_path(cwd)
         profile = self.profile_id(profile)
         identifier = self.store.create(str(path), profile, name=name)
         self.open(identifier)
@@ -128,10 +133,10 @@ def handler(desk):
                 if url.path == '/api/state':
                     return self.reply({'profiles': profiles(desk.home), 'sessions': [s for s in desk.store.sessions() if s['id'] != 'native-catalog'], 'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
                 if url.path == '/api/native':
-                    params = parse_qs(url.query)
+                    params = parse_qs(url.query, keep_blank_values=True)
                     options = {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
-                    if params.get('cwd'):
-                        options['cwd'] = params['cwd'][0]
+                    if 'cwd' in params:
+                        options['cwd'] = str(desk.project_path(params['cwd'][0]))
                     if params.get('cursor'):
                         options['cursor'] = params['cursor'][0]
                     return self.reply(desk.catalog().request('thread/list', options))

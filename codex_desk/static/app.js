@@ -3,6 +3,7 @@ let state = {profiles: [], sessions: []}, selected = null, after = 0, items = ne
 const nodes = new Map();
 let modeSelected=null, generation=0, opening=false, refreshVersion=0;
 const drafts=new Map(), submitting=new Set();
+let projectVersion=0, projectCursor=null, projectQuery=null, projectOpening=false;
 async function api(path, data) {
   const r = await fetch(path, data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
   const v = await r.json(); if (!r.ok) throw new Error(v.error || 'Request failed'); return v;
@@ -125,9 +126,53 @@ function profileInfo() {
   const p=state.profiles.find(p=>p.id===$('profile').value);
   $('profile-info').textContent=p?`${p.provider || 'Current default'} / ${p.model || 'Configured model'}${p.endpoint?' · '+p.endpoint:''}`:'';
 }
-$('new').onclick=()=>{ $('profile').replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));profileInfo();$('project').showModal();};
+function resetProject() {
+  ++projectVersion;projectCursor=null;projectQuery=null;projectOpening=false;
+  $('project-list').replaceChildren();$('project-results').hidden=true;$('project-more').hidden=true;
+  $('project-error').hidden=true;projectBusy(false);
+}
+function projectBusy(busy) {
+  for(const id of ['cwd','profile','session-name','project-find','project-more','project-new'])$(id).disabled=busy;
+  for(const b of $('project-list').querySelectorAll('button'))b.disabled=busy;
+}
+function projectCurrent(version, query) {return version===projectVersion && $('project').open && query===$('cwd').value;}
+function projectError(e) {$('project-error').textContent=e.message;$('project-error').hidden=false;}
+async function findProject(cursor=null) {
+  if(projectOpening)return;
+  if(cursor && projectQuery!==$('cwd').value)return;
+  if(!cursor)resetProject();
+  const current=projectVersion, query=$('cwd').value;projectQuery=query;
+  $('project-error').hidden=true;$('project-find').disabled=true;$('project-more').disabled=true;
+  $('project-results').hidden=false;$('project-summary').textContent='Looking for saved conversations…';
+  try {
+    const data=await api('/api/native?cwd='+encodeURIComponent(query)+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+    if(!projectCurrent(current,query))return;
+    for(const t of data.data || [])$('project-list').append(nativeRow(t,
+      ()=>openProjectChoice(()=>api('/api/import',{thread:t.id,profile:$('profile').value}),current,query),null,'Resume this conversation'));
+    projectCursor=data.nextCursor;$('project-more').hidden=!projectCursor;
+    $('project-summary').textContent=$('project-list').children.length?'Choose a saved conversation to keep its context, or start a new one.':'No saved conversations in this project. Start a new conversation below.';
+    if(projectOpening)projectBusy(true);
+  } catch(e) {
+    if(projectCurrent(current,query)){if(!cursor)$('project-results').hidden=true;projectError(e);}
+  } finally {
+    if(projectCurrent(current,query)){$('project-find').disabled=projectOpening;$('project-more').disabled=projectOpening;}
+  }
+}
+async function openProjectChoice(action, current=projectVersion, query=$('cwd').value) {
+  if(projectOpening || !projectCurrent(current,query))return;
+  projectOpening=true;projectBusy(true);$('project-error').hidden=true;
+  try {
+    const r=await action();if(!projectCurrent(current,query))return;
+    $('project').close();await open(r.id);
+  } catch(e) {if(projectCurrent(current,query))projectError(e);}
+  finally {if(current===projectVersion){projectOpening=false;projectBusy(false);}}
+}
+$('new').onclick=()=>{resetProject();fillProfiles($('profile'));profileInfo();$('project').showModal();};
 $('profile').onchange=profileInfo;$('cancel').onclick=()=>$('project').close();
-$('create').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const r=await api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null});$('project').close();await open(r.id);}catch(err){$('project').close();error(err);}finally{b.disabled=false;}};
+$('cwd').oninput=resetProject;$('project').addEventListener('close',()=>{if(!$('project').open)resetProject();});
+$('create').onsubmit=async e=>{e.preventDefault();await findProject();};
+$('project-more').onclick=()=>findProject(projectCursor);
+$('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
 $('prompt').oninput=()=>{if(selected)drafts.set(selected,$('prompt').value);};
 $('task').onsubmit=async e=>{
   e.preventDefault();if(!selected || opening || submitting.has(selected) || $('send').disabled)return;
@@ -147,14 +192,17 @@ async function tick(){try{if(selected && !opening){const current=generation;cons
 (async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
 
 let nativeCursor=null;
+function nativeRow(t, resume, handoff, label='Resume with current settings') {
+  const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
+  const actions=make('div','','actions'),view=make('button',label);view.type='button';view.onclick=resume;actions.append(view);
+  if(handoff){const review=make('button','Review handoff');review.type='button';review.onclick=handoff;actions.append(review);}
+  box.append(actions);return box;
+}
 async function nativeList(cursor=null) {
   const data=await api('/api/native'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
   if(!cursor)$('native-list').replaceChildren();
   for(const t of data.data || []) {
-    const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
-    const action=make('div','','actions'),view=make('button','Resume with current settings'),handoff=make('button','Review handoff');
-    view.onclick=async()=>{try{const r=await api('/api/import',{thread:t.id,profile:'default'});$('history').close();await open(r.id);}catch(e){error(e);}};
-    handoff.onclick=()=>showHandoff(t.id,t.cwd);action.append(view,handoff);box.append(action);$('native-list').append(box);
+    $('native-list').append(nativeRow(t,async()=>{try{const r=await api('/api/import',{thread:t.id,profile:'default'});$('history').close();await open(r.id);}catch(e){error(e);}},()=>showHandoff(t.id,t.cwd)));
   }
   nativeCursor=data.nextCursor;$('more').hidden=!nativeCursor;
 }
