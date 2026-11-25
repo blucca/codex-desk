@@ -132,33 +132,50 @@ function resetProject() {
   $('project-error').hidden=true;projectBusy(false);
 }
 function projectBusy(busy) {
-  for(const id of ['cwd','profile','session-name','project-find','project-more','project-new'])$(id).disabled=busy;
+  for(const id of ['cwd','profile','project-search','session-name','project-find','project-more','project-new'])$(id).disabled=busy;
   for(const b of $('project-list').querySelectorAll('button'))b.disabled=busy;
 }
-function projectCurrent(version, query) {return version===projectVersion && $('project').open && query===$('cwd').value;}
+function projectFilter() {return {cwd:$('cwd').value,search:$('project-search').value.trim()};}
+function projectCurrent(version, query) {
+  const current=projectFilter();
+  return version===projectVersion && $('project').open && query.cwd===current.cwd && query.search===current.search;
+}
+function historyPath(search, cwd=null, cursor=null) {
+  const params=new URLSearchParams();
+  if(search)params.set('search',search);
+  if(cwd!==null)params.set('cwd',cwd);
+  if(cursor)params.set('cursor',cursor);
+  const query=params.toString();return '/api/native'+(query?'?'+query:'');
+}
+function projectSummary(query) {
+  const count=$('project-list').children.length;
+  $('project-summary').textContent=count
+    ? (query.search?`Saved conversations with titles matching “${query.search}”. `:'')+'Choose a saved conversation to keep its context, or start a new one.'
+    : (query.search?`No saved conversation titles match “${query.search}” in this project.`:'No saved conversations in this project.')+' Start a new conversation below.';
+}
 function projectError(e) {$('project-error').textContent=e.message;$('project-error').hidden=false;}
 async function findProject(cursor=null) {
   if(projectOpening)return;
-  if(cursor && projectQuery!==$('cwd').value)return;
+  if(cursor && (!projectQuery || !projectCurrent(projectVersion,projectQuery) || $('project-more').disabled))return;
   if(!cursor)resetProject();
-  const current=projectVersion, query=$('cwd').value;projectQuery=query;
+  const current=projectVersion, query=projectFilter();projectQuery=query;
   $('project-error').hidden=true;$('project-find').disabled=true;$('project-more').disabled=true;
-  $('project-results').hidden=false;$('project-summary').textContent='Looking for saved conversations…';
+  $('project-results').hidden=false;$('project-summary').textContent=query.search?`Searching conversation titles for “${query.search}”…`:'Looking for saved conversations…';
   try {
-    const data=await api('/api/native?cwd='+encodeURIComponent(query)+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+    const data=await api(historyPath(query.search,query.cwd,cursor));
     if(!projectCurrent(current,query))return;
     for(const t of data.data || [])$('project-list').append(nativeRow(t,
       ()=>openProjectChoice(()=>api('/api/import',{thread:t.id,profile:$('profile').value}),current,query),null,'Resume this conversation'));
     projectCursor=data.nextCursor;$('project-more').hidden=!projectCursor;
-    $('project-summary').textContent=$('project-list').children.length?'Choose a saved conversation to keep its context, or start a new one.':'No saved conversations in this project. Start a new conversation below.';
+    projectSummary(query);
     if(projectOpening)projectBusy(true);
   } catch(e) {
-    if(projectCurrent(current,query)){if(!cursor)$('project-results').hidden=true;projectError(e);}
+    if(projectCurrent(current,query)){if(!cursor)$('project-results').hidden=true;else projectSummary(query);projectError(e);}
   } finally {
     if(projectCurrent(current,query)){$('project-find').disabled=projectOpening;$('project-more').disabled=projectOpening;}
   }
 }
-async function openProjectChoice(action, current=projectVersion, query=$('cwd').value) {
+async function openProjectChoice(action, current=projectVersion, query=projectFilter()) {
   if(projectOpening || !projectCurrent(current,query))return;
   projectOpening=true;projectBusy(true);$('project-error').hidden=true;
   try {
@@ -169,7 +186,8 @@ async function openProjectChoice(action, current=projectVersion, query=$('cwd').
 }
 $('new').onclick=()=>{resetProject();fillProfiles($('profile'));profileInfo();$('project').showModal();};
 $('profile').onchange=profileInfo;$('cancel').onclick=()=>$('project').close();
-$('cwd').oninput=resetProject;$('project').addEventListener('close',()=>{if(!$('project').open)resetProject();});
+$('cwd').oninput=resetProject;$('project-search').oninput=resetProject;
+$('project').addEventListener('close',()=>{if(!$('project').open)resetProject();});
 $('create').onsubmit=async e=>{e.preventDefault();await findProject();};
 $('project-more').onclick=()=>findProject(projectCursor);
 $('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
@@ -191,28 +209,68 @@ let failures=0;
 async function tick(){try{if(selected && !opening){const current=generation;const rows=await api(`/api/events?session=${selected}&after=${after}`);if(current!==generation)return;for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
 (async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
 
-let nativeCursor=null;
+let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;
 function nativeRow(t, resume, handoff, label='Resume with current settings') {
   const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
-  const actions=make('div','','actions'),view=make('button',label);view.type='button';view.onclick=resume;actions.append(view);
+  const actions=make('div','','actions'),view=make('button',label);view.type='button';
+  view.onclick=async()=>{
+    if(view.disabled)return;
+    view.disabled=true;
+    try {await resume();} finally {view.disabled=false;}
+  };actions.append(view);
   if(handoff){const review=make('button','Review handoff');review.type='button';review.onclick=handoff;actions.append(review);}
   box.append(actions);return box;
 }
+function resetNative() {
+  ++nativeVersion;nativeCursor=null;nativeQuery=null;nativeLoading=false;
+  $('native-list').replaceChildren();$('more').hidden=true;$('more').disabled=false;
+  $('history-search-submit').disabled=false;$('history-error').hidden=true;
+  $('history-summary').textContent='Choose Search titles to find saved conversations. Leave the search blank to list them without a title filter.';
+}
+function nativeCurrent(version, query) {return version===nativeVersion && $('history').open && query===$('history-search').value.trim();}
+function nativeSummary(query) {
+  const count=$('native-list').children.length;
+  $('history-summary').textContent=count
+    ? (query?`Saved conversations with titles matching “${query}”. `:'')+'Resume with current settings, or review a handoff.'
+    : query?`No saved conversation titles match “${query}”.`:'No saved conversations found.';
+}
 async function nativeList(cursor=null) {
-  const data=await api('/api/native'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
-  if(!cursor)$('native-list').replaceChildren();
-  for(const t of data.data || []) {
-    $('native-list').append(nativeRow(t,async()=>{try{const r=await api('/api/import',{thread:t.id,profile:'default'});$('history').close();await open(r.id);}catch(e){error(e);}},()=>showHandoff(t.id,t.cwd)));
+  const query=$('history-search').value.trim();
+  if(cursor && (nativeLoading || nativeQuery!==query || !nativeCursor))return;
+  if(!cursor)resetNative();
+  const current=nativeVersion;nativeQuery=query;nativeLoading=true;
+  $('history-error').hidden=true;$('history-search-submit').disabled=true;$('more').disabled=true;
+  $('history-summary').textContent=query?`Searching conversation titles for “${query}”…`:'Looking for saved conversations…';
+  try {
+    const data=await api(historyPath(query,null,cursor));
+    if(!nativeCurrent(current,query))return;
+    for(const t of data.data || []) {
+      $('native-list').append(nativeRow(t,async()=>{
+        if(!nativeCurrent(current,query))return;
+        try {const r=await api('/api/import',{thread:t.id,profile:'default'});if(!nativeCurrent(current,query))return;$('history').close();await open(r.id);}
+        catch(e){if(nativeCurrent(current,query))error(e);}
+      },()=>{if(nativeCurrent(current,query))showHandoff(t.id,t.cwd,()=>nativeCurrent(current,query));}));
+    }
+    nativeCursor=data.nextCursor;$('more').hidden=!nativeCursor;nativeSummary(query);
+  } catch(e) {
+    if(nativeCurrent(current,query)) {
+      if(cursor)nativeSummary(query);else $('history-summary').textContent='Could not load saved conversations. Retry Search titles.';
+      $('history-error').textContent=e.message;$('history-error').hidden=false;
+    }
+  } finally {
+    if(nativeCurrent(current,query)){nativeLoading=false;$('history-search-submit').disabled=false;$('more').disabled=false;}
   }
-  nativeCursor=data.nextCursor;$('more').hidden=!nativeCursor;
 }
 function fillProfiles(select) {select.replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));}
-async function showHandoff(thread,cwd) {
+async function showHandoff(thread,cwd,valid=()=>true) {
   const current=generation;
-  try {const r=await api('/api/handoff',{thread});if(current!==generation)return;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation)error(e);}
+  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
 }
-$('browse').onclick=async()=>{try{$('history').showModal();await nativeList();}catch(e){$('history').close();error(e);}};
-$('more').onclick=async()=>{try{await nativeList(nativeCursor);}catch(e){error(e);}};
+$('browse').onclick=()=>{$('history').showModal();nativeList();};
+$('history-search').oninput=resetNative;
+$('history-search-form').onsubmit=e=>{e.preventDefault();nativeList();};
+$('history').addEventListener('close',()=>{if(!$('history').open)resetNative();});
+$('more').onclick=()=>nativeList(nativeCursor);
 $('history-close').onclick=()=>$('history').close();$('preview-close').onclick=()=>$('preview').close();
 $('handoff').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)showHandoff(s.thread_id,s.cwd);};
 $('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal:$('handoff-goal').value});$('preview').close();await open(r.id);}catch(e){error(e);}finally{b.disabled=false;}};

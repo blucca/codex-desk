@@ -1,6 +1,6 @@
 # Codex Desk：打开第一个项目，继续已有会话
 
-适用于 **v0.1.0a7**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+适用于 **v0.1.0a8**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
 
@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a8/codex_desk-0.1.0a8-py3-none-any.whl
 codex-desk
 ```
 
@@ -33,7 +33,7 @@ codex --version
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a8/codex_desk-0.1.0a8-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -46,7 +46,11 @@ Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打�
 3. 点击 **Find existing sessions**，查看这个项目的 **Saved conversations**；需要更多结果时点击 **Load more**。
 4. 找到要继续的会话，点击 **Resume this conversation**。要开始独立的新任务，则填写可选的 **New conversation name (optional)**，点击 **Start new conversation**。
 
-侧栏的 **Browse existing Codex sessions** 可浏览全部原生历史；其中 **Resume with current settings** 使用当前 Codex 配置。新建但还未发送过任务的空会话，原生 Codex 尚未写入会话记录（rollout），重启后可能获得新的原生线程（thread）；已使用过的会话按保存的 thread 续接。
+若已知部分会话标题，在 **Search conversation titles** 输入这些文字，再点击 **Find existing sessions** 或按 Enter。侧栏的 **Browse existing Codex sessions** 可跨项目浏览所选 Codex home 中的原生会话；在其中输入标题文字并点击 **Search titles**。修改搜索文字会清空旧结果和分页，需要再次提交；标题框留空则列出当前范围内的会话，**Load more** 继续同一次搜索和范围。
+
+项目列表按会话保存的工作目录（`cwd`）精确匹配：在子目录中创建的会话，需要输入该子目录或使用侧栏的全局浏览。标题搜索按子串匹配原生提取出的会话标题，不搜索消息正文、命令输出或 MCP 结果。
+
+全局列表中的 **Resume with current settings** 使用当前 Codex 配置。新建但还未发送过任务的空会话，原生 Codex 尚未写入会话记录（rollout），重启后可能获得新的原生线程（thread）；已使用过的会话按保存的 thread 续接。
 
 ## 3. 先看证据，再发一个只读任务
 

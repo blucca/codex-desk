@@ -137,6 +137,9 @@ def handler(desk):
                     options = {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
                     if 'cwd' in params:
                         options['cwd'] = str(desk.project_path(params['cwd'][0]))
+                    search = params.get('search', [''])[0].strip()
+                    if search:
+                        options['searchTerm'] = search
                     if params.get('cursor'):
                         options['cursor'] = params['cursor'][0]
                     return self.reply(desk.catalog().request('thread/list', options))
