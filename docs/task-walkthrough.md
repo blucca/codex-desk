@@ -1,6 +1,6 @@
 # One project task. The same conversation when you return.
 
-**Codex Desk v0.1.0a10** — find a saved conversation, read its tool evidence, give it one next task, then return to the same native thread.
+**Codex Desk v0.1.0a11** — find a saved conversation, read its tool evidence, give it one next task, then return to the same native thread.
 
 ![Five-panel Codex Desk walkthrough: exact project and title search, saved MCP success and deliberate failure, an unsent verification task, same-session return, and optional reviewed handoff](images/task-walkthrough.png)
 
@@ -17,7 +17,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
 codex-desk
 ```
 
