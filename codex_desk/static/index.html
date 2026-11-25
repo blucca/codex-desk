@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Codex Desk</title><link rel="stylesheet" href="/style.css"></head><body>
+<aside><div class="brand">◈ Codex Desk <span>LOCAL</span></div><p class="muted">Your projects. Your providers.<br>Your actual Codex sessions.</p><button id="new">+ Open a project</button><div id="sessions"></div><footer>Native Codex does the work.<br>Settings and keys stay on this machine.</footer></aside>
+<main><header><div><h1 id="title">Pick up where you left off</h1><p id="binding">Project-bound sessions, without rewriting your Codex settings.</p></div><span id="status">Ready</span></header>
+<div id="error" role="alert" hidden></div>
+<section id="welcome"><h2>One place to continue the day's work.</h2><p>Open an existing project, choose your current Codex setup or retained provider profile, and run a real task. Come back to the same project and native conversation tomorrow.</p><p>Profiles are loaded from your Codex home. No account signup or new API key is required here.</p></section>
+<section id="activity" aria-live="polite"></section><section id="approvals"></section>
+<div id="usage"></div><form id="task" hidden><textarea id="prompt" rows="3" placeholder="What should Codex do in this project?" required></textarea><div class="actions"><span>Runs in the selected project with native Codex permissions.</span><button type="button" id="stop">Stop turn</button><button id="send">Run task</button></div></form>
+</main>
+<dialog id="project"><form id="create"><h2>Open a project</h2><label>Project folder<input id="cwd" placeholder="/home/you/projects/my-app" required></label><label>Provider profile<select id="profile"></select></label><p id="profile-info" class="muted"></p><div class="actions"><button type="button" id="cancel">Cancel</button><button>Open workspace</button></div></form></dialog>
+<script src="/app.js"></script></body></html>
