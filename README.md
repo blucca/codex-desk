@@ -9,7 +9,7 @@ Requires Python 3.11+ and an existing complete Codex CLI installation. The curre
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a3
+python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a4
 codex-desk
 ```
 
@@ -19,7 +19,7 @@ Or run from source without installation:
 python3 -m codex_desk.server
 ```
 
-The server prints `http://127.0.0.1:8787` and opens it in your browser. Select an existing project folder and either your current Codex settings or a provider-only `NAME.config.toml` in your Codex home. Use **Add API provider** to save a new provider profile from your existing API key, base URL and model. Run a task. Close the browser, reopen it, and continue the same native conversation. Restarting Desk reattaches completed native conversations; native Codex only writes an unused blank thread's rollout after its first turn, so an unused blank workspace may get a fresh thread on reopening.
+The server prints `http://127.0.0.1:8787` and opens it in your browser. Select an existing project folder and either your current Codex settings or a provider-only `NAME.config.toml` in your Codex home. Native file profiles have distinct IDs from current settings, including a file profile named `default`; older stored profile names remain readable. Use **Add API provider** to save a new provider profile from your existing API key, base URL and model. Run a task. Close the browser, reopen it, and continue the same native conversation. Restarting Desk reattaches completed native conversations; native Codex only writes an unused blank thread's rollout after its first turn, so an unused blank workspace may get a fresh thread on reopening.
 
 ```sh
 codex-desk --codex /path/to/codex --no-browser
@@ -32,7 +32,7 @@ The workbench saves project/profile/native-thread bindings and activity in a loc
 
 ## Current vertical slice
 
-- Project-bound provider choice and persistent, named workspace list.
+- Project-bound provider choice and persistent, named workspace list; importing the same native conversation/profile reopens its existing workspace.
 - First-task titles and editable session names, synced through native `thread/name/set` for saved conversations. Blank-workspace names stay local until the first turn persists.
 - Native `thread/start`, `thread/resume`, `turn/start` and interruption.
 - Live native task, command, answer, failure and usage events.

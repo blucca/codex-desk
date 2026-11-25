@@ -8,17 +8,18 @@ async function api(path, data) {
 }
 function error(e) { $('error').textContent = e.message; $('error').hidden = false; }
 function make(tag, text, cls) { const node = document.createElement(tag); if(text) node.textContent=text; if(cls) node.className=cls; return node; }
+function profileLabel(id){return state.profiles.find(p=>p.id===id || p.legacy_id===id)?.name || id;}
 function draw() {
   $('sessions').replaceChildren();
   for(const s of state.sessions) {
     const b = make('button', '', 'session' + (s.id===selected?' selected':''));
     b.title=s.cwd;
-    b.append(make('strong', s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1)), make('small', `${s.cwd.split(/[\\/]/).filter(Boolean).at(-1) || s.cwd} · ${s.profile} · ${s.status}`));
+    b.append(make('strong', s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1)), make('small', `${s.cwd.split(/[\\/]/).filter(Boolean).at(-1) || s.cwd} · ${profileLabel(s.profile)} · ${s.status}`));
     b.onclick=()=>open(s.id); $('sessions').append(b);
   }
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
   $('title').textContent=s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1);$('rename').hidden=false;
-  $('binding').textContent=`${s.cwd}\n${s.profile} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
+  $('binding').textContent=`${s.cwd}\n${profileLabel(s.profile)} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
   if(modeSelected!==selected){$('turn-mode').value=s.mode || 'native';modeSelected=selected;}
   $('turn-mode').disabled=['running','approval','starting'].includes(s.status);
   $('status').textContent=s.status; $('send').disabled=['running','approval','starting'].includes(s.status);

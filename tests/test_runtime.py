@@ -30,11 +30,16 @@ class PersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             home=Path(folder)
             result=save_profile(home,'my-api','http://127.0.0.1:9999/v1','fixture','local-test-secret')
-            self.assertEqual(result,{'id':'my-api'})
+            self.assertEqual(result,{'id':'sidecar:my-api'})
             self.assertEqual((home/'my-api.config.toml').stat().st_mode & 0o777,0o600)
             self.assertNotIn('local-test-secret',str(profiles(home)))
             self.assertEqual(profile_config(home,'my-api')['model'],'fixture')
             with self.assertRaises(ValueError):save_profile(home,'my-api','https://example.com/v1','other','other')
+            default=save_profile(home,'default','https://example.com/v1','sidecar-default','test-default')
+            self.assertEqual(default['id'],'sidecar:default')
+            self.assertEqual(profile_config(home,'sidecar:default')['model'],'sidecar-default')
+            self.assertIsNone(profile_config(home,'default'))
+            self.assertEqual(profiles(home)[0]['id'],'default')
             with self.assertRaises(ValueError):save_profile(home,'../other','https://example.com/v1','other','other')
 
 if __name__=='__main__':unittest.main()

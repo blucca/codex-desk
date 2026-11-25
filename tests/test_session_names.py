@@ -153,6 +153,9 @@ class SessionNamesTests(unittest.TestCase):
         self.assertEqual(desk.store.get(unnamed['id'])['name'], 'First user task')
         self.assertEqual(desk.runtimes, {})
         self.assertEqual(desk.store.get(named['id'])['thread_id'], 'native-a')
+        again = desk.import_thread('native-b', 'default')
+        self.assertEqual(again['id'], unnamed['id'])
+        self.assertEqual(len(desk.store.sessions()), 2)
 
     def test_plan_mode_and_explicit_return_to_native(self):
         identifier = self.store.create(str(self.path), 'default')

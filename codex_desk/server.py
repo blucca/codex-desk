@@ -35,12 +35,18 @@ class Desk:
                 self.runtimes.pop(identifier, None)
                 self.store.update(identifier, status="failed", error="Native session could not open")
                 raise
+    def profile_id(self, value):
+        rows = profiles(self.home)
+        row = next((p for p in rows if p['id'] == value), None)
+        row = row or next((p for p in rows if p.get('legacy_id') == value), None)
+        if not row:
+            raise ValueError('Select an existing Codex profile')
+        return row['id']
     def create(self, cwd, profile, name=None):
         path = Path(cwd).expanduser().resolve(strict=True)
         if not path.is_dir():
             raise ValueError("Select a project directory")
-        if profile not in {p['id'] for p in profiles(self.home)}:
-            raise ValueError("Select an existing Codex profile")
+        profile = self.profile_id(profile)
         identifier = self.store.create(str(path), profile, name=name)
         self.open(identifier)
         return {"id": identifier}
@@ -69,8 +75,11 @@ class Desk:
         cwd = Path(thread['cwd'])
         if not cwd.is_dir():
             raise ValueError('The saved project folder no longer exists; open a new workspace and hand off there')
-        if profile not in {p['id'] for p in profiles(self.home)}:
-            raise ValueError('Select an existing profile')
+        profile = self.profile_id(profile)
+        existing = next((s for s in self.store.sessions()
+            if s['thread_id'] == thread_id and (s['profile'] if s['profile'] == 'default' or s['profile'].startswith('sidecar:') else 'sidecar:' + s['profile']) == profile), None)
+        if existing:
+            return {'id': existing['id'], 'thread': thread}
         # Import is read-only. Native resume happens only when the user opens it.
         identifier = self.store.create(str(cwd), profile)
         self.store.update(identifier, thread_id=thread['id'], model=thread.get('model'),

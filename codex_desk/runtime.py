@@ -55,7 +55,8 @@ def profiles(home):
             data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             continue
-        identifier = "default" if path.name == "config.toml" else path.name.removesuffix(".config.toml")
+        native_name = path.name.removesuffix(".config.toml")
+        identifier = "default" if path.name == "config.toml" else "sidecar:" + native_name
         provider = data.get("model_provider", "openai")
         endpoint = data.get("model_providers", {}).get(provider, {}).get("base_url", "")
         # Endpoint credentials/query strings never leave the process.
@@ -67,7 +68,8 @@ def profiles(home):
         if parsed.port:
             host += ':' + str(parsed.port)
         endpoint = urlunsplit((parsed.scheme, host, parsed.path, "", ""))
-        row = {"id": identifier, "name": identifier if identifier != "default" else "Current Codex settings",
+        row = {"id": identifier, "name": native_name if identifier != "default" else "Current Codex settings",
+               "legacy_id": native_name if identifier != "default" else "default",
                "model": data.get("model", ""), "provider": provider, "endpoint": endpoint}
         if identifier == "default":
             result[0] = row
@@ -79,9 +81,11 @@ def profiles(home):
 def profile_config(home, profile):
     if profile == "default":
         return None
-    if profile not in {row['id'] for row in profiles(home)}:
+    row = next((row for row in profiles(home)
+        if row['id'] == profile or row.get('legacy_id') == profile), None)
+    if not row or row['id'] == 'default':
         raise ValueError("Choose an existing Codex profile")
-    data = tomllib.loads((Path(home) / (profile + ".config.toml")).read_text(encoding="utf-8-sig"))
+    data = tomllib.loads((Path(home) / (row['legacy_id'] + ".config.toml")).read_text(encoding="utf-8-sig"))
     return {k: v for k, v in data.items() if k in (
         "model", "model_provider", "model_reasoning_effort", "model_providers", "model_catalog_json")}
 
@@ -169,7 +173,7 @@ class Runtime:
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._stderr, daemon=True).start()
-        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a3"}, "capabilities": {"experimentalApi": True}})
+        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a4"}, "capabilities": {"experimentalApi": True}})
         self.send({"method": "initialized", "params": {}})
     def send(self, payload):
         with self.write_lock:
@@ -386,4 +390,4 @@ def save_profile(home, name, endpoint, model, key):
         raise ValueError('This profile already exists; choose a new name') from None
     with os.fdopen(fd, 'w', encoding='utf-8') as file:
         file.write(text)
-    return {'id':name}
+    return {'id':'sidecar:' + name}
