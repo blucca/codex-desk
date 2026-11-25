@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a16/codex_desk-0.1.0a16-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a17/codex_desk-0.1.0a17-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a16/codex_desk-0.1.0a16-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a17/codex_desk-0.1.0a17-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -41,7 +41,7 @@ The release wheel installs without Git. To run from a downloaded or cloned sourc
 python3 -m codex_desk.server
 ```
 
-The server prints `http://127.0.0.1:8787` and opens it in your browser. Choose **Open a project**, enter its folder, and select your current Codex settings or a retained provider profile. **Find existing sessions** lists the saved conversations for that project: resume the one you want, or explicitly **Start new conversation**. You can also browse all native history from the sidebar.
+The server prints `http://127.0.0.1:8787` and opens it in your browser. If the local connection briefly fails while the page starts, Desk retries and restores your last eligible saved conversation when it recovers; choosing another conversation takes priority. Choose **Open a project**, enter its folder, and select your current Codex settings or a retained provider profile. **Find existing sessions** lists the saved conversations for that project: resume the one you want, or explicitly **Start new conversation**. You can also browse all native history from the sidebar.
 
 Use **Add API provider** to save a provider profile from your existing API key, base URL and model. Native file profiles have distinct IDs from current settings, including a file named `default`. Restarting Desk resumes saved conversations; native Codex writes a blank thread's rollout after its first turn, so a newly created, never-used blank workspace may get a fresh thread on reopening. Saved/imported conversations keep their binding when history is missing; restore the history or relaunch with its original `--codex-home`, or explicitly start new work. Older Desk bindings are kept rather than guessed to be blank.
 
@@ -172,6 +172,7 @@ python3 -m pip install playwright
 python3 -m playwright install chromium
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_navigation.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_onboarding.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_startup.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_search.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_recall.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_activity.py

@@ -272,12 +272,13 @@ async function refresh() {
   if(current!==generation || version!==refreshVersion)return;
   state=next;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();DeskRecall.stateChanged();if($('profiles-dialog').open)drawProfiles();
 }
-async function open(id,{revealLatest=true}={}) {
+async function open(id,{revealLatest=true,keepError=false}={}) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
   selected=id;DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
-  $('error').hidden=true;$('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
+  if(!keepError)$('error').hidden=true;
+  $('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
   const preparation=loadDraft(id,current);
   try {
@@ -292,8 +293,10 @@ async function open(id,{revealLatest=true}={}) {
     await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
     if(revealLatest)requestAnimationFrame(()=>{if(current===generation)goLatest();});
+    return true;
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
+    return {error:e};
   }
 }
 function profileInfo() {
@@ -400,6 +403,33 @@ $('task').onsubmit=async e=>{
 $('stop').onclick=async()=>{if(opening)return;const session=selected,current=generation;try{await api('/api/stop',{session});if(current===generation){requests.clear();approvals();await refresh();}}catch(e){if(current===generation)error(e);}};
 let failures=0;
 const connectionError='Connection lost. Retrying… If Desk stopped, relaunch it and reopen this URL.';
+let starting=true, restoreChosen=false, restoreSession=null, restoreGeneration=0, startupError='';
+async function startup(){
+  const current=generation;
+  await refresh();
+  if(!restoreChosen){
+    restoreChosen=true;restoreGeneration=current;
+    const last=localStorage.getItem('codex-desk-session');
+    if(current===generation && !selected && state.sessions.some(s=>s.id===last && (!s.archived || activeSession(s))))restoreSession=last;
+  }
+  // A deliberate selection supersedes this return, including a late open reply.
+  if(restoreSession && restoreGeneration===generation){
+    const attempt=generation+1;
+    const restored=await open(restoreSession,{keepError:true});
+    if(generation===attempt){
+      restoreGeneration=attempt;
+      if(restored!==true){
+        // Native rejections (missing history/profile, etc.) need explicit repair,
+        // not a fresh owned backend every time the connection retry timer fires.
+        if(restored?.error?.status>=400 && restored.error.status<500){starting=false;startupError='';return true;}
+        startupError=$('error').textContent;return false;
+      }
+    }
+  }
+  starting=false;
+  if(startupError && $('error').textContent===startupError)$('error').hidden=true;
+  startupError='';return true;
+}
 async function pollActivity(){
   const current=generation;
   if(selected && !opening){
@@ -420,11 +450,14 @@ async function pollActivity(){
   if(Date.now()-statePollAt>=4000){await refresh();statePollAt=Date.now();}
 }
 async function tick(){
-  try{await pollActivity();failures=0;if($('error').textContent===connectionError)$('error').hidden=true;}
-  catch(e){if(++failures===1)error(new Error(connectionError));}
+  try{
+    if(starting){if(!await startup()){++failures;return;}failures=0;}
+    await pollActivity();failures=0;if($('error').textContent===connectionError)$('error').hidden=true;
+  }
+  catch(e){if(++failures===1){error(new Error(connectionError));if(starting)startupError=connectionError;}}
   finally{setTimeout(tick,failures?3000:800);}
 }
-(async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last && (!s.archived || activeSession(s))))await open(last);tick();}catch(e){error(e)}})();
+tick();
 
 let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;
 function nativeRow(t, resume, handoff, label='Resume with current settings') {
