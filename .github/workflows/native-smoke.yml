@@ -2,6 +2,7 @@ name: Native launcher and retained profiles
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - 'codex_desk/**'
       - 'pyproject.toml'
