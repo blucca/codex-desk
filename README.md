@@ -10,11 +10,15 @@ A local project workbench for native Codex: reopen a project, continue its actua
 
 ## Install the preview
 
+[中文：打开第一个项目并继续已有会话](docs/first-project.zh-CN.md)
+
 Requires Python 3.11+ and an existing complete Codex CLI installation. [Install and sign in to Codex CLI](https://developers.openai.com/codex/cli) first, then check `codex --version` in the shell you will use for Desk. The current native integration was exercised with CLI **0.171.0 on Linux**.
 
 **Linux/macOS/WSL:**
 
 ```sh
+mkdir -p "$HOME/codex-desk-install"
+cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
@@ -24,6 +28,8 @@ codex-desk
 **Windows PowerShell** (run the virtual environment directly):
 
 ```powershell
+New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
+Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
@@ -81,7 +87,7 @@ Provider choice stays with you. The Add Provider form includes optional, explici
 
 ## Feedback
 
-If you already switch between enterprise/personal providers or lose the desktop UI while local tasks continue, [open an issue](https://github.com/blucca/codex-desk/issues) with your CLI version, operating system and the workflow you wanted to complete. We can work through one project task or handoff with you.
+If you already switch between enterprise/personal providers or lose the desktop UI while local tasks continue, [ask for task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) with your CLI version, operating system, the one workflow you want to complete and the step you reached. We can work through one project task or handoff with you.
 
 ## Check
 

@@ -1,0 +1,125 @@
+# Codex Desk：打开第一个项目，继续已有会话
+
+适用于 **v0.1.0a7**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+
+![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
+
+*项目自有的合成 MCP 示例：文本和结构化结果、刻意触发的工具失败，以及重新打开的会话。*
+
+## 1. 安装并启动
+
+准备 **Python 3.11+** 和完整的 **Codex CLI**。先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。当前原生集成已在 **Linux / Codex CLI 0.171.0** 上运行验证。
+
+先确认下面的 Python 版本输出为 3.11 或更高，再在独立的安装目录创建虚拟环境；网页中选择实际项目目录。发布包安装不需要 Git。
+
+**Linux / macOS / WSL：**
+
+```sh
+python3 --version
+codex --version
+mkdir -p "$HOME/codex-desk-install"
+cd "$HOME/codex-desk-install"
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
+codex-desk
+```
+
+**Windows PowerShell：**
+
+```powershell
+py -3 --version
+codex --version
+New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
+Set-Location "$HOME\codex-desk-install"
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a7/codex_desk-0.1.0a7-py3-none-any.whl
+.\.venv\Scripts\codex-desk.exe
+```
+
+Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打印的完整地址。需要指定 Codex 启动器或手动打开浏览器时，可用 `codex-desk --codex /path/to/codex --no-browser`。
+
+## 2. 选择已有会话或新会话
+
+1. 点击 **Open a project**，在 **Project folder** 输入实际项目的完整路径。使用 WSL 启动 Desk 时，输入 WSL 中可访问的路径。
+2. 首次续接，在 **Provider profile** 保持 **Current Codex settings**，使用当前 Codex 配置。
+3. 点击 **Find existing sessions**，查看这个项目的 **Saved conversations**；需要更多结果时点击 **Load more**。
+4. 找到要继续的会话，点击 **Resume this conversation**。要开始独立的新任务，则填写可选的 **New conversation name (optional)**，点击 **Start new conversation**。
+
+侧栏的 **Browse existing Codex sessions** 可浏览全部原生历史；其中 **Resume with current settings** 使用当前 Codex 配置。新建但还未发送过任务的空会话，原生 Codex 尚未写入会话记录（rollout），重启后可能获得新的原生线程（thread）；已使用过的会话按保存的 thread 续接。
+
+## 3. 先看证据，再发一个只读任务
+
+打开已有会话后，先确认页眉的项目路径、提供商和模型，再阅读历史消息、实际命令输出与退出状态、文件变化，以及已有的 MCP 文本／结构化结果和失败。
+
+在 **Task mode** 选择 **Work — native tools and edits**，输入下面这个只读检查任务，然后点击 **Run task**：
+
+```text
+只读检查这个项目：列出项目根目录的一层文件，读取 README（若存在），找出其中说明的验证命令。报告实际执行的命令、输出和退出状态；若未记载验证命令，直接说明未找到。只说明验证命令，不运行它，不安装依赖，不修改文件。
+```
+
+出现原生命令审批时，查看实际命令后点击 **Allow once**；拒绝该命令用 **Decline**。需要中断当前任务用 **Stop turn**。任务结束后核对命令结果；**Thread usage** 显示原生 Codex 最近报告的当前 thread 累计用量。
+
+可用 **Rename session** → **Save name** 为会话取一个容易再次找到的名字。
+
+## 4. 关闭页面后怎样回来
+
+- **只关闭浏览器：** Desk 终端和后台任务继续运行。重新打开终端打印的 URL，在侧栏选择同一个命名会话，核对刚才的消息和命令结果后继续。
+- **停止 Desk：** 在启动它的终端按 **Ctrl+C**，Desk 会停止自己管理的 app-server 和正在运行的原生任务。下次从同一个虚拟环境启动，并沿用相同的 Codex home 和 Desk state directory，再选择该会话。
+
+再次启动不需要重新安装：
+
+```sh
+cd "$HOME/codex-desk-install"
+. .venv/bin/activate
+codex-desk
+```
+
+PowerShell 对应为：
+
+```powershell
+Set-Location "$HOME\codex-desk-install"
+.\.venv\Scripts\codex-desk.exe
+```
+
+若之前使用 `--codex-home`、`--state-dir` 或 `--codex`，再次启动时保留这些参数；依赖环境变量提供密钥的配置，也从设置了该变量的终端启动。
+
+## 5. 当前配置、提供商 profile 与交接
+
+**Current Codex settings** 使用主配置。已有的原生文件 profile 会出现在下拉框；**Add API provider** 可保存新的本地 profile。表单填写 **Profile name**（1–41 个英文字母、数字、下划线或连字符，首字符为字母或数字）、**API base URL**、账户可用的准确 **Model** 和已有 **API key**，点击 **Save local profile**。该账户需支持 Responses API，base URL 使用提供商为 Codex 指定的完整地址。
+
+在项目对话框选择 profile 后点击 **Resume this conversation**，仍然续接原来的原生 thread，只是使用所选配置；这不是交接到新 thread。名为 `default` 的文件 profile 与 **Current Codex settings** 是不同选项。
+
+要把可见工作证据交给另一提供商，使用以下流程：
+
+1. 在打开的会话点击 **Continue with another provider**，或在原生历史列表点击 **Review handoff**。
+2. 在 **Review the handoff** 中核对可见消息、命令、文件变化和 MCP 结果，编辑完成情况与剩余工作，并查看省略提示。填写 **What should Codex do next?**，确认 **Project folder** 和 **Next provider**。
+3. 点击 **Start new native conversation**，Desk 会创建**不同的原生 thread**，立即向目标提供商运行你审阅后的交接文本和下一目标。原会话 rollout 保持原样。
+
+只读取或审阅交接文本不运行模型回合，也不向旧提供商请求压缩。交接使用可见任务证据，加密推理内容（reasoning）不重放到新 thread。
+
+## 6. 本地记录与任务求助
+
+Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQLite，默认路径为 `~/.local/state/codex-desk/desk.sqlite3`；活动包括任务文本和命令输出。Desk 没有托管的活动存储服务，模型请求由原生 Codex 发往所选提供商。
+
+已有密钥沿用 Codex 配置或启动进程的环境。新 profile 的密钥保存在本地 sidecar 文件（Linux 权限 0600），配置通过 app-server 的私有 stdin 协议传入。Desk 保留主配置、auth 和原生 rollout，继承主配置中的 MCP、项目 trust 和 sandbox 设置。
+
+**Add API provider** 中有明确标注的可选 CometAPI、88API 联盟账户链接；通过这些链接使用服务可能为 Blucca 带来佣金。现有账户和密钥也可直接使用。
+
+需要协助完成一个项目任务或续接时，[填写任务求助表单](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)：
+
+- **Operating system**：Linux、macOS、Windows、WSL 或 Other。
+- **Codex CLI version**：启动 Desk 的终端中 `codex --version` 的完整输出。
+- **The task you want to complete**：一个具体的项目／会话目标。
+- **Step reached**：选择已到达的英文步骤，见下表。
+- **Short error text (optional)**：可选的短错误原文，去掉密钥、私有 URL 和项目路径。
+
+| Step reached 选项 | 对应步骤 |
+| --- | --- |
+| Install and launch | 安装与启动 |
+| Find/import saved conversation | 查找／导入已有会话 |
+| Resume/send task | 续接／发送任务 |
+| Tool approval or planning question | 工具审批或规划问题 |
+| New-provider handoff | 新提供商交接 |
+| Return after closing/stopping | 关闭页面／停止后返回 |
+| Other | 其他 |

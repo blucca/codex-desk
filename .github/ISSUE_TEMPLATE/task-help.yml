@@ -1,0 +1,55 @@
+name: Help with one project task
+description: Get help opening, continuing, or handing off an actual Codex project session.
+title: "[Task help]: "
+body:
+  - type: markdown
+    attributes:
+      value: Tell us the one project/session task you want to complete and the step you reached.
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - WSL
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: codex-version
+    attributes:
+      label: Codex CLI version
+      description: Run codex --version in the shell used to launch Desk.
+      placeholder: codex-cli 0.171.0
+    validations:
+      required: true
+  - type: textarea
+    id: desired-task
+    attributes:
+      label: The task you want to complete
+      description: Describe one project/session goal in your own words.
+      placeholder: Resume my existing conversation, check its previous command result, then continue with my selected provider.
+    validations:
+      required: true
+  - type: dropdown
+    id: reached-step
+    attributes:
+      label: Step reached
+      options:
+        - Install and launch
+        - Find/import saved conversation
+        - Resume/send task
+        - Tool approval or planning question
+        - New-provider handoff
+        - Return after closing/stopping
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: error-text
+    attributes:
+      label: Short error text (optional)
+      description: A short excerpt with keys, private URLs and project paths removed.
+      render: text
