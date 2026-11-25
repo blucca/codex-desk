@@ -41,7 +41,7 @@ async def check():
             'turns': [{'id': 'earlier-turn', 'items': [
                 {'id': 'earlier-message-' + id, 'type': 'agentMessage', 'text': 'Earlier project evidence retained.'}]}]}
             for id, cwd in projects.items()}
-        native_calls, http_calls, holds, draft_holds, errors, completed = [], [], {}, {}, [], []
+        native_calls, http_calls, holds, draft_holds, draft_reply_holds, errors, completed = [], [], {}, {}, {}, [], []
         original_save = desk_server.save_draft
 
         def controlled_save(store, session, text, mode, revision, *extra, **options):
@@ -49,7 +49,12 @@ async def check():
                 entered, release = draft_holds[text]
                 entered.set()
                 assert release.wait(25), 'Held draft save was not released'
-            return original_save(store, session, text, mode, revision, *extra, **options)
+            saved = original_save(store, session, text, mode, revision, *extra, **options)
+            if text in draft_reply_holds:
+                entered, release = draft_reply_holds[text]
+                entered.set()
+                assert release.wait(25), 'Held draft reply was not released'
+            return saved
 
         class ControlledRuntime(Runtime):
             def __init__(self, store, identifier, binary, native_home):
@@ -203,6 +208,30 @@ async def check():
                         assert not turns()
                         checkpoint('page close during in-flight autosave restores without submission')
 
+                        # Let a second autosave queue behind a committed save whose
+                        # HTTP reply is delayed, then reload after its timer expires.
+                        await open_session(page, 'session-a')
+                        first = 'First committed preparation with delayed reply'
+                        newest = 'Latest queued preparation before reload'
+                        draft_reply_holds[first] = (threading.Event(), threading.Event())
+                        await page.locator('#prompt').fill(first)
+                        assert await asyncio.to_thread(draft_reply_holds[first][0].wait, 10)
+                        assert load_draft(desk.store, 'session-a')['text'] == first
+                        await page.locator('#prompt').fill(newest)
+                        await page.locator('#turn-mode').select_option('native')
+                        await page.wait_for_function("!draftTimers.has('session-a')")
+                        assert load_draft(desk.store, 'session-a')['text'] == first
+                        await page.reload()
+                        await page.wait_for_function("selected==='session-a' && !opening && !$('task').hidden")
+                        draft_reply_holds[first][1].set()
+                        await exact(page, 'session-a', newest, 'native')
+                        assert load_draft(desk.store, 'session-a')['text'] == newest
+                        text_a = newest
+                        assert not turns()
+                        checkpoint('reload flushes newer queued autosave after debounce expires')
+                        await prepare(page, 'session-a', newest, 'plan')
+                        await open_session(page, 'session-b')
+
                         await page.goto('about:blank')
                         await asyncio.to_thread(stop_server, desk, server, worker)
                         desk, server, worker = start_server(port=port)
@@ -319,7 +348,7 @@ async def check():
                         print(json.dumps({'failure': diagnostic}, indent=2, ensure_ascii=False), flush=True)
                         raise
                     finally:
-                        for _, release in [*holds.values(), *draft_holds.values()]:
+                        for _, release in [*holds.values(), *draft_holds.values(), *draft_reply_holds.values()]:
                             release.set()
                         await context.close()
                         await browser.close()
@@ -327,7 +356,7 @@ async def check():
                             if path.is_file():
                                 path.chmod(0o600)
             finally:
-                for _, release in [*holds.values(), *draft_holds.values()]:
+                for _, release in [*holds.values(), *draft_holds.values(), *draft_reply_holds.values()]:
                     release.set()
                 stop_server(desk, server, worker)
 

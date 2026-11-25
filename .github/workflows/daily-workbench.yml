@@ -1,0 +1,61 @@
+name: Installed daily workbench
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['codex_desk/**', 'tests/**', 'pyproject.toml', '.github/workflows/daily-workbench.yml']
+  push:
+    branches: [main]
+    paths: ['codex_desk/**', 'tests/**', 'pyproject.toml', '.github/workflows/daily-workbench.yml']
+permissions:
+  contents: read
+jobs:
+  preparation-and-return:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DESK_TEST_TEMP: ${{ github.workspace }}/temp
+      TMPDIR: ${{ github.workspace }}/temp
+      TEMP: ${{ github.workspace }}/temp
+      TMP: ${{ github.workspace }}/temp
+      PIP_CACHE_DIR: ${{ github.workspace }}/temp/pip-cache
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/temp/playwright-browsers
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare workspace scratch
+        run: mkdir -p temp/installed-fixtures/tests temp/evidence
+      - name: Test canonical source
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Install workbench and browser harness
+        run: |
+          python -m pip install . playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Check installed daily workflows
+        working-directory: temp
+        run: |
+          cp ../tests/browser_drafts.py ../tests/browser_followups.py ../tests/browser_organization.py installed-fixtures/tests/
+          python - <<'PY'
+          from pathlib import Path
+          import codex_desk
+          source = Path('../codex_desk').resolve()
+          installed = Path(codex_desk.__file__).resolve()
+          assert not installed.is_relative_to(source), installed
+          print('Installed package:', installed)
+          PY
+          for fixture in drafts followups organization; do
+            DESK_TEST_EVIDENCE="$PWD/evidence/$fixture" python "installed-fixtures/tests/browser_$fixture.py"
+          done
+      - name: Retain daily-workflow receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-daily-workbench
+          path: temp/evidence
+          if-no-files-found: ignore
+          retention-days: 7

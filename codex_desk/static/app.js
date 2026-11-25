@@ -47,7 +47,8 @@ function persistDraft(id){
       draftStatus(id);return false;
     }
   });
-  draftSaves.set(id,pending);return pending;
+  const tracked=pending.finally(()=>{if(draftSaves.get(id)===tracked)draftSaves.delete(id);});
+  draftSaves.set(id,tracked);return tracked;
 }
 function scheduleDraft(id){
   clearTimeout(draftTimers.get(id));draftMessages.set(id,'Unsaved draft…');draftStatus(id);
@@ -57,7 +58,8 @@ $('draft-keep').onclick=()=>{const id=selected,current=draftConflicts.get(id);if
 $('draft-load').onclick=()=>{const id=selected,current=draftConflicts.get(id);if(!current)return;draftRevisions.set(id,current.revision);draftSaved.set(id,current);drafts.set(id,current.text);draftModes.set(id,current.mode);draftConflicts.delete(id);draftEdits.set(id,(draftEdits.get(id) || 0)+1);$('prompt').value=current.text;$('turn-mode').value=current.mode;modeSelected=id;draftMessages.set(id,'Saved draft loaded. Nothing has been sent.');draftStatus(id);};
 window.addEventListener('pagehide',()=>{
   if(selected)rememberDraft(selected);
-  for(const [id] of draftTimers){clearTimeout(draftTimers.get(id));if(draftRevisions.has(id) && !draftConflicts.has(id))fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:id,text:drafts.get(id) || '',mode:draftModes.get(id) || 'native',revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0}),keepalive:true}).catch(()=>{});}
+  // A debounced save can already be waiting behind an in-flight response.
+  for(const id of new Set([...draftTimers.keys(),...draftSaves.keys()])){clearTimeout(draftTimers.get(id));if(draftRevisions.has(id) && !draftConflicts.has(id))fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:id,text:drafts.get(id) || '',mode:draftModes.get(id) || 'native',revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0}),keepalive:true}).catch(()=>{});}
 });
 function nearLatest(){return window.scrollY+window.innerHeight >= document.documentElement.scrollHeight-140;}
 function latestLabel(){
