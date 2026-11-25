@@ -2,6 +2,29 @@ import unittest
 from codex_desk.handoff import build_handoff
 
 class HandoffTests(unittest.TestCase):
+    def test_native_command_without_output_keeps_reviewable_pending_evidence(self):
+        thread = {'id': 'native-id', 'cwd': '/project', 'modelProvider': 'relay',
+                  'turns': [{'items': [
+                      {'id': 'earlier', 'type': 'agentMessage', 'text': 'Earlier verified evidence'},
+                      {'id': 'pending-command', 'type': 'commandExecution',
+                       'command': 'python verify.py', 'status': 'inProgress',
+                       'aggregatedOutput': None, 'exitCode': None, 'durationMs': None}]}]}
+        text = build_handoff(thread)
+        for value in ('Earlier verified evidence', 'python verify.py', 'Status: inProgress',
+                      'Exit: not reported', '[No command output reported.]'):
+            self.assertIn(value, text)
+        self.assertNotIn('Exit: 0', text)
+        self.assertNotIn('None', text)
+
+    def test_quiet_completed_command_retains_reported_exit_and_empty_output(self):
+        thread = {'id': 'native-id', 'cwd': '/project', 'modelProvider': 'relay',
+                  'turns': [{'items': [{'id': 'quiet-command', 'type': 'commandExecution',
+                                      'command': 'true', 'status': 'completed',
+                                      'aggregatedOutput': '', 'exitCode': 0}]}]}
+        text = build_handoff(thread)
+        self.assertIn('Status: completed\nExit: 0\n', text)
+        self.assertNotIn('[No command output reported.]', text)
+
     def test_visible_command_evidence_and_cutoff(self):
         thread={'id':'native-id','cwd':'/project','modelProvider':'relay','turns':[{'items':[
             {'id':'goal','type':'userMessage','content':[{'type':'text','text':'Check totals'}]},

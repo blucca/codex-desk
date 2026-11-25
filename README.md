@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a18/codex_desk-0.1.0a18-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a19/codex_desk-0.1.0a19-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a18/codex_desk-0.1.0a18-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a19/codex_desk-0.1.0a19-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -121,7 +121,7 @@ Saving does not reconfigure a running native backend. If the profile is already 
 
 [Step-by-step provider-switch task guide](https://blucca.github.io/guides/switch-codex-api-provider/): verify the local API profile, review the saved evidence, run one next task, and return to the new conversation.
 
-Choose **Continue with another provider** in an open session, or **Review handoff** beside a saved conversation. Review the visible messages, commands, file changes and MCP results; state the next goal and select the target profile. Desk starts a **distinct native thread** with that reviewed text, leaving the original rollout intact. Reading a handoff does not run a model turn or attempt compaction through the old provider. Encrypted reasoning is not replayed into the new thread.
+Choose **Continue with another provider** in an open session, or **Review handoff** beside a saved conversation. Review the visible messages, commands, file changes and MCP results; state the next goal and select the target profile. Desk starts a **distinct native thread** with that reviewed text, leaving the original rollout intact. Reading a handoff does not run a model turn or attempt compaction through the old provider. Encrypted reasoning is not replayed into the new thread. Pending commands retain their reported status; an unreported exit or output is shown as unreported, so you can review that evidence before continuing.
 
 This is useful when the old provider is unavailable and you want to carry useful task evidence into a fresh conversation. Verify the target profile’s endpoint/model in **Open a project** before selecting its name in the handoff. Same-thread resume uses the current selected settings.
 
@@ -165,7 +165,7 @@ Startup tests cover a broken npm launcher, a missing interpreter and a bounded v
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**159 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**163 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 Two browser windows importing the same saved thread and profile now share one complete local binding. A slow native history read leaves other open sessions responsive. A separate controlled native-stdio/HTTP fixture exercises retained-profile import, same-thread continuation, reviewed distinct-provider handoff and Desk restart without provider calls. Project organization, prepared follow-up and native state browser checks exercise session scope, explicit admission/review, restart and 390/1250 layouts. Profile edit and draft browser checks exercise local persistence, canceled/delayed responses, two-tab draft conflicts and 390/1280 layouts.
 

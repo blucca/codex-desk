@@ -8,7 +8,11 @@ def visible_text(item):
     if kind == 'agentMessage':
         return 'Codex\n' + item.get('text', '')
     if kind == 'commandExecution':
-        return 'Command\n' + item.get('command', '') + '\nExit: ' + str(item.get('exitCode')) + '\n' + item.get('aggregatedOutput', '')
+        output, exit_code = item.get('aggregatedOutput'), item.get('exitCode')
+        return ('Command\n' + item.get('command', '')
+                + '\nStatus: ' + (item.get('status') or 'unknown')
+                + '\nExit: ' + (str(exit_code) if exit_code is not None else 'not reported')
+                + '\n' + (output if isinstance(output, str) else '[No command output reported.]'))
     if kind in ('mcpToolCall', 'dynamicToolCall'):
         return tool_text(item)
     if kind in ('collabAgentToolCall', 'subAgentActivity'):

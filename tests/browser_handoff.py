@@ -36,6 +36,13 @@ async def check():
                        'text': 'Verified project ' + key.upper() + ' evidence'}]}]}
             for key, path in projects.items()
         }
+        # Native 0.171's owned command-start capture reports null output/exit.
+        # Keep that shape in the ordinary review path, with a short read command.
+        pending_command = {'id': 'pending-read-b', 'type': 'commandExecution',
+                           'command': 'cat lines.txt', 'cwd': str(projects['b']),
+                           'status': 'inProgress', 'aggregatedOutput': None,
+                           'exitCode': None, 'durationMs': None}
+        histories['b']['turns'][0]['items'].append(pending_command)
         desk = Desk('not-called', folder / 'home', folder / 'state')
         desk.history = lambda thread: next(t for t in histories.values() if t['id'] == thread)
 
@@ -87,6 +94,11 @@ async def check():
                         await review('b')
                         cancelled_goal = await page.input_value('#handoff-goal')
                         b_evidence = await page.input_value('#handoff-text')
+                        pending_evidence = {
+                            'command': pending_command['command'] in b_evidence,
+                            'status': 'Status: inProgress' in b_evidence,
+                            'exit': 'Exit: not reported' in b_evidence,
+                            'output': '[No command output reported.]' in b_evidence}
                         b_evidence += '\nReviewed remaining: run the project B build.'
                         await page.fill('#handoff-text', b_evidence)
                         await page.fill('#handoff-goal', 'Verify only project B build')
@@ -111,6 +123,7 @@ async def check():
                         result = {'width': width, 'cancelledGoal': cancelled_goal,
                                   'sameSourceGoal': same_source_goal,
                                   'completedGoal': completed_goal, 'failedStart': failure,
+                                  'pendingCommandEvidence': pending_evidence,
                                   'retainedSourceGoal': retained_source_goal,
                                   'target': captured[-1], 'mobileOverflow': overflow,
                                   'javascriptErrors': errors}
@@ -124,6 +137,7 @@ async def check():
                         assert result['sameSourceGoal'] == 'Change only project A login', result
                         assert result['completedGoal'] == '', result
                         assert result['retainedSourceGoal'] == 'Change only project A login', result
+                        assert all(result['pendingCommandEvidence'].values()), result
                         failure = result['failedStart']
                         assert failure['open'] and failure['errorVisible'], result
                         assert failure['goal'] == 'Verify only project B build', result
