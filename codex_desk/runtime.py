@@ -189,7 +189,7 @@ class Runtime:
         self.reader.start()
         self.stderr_reader.start()
         try:
-            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a9"}, "capabilities": {"experimentalApi": True}})
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a11"}, "capabilities": {"experimentalApi": True}})
             self.send({"method": "initialized", "params": {}})
         except Exception:
             # A rejected handshake never reaches Desk's runtime registry.

@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -50,7 +50,7 @@ codex-desk --codex /path/to/codex --no-browser
 codex-desk --codex-home /your/codex-home --state-dir /your/desk-state
 ```
 
-`--codex` accepts an executable on `PATH`, an absolute path, or a relative path from the shell where Desk starts (including `~/...`). Desk checks the executable before opening the browser and uses that same launcher in every selected project.
+`--codex` accepts an executable on `PATH`, an absolute path, or a relative path from the shell where Desk starts (including `~/...`). Desk checks the resolved launcher with `--version` before creating state or opening the browser (10-second limit), then uses that same launcher in every selected project. If the check fails, run the printed command in the same shell to see Codex’s native diagnosis and complete or repair that installation.
 
 Existing keys remain in your Codex configuration or inherited process environment. A newly added key is stored in a local provider sidecar with mode 0600 on Linux. Provider overrides go to the app-server through its private stdin protocol, keeping keys out of process command arguments. For a Trial sidecar using `ONRAMP_API_KEY`, launch Desk from the shell where that variable is set. The optional local provider form accepts your existing key without uploading or exporting it. Desk does not rewrite your main config, auth or native rollouts. Main MCP, trust and sandbox settings are inherited.
 
@@ -102,11 +102,13 @@ If you already switch between enterprise/personal providers or lose the desktop 
 
 ## Check
 
+Startup tests cover a broken npm launcher, a missing interpreter and a bounded version-check timeout before any Desk state or browser opens. Launcher output is suppressed; diagnostics give the exact same-shell command.
+
 ```sh
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**51 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**54 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 A real MCP acceptance turn called a local read-only fixture twice: success with a structured result, then a deliberate failure. After restarting Desk, the same native thread showed both results in the browser and reviewed handoff without another inference turn. Controlled browser fixtures additionally cover dynamic-tool results, resource/media descriptors, progress preservation and 390px layout. The fixtures use synthetic data; an outside user's completed project task and return are recorded separately from these checks.
 

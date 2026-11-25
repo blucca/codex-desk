@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -48,6 +49,71 @@ class CliTests(unittest.TestCase):
                 executable.chmod(0o755)
                 self.assertEqual(desk_server.resolve_codex('~/codex'), str(executable))
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX executable launcher fixture')
+    def test_broken_launcher_stops_before_state_browser_or_url_without_private_output(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            root = Path(folder)
+            executable = root / 'npm codex'
+            executable.write_text(f'#!{sys.executable}\n' + '''
+import os, sys
+assert sys.argv[1:] == ['--version']
+print(os.environ['DESK_FIXTURE_KEY'])
+print(os.environ['DESK_FIXTURE_KEY'], file=sys.stderr)
+sys.exit(1)
+''')
+            executable.chmod(0o755)
+            output, errors = io.StringIO(), io.StringIO()
+            state = root / 'state'
+            with patch.object(sys, 'argv', ['codex-desk', '--codex', str(executable),
+                    '--state-dir', str(state)]), \
+                    patch.dict(os.environ, {'DESK_FIXTURE_KEY': 'fixture-private-key'}), \
+                    patch.object(desk_server, 'Desk') as desk, \
+                    patch.object(desk_server.webbrowser, 'open') as browser, \
+                    contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                with self.assertRaises(SystemExit) as exit:
+                    desk_server.main()
+            self.assertEqual(exit.exception.code, 2)
+            self.assertIn('--version exited with status 1', errors.getvalue())
+            self.assertIn(shlex.quote(str(executable)) + ' --version', errors.getvalue())
+            self.assertIn('same shell', errors.getvalue())
+            self.assertIn('Complete or repair', errors.getvalue())
+            self.assertNotIn('fixture-private-key', errors.getvalue() + output.getvalue())
+            self.assertNotIn('Traceback', errors.getvalue())
+            self.assertEqual(output.getvalue(), '')
+            self.assertFalse(state.exists())
+            desk.assert_not_called()
+            browser.assert_not_called()
+
+    def test_launcher_timeout_is_bounded_and_stops_before_state_or_browser(self):
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(sys, 'argv', ['codex-desk', '--codex', sys.executable]), \
+                patch.object(desk_server.subprocess, 'run', side_effect=subprocess.TimeoutExpired(
+                    [sys.executable, '--version'], 10, output='fixture-private-key',
+                    stderr='fixture-private-key')) as run, \
+                patch.object(desk_server, 'Desk') as desk, \
+                patch.object(desk_server.webbrowser, 'open') as browser, \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            with self.assertRaises(SystemExit) as exit:
+                desk_server.main()
+        self.assertEqual(exit.exception.code, 2)
+        run.assert_called_once_with([os.path.abspath(sys.executable), '--version'], timeout=10,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.assertIn('--version timed out after 10 seconds', errors.getvalue())
+        self.assertIn('same shell', errors.getvalue())
+        self.assertNotIn('fixture-private-key', errors.getvalue() + output.getvalue())
+        self.assertEqual(output.getvalue(), '')
+        desk.assert_not_called()
+        browser.assert_not_called()
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX missing-interpreter fixture')
+    def test_executable_with_missing_interpreter_has_actionable_preflight_error(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            executable = Path(folder) / 'codex'
+            executable.write_text('#!/missing/codex-interpreter\n')
+            executable.chmod(0o755)
+            with self.assertRaisesRegex(ValueError, '--version could not run.*same shell'):
+                desk_server.resolve_codex(str(executable))
+
     @unittest.skipIf(os.name == 'nt', 'POSIX native-protocol executable fixture')
     def test_relative_launcher_opens_a_different_project(self):
         # This is the actual CLI and HTTP first-project path, with no model turn.
@@ -59,9 +125,25 @@ class CliTests(unittest.TestCase):
             bin_dir = launch / 'bin with spaces'
             bin_dir.mkdir()
             executable = bin_dir / 'codex'
+            home = root / 'home'
+            home.mkdir()
+            config = home / 'config.toml'
+            config.write_text('model="existing-model"\nmodel_provider="existing-provider"\n')
+            auth = home / 'auth.json'
+            auth.write_text('{"OPENAI_API_KEY":"fixture-private-key"}')
+            config_before, auth_before = config.read_bytes(), auth.read_bytes()
+            log = root / 'launcher.jsonl'
             executable.write_text(f'#!{sys.executable}\n' + '''
 import json, os, sys
+from pathlib import Path
+with Path(os.environ['DESK_LAUNCHER_LOG']).open('a') as log:
+    log.write(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(),
+                         'home': os.environ.get('CODEX_HOME')}) + '\\n')
+if sys.argv[1:] == ['--version']:
+    print('codex-cli fixture')
+    sys.exit(0)
 assert sys.argv[1:] == ['app-server', '--stdio']
+assert os.environ['DESK_FIXTURE_KEY'] == 'fixture-private-key'
 for line in sys.stdin:
     message = json.loads(line)
     if 'id' not in message:
@@ -70,6 +152,8 @@ for line in sys.stdin:
     if method == 'initialize':
         result = {'userAgent': 'onboarding-fixture'}
     elif method == 'thread/start':
+        assert message['params']['cwd'] == os.getcwd()
+        assert 'config' not in message['params']
         result = {'thread': {'id': 'onboarding-thread', 'cwd': os.getcwd()},
                   'model': 'fixture', 'modelProvider': 'fixture'}
     else:
@@ -78,9 +162,10 @@ for line in sys.stdin:
 ''')
             executable.chmod(0o755)
             source = str(Path(desk_server.__file__).parent.parent)
-            env = {**os.environ, 'PYTHONPATH': source}
+            env = {**os.environ, 'PYTHONPATH': source, 'DESK_LAUNCHER_LOG': str(log),
+                   'DESK_FIXTURE_KEY': 'fixture-private-key'}
             process = subprocess.Popen([sys.executable, '-m', 'codex_desk.server',
-                '--codex', './bin with spaces/codex', '--codex-home', str(root / 'home'),
+                '--codex', './bin with spaces/codex', '--codex-home', str(home),
                 '--state-dir', str(root / 'state'), '--port', '0', '--no-browser'],
                 cwd=launch, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             lines = queue.Queue()
@@ -116,6 +201,15 @@ for line in sys.stdin:
                     _, errors = process.communicate(timeout=5)
                 reader.join(timeout=5)
             self.assertEqual(process.returncode, 0, errors)
+            launches = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertEqual(launches[0]['argv'], ['--version'])
+            self.assertEqual(launches[0]['cwd'], str(launch))
+            self.assertEqual(len(launches), 2)
+            self.assertEqual(launches[1], {'argv': ['app-server', '--stdio'],
+                                          'cwd': str(project), 'home': str(home)})
+            self.assertNotIn('fixture-private-key', log.read_text() + errors)
+            self.assertEqual(config.read_bytes(), config_before)
+            self.assertEqual(auth.read_bytes(), auth_before)
 
 
 if __name__ == '__main__':

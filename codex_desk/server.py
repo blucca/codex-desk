@@ -3,8 +3,10 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import signal
+import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
@@ -221,7 +223,25 @@ def resolve_codex(value):
     if not executable:
         raise ValueError(f'Codex executable not found or not executable: {value}. '
                          'Install Codex CLI first, or pass --codex /path/to/codex')
-    return os.path.abspath(executable)
+    executable = os.path.abspath(executable)
+    # npm can leave an executable shim without Node or its native dependency.
+    # Check the actual launcher before creating Desk state or opening its UI.
+    try:
+        checked = subprocess.run([executable, '--version'], timeout=10,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        reason = '--version timed out after 10 seconds'
+    except OSError:
+        reason = '--version could not run'
+    else:
+        if checked.returncode == 0:
+            return executable
+        reason = f'--version exited with status {checked.returncode}'
+    command = ("& '" + executable.replace("'", "''") + "' --version" if os.name == 'nt'
+               else shlex.quote(executable) + ' --version')
+    raise ValueError(f'Codex launcher check failed ({reason}). '
+                     f'Run {command} in the same shell to see its native diagnostic. '
+                     'Complete or repair that Codex CLI installation, or pass --codex /path/to/codex')
 
 
 def main():
