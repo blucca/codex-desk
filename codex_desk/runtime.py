@@ -9,6 +9,40 @@ import threading
 import time
 import tomllib
 import uuid
+from datetime import datetime
+
+
+NAME_LIMIT = 120
+
+
+def session_name(value):
+    if not isinstance(value, str):
+        raise ValueError("Enter a session name")
+    value = ' '.join(value.split())
+    if not value or len(value) > NAME_LIMIT:
+        raise ValueError(f"Use a session name of 1–{NAME_LIMIT} characters")
+    return value
+
+
+def task_name(text):
+    """A useful local title, without sending a separate inference request."""
+    return ' '.join(text.split())[:NAME_LIMIT].rstrip()
+
+
+def default_name(cwd, created, identifier):
+    project = Path(cwd).name or str(cwd)
+    stamp = datetime.fromtimestamp(created).strftime('%b %d, %H:%M')
+    return f"{project[:80]} · {stamp} · {identifier[:6]}"
+
+
+def first_task(turns):
+    for turn in turns:
+        for item in turn.get('items', []):
+            if item.get('type') == 'userMessage':
+                title = task_name(' '.join(c.get('text', '') for c in item.get('content', [])))
+                if title:
+                    return title
+    return ''
 
 
 def profiles(home):
@@ -67,16 +101,34 @@ class Store:
             CREATE TABLE IF NOT EXISTS sessions(
               id TEXT PRIMARY KEY, cwd TEXT NOT NULL, profile TEXT NOT NULL,
               thread_id TEXT, model TEXT, provider TEXT, status TEXT,
-              created REAL, updated REAL, usage TEXT, error TEXT);
+              created REAL, updated REAL, usage TEXT, error TEXT,
+              name TEXT, name_source TEXT NOT NULL DEFAULT 'default',
+              name_pending INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS events(
               seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, payload TEXT NOT NULL);
             ''')
-    def create(self, cwd, profile, identifier=None):
+            columns = {r[1] for r in self.db.execute('PRAGMA table_info(sessions)')}
+            for column, definition in (
+                ('name', 'TEXT'), ('name_source', "TEXT NOT NULL DEFAULT 'default'"),
+                ('name_pending', 'INTEGER NOT NULL DEFAULT 0')):
+                if column not in columns:
+                    self.db.execute(f'ALTER TABLE sessions ADD COLUMN {column} {definition}')
+            # Backfill in place: keep IDs, binding, event sequence, and list order.
+            for identifier, cwd, created in self.db.execute(
+                    "SELECT id,cwd,created FROM sessions WHERE name IS NULL OR trim(name)='' ").fetchall():
+                items = [e['event'].get('params', {}).get('item', {}) for e in self.events(identifier)]
+                title = first_task([{'items': items}])
+                self.db.execute('UPDATE sessions SET name=?,name_source=?,name_pending=? WHERE id=?',
+                    (title or default_name(cwd, created or 0, identifier),
+                     'task' if title else 'default', int(bool(title)), identifier))
+    def create(self, cwd, profile, identifier=None, name=None):
         identifier = identifier or uuid.uuid4().hex
         now = time.time()
+        title = session_name(name) if name is not None else default_name(cwd, now, identifier)
         with self.lock, self.db:
-            self.db.execute("INSERT INTO sessions(id,cwd,profile,status,created,updated) VALUES(?,?,?,?,?,?)",
-                            (identifier, cwd, profile, "starting", now, now))
+            self.db.execute("INSERT INTO sessions(id,cwd,profile,status,created,updated,name,name_source,name_pending) VALUES(?,?,?,?,?,?,?,?,?)",
+                            (identifier, cwd, profile, "starting", now, now, title,
+                             'user' if name is not None else 'default', int(name is not None)))
         return identifier
     def update(self, identifier, **fields):
         if not fields:
@@ -106,6 +158,8 @@ class Runtime:
         self.store, self.id, self.home = store, identifier, home
         self.pending, self.approvals = {}, {}
         self.lock, self.write_lock = threading.Lock(), threading.Lock()
+        self.name_lock = threading.RLock()
+        self.persisted = False
         self.counter = 0
         row = store.get(identifier)
         env = {**os.environ, "CODEX_HOME": str(home)}
@@ -114,7 +168,7 @@ class Runtime:
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._stderr, daemon=True).start()
-        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a1"}})
+        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a2"}})
         self.send({"method": "initialized", "params": {}})
     def send(self, payload):
         with self.write_lock:
@@ -168,6 +222,14 @@ class Runtime:
                 turn = params.get('turn', {})
                 self.store.update(self.id, status=turn.get('status', 'completed'),
                                   error=json.dumps(turn['error']) if turn.get('error') else None)
+                self.persisted = True
+                # The reader must stay available for the name/set response.
+                threading.Thread(target=self._flush_name, daemon=True).start()
+            elif method == 'thread/name/updated' and params.get('threadId') == self.store.get(self.id)['thread_id']:
+                name = params.get('threadName')
+                row = self.store.get(self.id)
+                if name and (not row['name_pending'] or name == row['name']):
+                    self.store.update(self.id, name=task_name(name), name_source='native', name_pending=0)
         with self.lock:
             for target in self.pending.values():
                 if target.empty():
@@ -185,6 +247,7 @@ class Runtime:
         if row['thread_id']:
             try:
                 result = self.request('thread/resume', {'threadId': row['thread_id'], **params})
+                self.persisted = True
             except RuntimeError as error:
                 used = any(e['event'].get('method') == 'turn/started' for e in self.store.events(self.id))
                 if 'no rollout found' not in str(error) or used:
@@ -198,11 +261,45 @@ class Runtime:
         thread = result['thread']
         self.store.update(self.id, thread_id=thread['id'], model=result.get('model'),
                           provider=result.get('modelProvider'), status="ready")
+        if row['name_pending']:
+            self._flush_name()
+        elif thread.get('name'):
+            self.store.update(self.id, name=task_name(thread['name']), name_source='native')
+        elif row['name_source'] == 'default':
+            title = first_task(thread.get('turns', [])) or task_name(thread.get('preview', ''))
+            if title:
+                self.store.update(self.id, name=title, name_source='task')
         return result
+    def _sync_name(self):
+        with self.name_lock:
+            row = self.store.get(self.id)
+            if not self.persisted or not row['name_pending']:
+                return
+            self.request('thread/name/set', {'threadId': row['thread_id'], 'name': row['name']})
+            self.store.update(self.id, name_pending=0)
+    def _flush_name(self):
+        try:
+            self._sync_name()
+        except (RuntimeError, OSError, ValueError):
+            # The local name remains saved and pending for the next resume.
+            pass
+    def rename(self, name):
+        name = session_name(name)
+        with self.name_lock:
+            self.store.update(self.id, name=name, name_source='user', name_pending=1)
+            self._sync_name()
+        return {'name': name, 'namePending': bool(self.store.get(self.id)['name_pending'])}
     def turn(self, text):
         row = self.store.get(self.id)
         if row['status'] in ('running', 'approval'):
             raise ValueError("Finish or stop the current turn first")
+        with self.name_lock:
+            row = self.store.get(self.id)
+            if row['name_source'] == 'default':
+                title = task_name(text)
+                if title:
+                    self.store.update(self.id, name=title, name_source='task', name_pending=1)
+                    self._sync_name()
         return self.request('turn/start', {'threadId': row['thread_id'],
             'input': [{'type': 'text', 'text': text}]})
     def approve(self, request_id, decision):

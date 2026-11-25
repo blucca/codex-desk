@@ -9,7 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
-from .runtime import Runtime, Store, profiles, save_profile
+from .runtime import Runtime, Store, profiles, save_profile, task_name, first_task, session_name
 from .handoff import build_handoff
 
 
@@ -35,18 +35,23 @@ class Desk:
                 self.runtimes.pop(identifier, None)
                 self.store.update(identifier, status="failed", error="Native session could not open")
                 raise
-    def create(self, cwd, profile):
+    def create(self, cwd, profile, name=None):
         path = Path(cwd).expanduser().resolve(strict=True)
         if not path.is_dir():
             raise ValueError("Select a project directory")
         if profile not in {p['id'] for p in profiles(self.home)}:
             raise ValueError("Select an existing Codex profile")
-        identifier = self.store.create(str(path), profile)
+        identifier = self.store.create(str(path), profile, name=name)
         self.open(identifier)
         return {"id": identifier}
     def runtime(self, identifier):
         self.open(identifier)
         return self.runtimes[identifier]
+    def rename(self, identifier, name):
+        name = session_name(name)
+        if not self.store.get(identifier) or identifier == 'native-catalog':
+            raise ValueError('Session not found')
+        return self.runtime(identifier).rename(name)
     def catalog(self):
         with self.lock:
             identifier = 'native-catalog'
@@ -70,6 +75,11 @@ class Desk:
         identifier = self.store.create(str(cwd), profile)
         self.store.update(identifier, thread_id=thread['id'], model=thread.get('model'),
                           provider=thread.get('modelProvider'), status='saved')
+        title = task_name(thread.get('name') or '')
+        source = 'native' if title else 'task'
+        title = title or first_task(thread.get('turns', [])) or task_name(thread.get('preview') or '')
+        if title:
+            self.store.update(identifier, name=title, name_source=source, name_pending=0)
         return {'id': identifier, 'thread': thread}
     def close(self):
         for runtime in list(self.runtimes.values()):
@@ -141,7 +151,7 @@ def handler(desk):
                 if path == '/api/profiles':
                     result = save_profile(desk.home, data['name'], data['endpoint'], data['model'], data['key'])
                 elif path == '/api/sessions':
-                    result = desk.create(data['cwd'], data['profile'])
+                    result = desk.create(data['cwd'], data['profile'], data.get('name') or None)
                 elif path == '/api/import':
                     result = desk.import_thread(data['thread'], data['profile'])
                 elif path == '/api/handoff':
@@ -156,6 +166,8 @@ def handler(desk):
                     desk.runtime(result['id']).turn(text)
                 elif path == '/api/open':
                     result = desk.open(data['session'])
+                elif path == '/api/rename':
+                    result = desk.rename(data['session'], data['name'])
                 elif path == '/api/turn':
                     text = data['text'].strip()
                     if not text:

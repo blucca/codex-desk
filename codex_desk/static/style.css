@@ -3,3 +3,5 @@
 #handoff{display:block;font-size:11px;margin-top:12px}#handoff[hidden]{display:none}#history,#preview{width:min(860px,95vw)}.native-row{padding:15px 0;border-bottom:1px solid #344356}.native-row strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.native-row small{color:#97aabd;display:block;overflow-wrap:anywhere}#native-list{max-height:60vh;overflow:auto}#handoff-text{font-family:ui-monospace,monospace;font-size:12px;margin-top:15px;max-height:45vh}
 
 a{color:#8cddc3}a:hover{color:#bcf5df}
+.session strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#rename{display:block;font-size:11px;margin-top:12px}#rename[hidden]{display:none}
+aside{min-width:0}

@@ -11,11 +11,12 @@ function draw() {
   $('sessions').replaceChildren();
   for(const s of state.sessions) {
     const b = make('button', '', 'session' + (s.id===selected?' selected':''));
-    b.append(make('strong', s.cwd.split(/[\\/]/).filter(Boolean).at(-1)), make('small', `${s.profile} · ${s.status}`));
+    b.title=s.cwd;
+    b.append(make('strong', s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1)), make('small', `${s.cwd.split(/[\\/]/).filter(Boolean).at(-1) || s.cwd} · ${s.profile} · ${s.status}`));
     b.onclick=()=>open(s.id); $('sessions').append(b);
   }
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
-  $('title').textContent=s.cwd.split(/[\\/]/).filter(Boolean).at(-1);
+  $('title').textContent=s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1);$('rename').hidden=false;
   $('binding').textContent=`${s.cwd}\n${s.profile} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
   $('status').textContent=s.status; $('send').disabled=['running','approval','starting'].includes(s.status);
   $('stop').disabled=!['running','approval'].includes(s.status);
@@ -96,7 +97,7 @@ function profileInfo() {
 }
 $('new').onclick=()=>{ $('profile').replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));profileInfo();$('project').showModal();};
 $('profile').onchange=profileInfo;$('cancel').onclick=()=>$('project').close();
-$('create').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const r=await api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value});$('project').close();await open(r.id);}catch(err){$('project').close();error(err);}finally{b.disabled=false;}};
+$('create').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const r=await api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null});$('project').close();await open(r.id);}catch(err){$('project').close();error(err);}finally{b.disabled=false;}};
 $('task').onsubmit=async e=>{e.preventDefault();$('error').hidden=true;try{await api('/api/turn',{session:selected,text:$('prompt').value});$('prompt').value='';await refresh();}catch(err){error(err);}};
 $('stop').onclick=async()=>{try{await api('/api/stop',{session:selected});requests.clear();approvals();await refresh();}catch(e){error(e);}};
 let failures=0;
@@ -128,3 +129,7 @@ $('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;
 $('add-provider').onclick=()=>$('provider').showModal();
 $('provider-close').onclick=()=>{$('provider-key').value='';$('provider').close();};
 $('provider-form').onsubmit=async e=>{e.preventDefault();$('provider-save').disabled=true;try{await api('/api/profiles',{name:$('provider-name').value,endpoint:$('provider-endpoint').value,model:$('provider-model').value,key:$('provider-key').value});$('provider-key').value='';$('provider').close();await refresh();}catch(e){$('provider').close();error(e);}finally{$('provider-key').value='';$('provider-save').disabled=false;}};
+
+$('rename').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(!s)return;$('rename-name').value=s.name || '';$('rename-error').hidden=true;$('rename-dialog').showModal();$('rename-name').focus();$('rename-name').select();};
+$('rename-cancel').onclick=()=>$('rename-dialog').close();
+$('rename-form').onsubmit=async e=>{e.preventDefault();const b=$('rename-save');b.disabled=true;try{await api('/api/rename',{session:selected,name:$('rename-name').value});$('rename-dialog').close();await refresh();}catch(e){$('rename-error').textContent=e.message;$('rename-error').hidden=false;await refresh();}finally{b.disabled=false;}};

@@ -9,7 +9,7 @@ Requires Python 3.11+ and an existing complete Codex CLI installation. The curre
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a1
+python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a2
 codex-desk
 ```
 
@@ -32,7 +32,8 @@ The workbench saves project/profile/native-thread bindings and activity in a loc
 
 ## Current vertical slice
 
-- Project-bound provider choice and persistent workspace list.
+- Project-bound provider choice and persistent, named workspace list.
+- First-task titles and editable session names, synced through native `thread/name/set` for saved conversations. Blank-workspace names stay local until the first turn persists.
 - Native `thread/start`, `thread/resume`, `turn/start` and interruption.
 - Live native task, command, answer, failure and usage events.
 - One-time native command/file-change approval decisions.
@@ -55,7 +56,7 @@ If you already switch between enterprise/personal providers or lose the desktop 
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-The first native owned-project check ran the two persistence/profile tests through an actual Codex command (exit 0), stopped/restarted Desk, and resumed the same used native thread with its prior turn. A second browser-driven native check read that existing history, previewed its actual command/output, started a new native thread with the reviewed handoff and an explicit next task, and ran all three current tests successfully. The source rollout remained unchanged. Sidecar model/provider selection was also checked through native CLI overrides against an isolated loopback configuration. Main config/auth remained unchanged. The native question response shape and browser choice/private-input flow are checked against the 0.171 schema with a controlled fixture; live model-generated questions remain to be exercised. Outside-user trial and repeated use are the next acceptance paths.
+The first native owned-project check ran the two persistence/profile tests through an actual Codex command (exit 0), stopped/restarted Desk, and resumed the same used native thread with its prior turn. A second browser-driven native check read that existing history, previewed its actual command/output, started a new native thread with the reviewed handoff and an explicit next task, and ran all three current tests successfully. The source rollout remained unchanged. Sidecar model/provider selection was also checked through native CLI overrides against an isolated loopback configuration. Main config/auth remained unchanged. Existing database bindings/events migrate in place; native used-thread rename/restart, blank-workspace rename/reopen and browser rename/refresh were also exercised without model inference. Fifteen focused tests pass. The native question response shape and browser choice/private-input flow are checked against the 0.171 schema with a controlled fixture; live model-generated questions remain to be exercised. Outside-user trial and repeated use are the next acceptance paths.
 
 ## License
 
