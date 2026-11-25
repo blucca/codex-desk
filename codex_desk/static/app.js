@@ -512,9 +512,13 @@ async function nativeList(cursor=null) {
   }
 }
 function fillProfiles(select) {select.replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));}
+let handoffSource=null;
+// Canceled next-task preparation belongs to its source, not the shared dialog.
+const handoffGoals=new Map();
+$('handoff-goal').oninput=()=>{if(handoffSource)handoffGoals.set(handoffSource,$('handoff-goal').value);};
 async function showHandoff(thread,cwd,valid=()=>true) {
   const current=generation;
-  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;$('handoff-error').hidden=true;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
+  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;handoffSource=thread;$('handoff-goal').value=handoffGoals.get(thread) || '';$('handoff-error').hidden=true;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
 }
 $('browse').onclick=()=>{$('history').showModal();nativeList();};
 $('history-search').oninput=resetNative;
@@ -523,7 +527,7 @@ $('history').addEventListener('close',()=>{if(!$('history').open)resetNative();}
 $('more').onclick=()=>nativeList(nativeCursor);
 $('history-close').onclick=()=>$('history').close();$('preview-close').onclick=()=>$('preview').close();
 $('handoff').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)showHandoff(s.thread_id,s.cwd);};
-$('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;$('handoff-error').hidden=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal:$('handoff-goal').value});$('preview').close();await open(r.id);}catch(e){$('handoff-error').textContent=e.message;$('handoff-error').hidden=false;}finally{b.disabled=false;}};
+$('handoff-start').onclick=async()=>{const b=$('handoff-start'),source=handoffSource,goal=$('handoff-goal').value;b.disabled=true;$('handoff-error').hidden=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal});if(handoffGoals.get(source)===goal)handoffGoals.delete(source);$('preview').close();await open(r.id);}catch(e){$('handoff-error').textContent=e.message;$('handoff-error').hidden=false;}finally{b.disabled=false;}};
 
 let providerEditing=null, providerVersion=0, providerReturn=false;
 function drawProfiles(){
