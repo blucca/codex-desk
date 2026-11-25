@@ -6,6 +6,8 @@ A local project workbench for native Codex: reopen a project, continue its actua
 
 *Own synthetic MCP example: text and structured results, a deliberate tool failure, and the reopened conversation.*
 
+<a name="development-preview"></a>
+
 ## Install the preview
 
 Requires Python 3.11+ and an existing complete Codex CLI installation. [Install and sign in to Codex CLI](https://developers.openai.com/codex/cli) first, then check `codex --version` in the shell you will use for Desk. The current native integration was exercised with CLI **0.171.0 on Linux**.
@@ -62,6 +64,8 @@ For a fresh task, choose **Start new conversation** instead of resuming an exist
 Choose **Continue with another provider** in an open session, or **Review handoff** beside a saved conversation. Review the visible messages, commands, file changes and MCP results; state the next goal and select the target profile. Desk starts a **distinct native thread** with that reviewed text, leaving the original rollout intact. Reading a handoff does not run a model turn or attempt compaction through the old provider. Encrypted reasoning is not replayed into the new thread.
 
 This is useful when the old provider is unavailable and you want to carry useful task evidence into a fresh conversation. The target profile must name the endpoint/model you intend to use. Same-thread resume uses the current selected settings.
+
+<a name="current-vertical-slice"></a>
 
 ## Daily workbench
 
