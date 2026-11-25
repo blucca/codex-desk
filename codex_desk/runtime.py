@@ -16,7 +16,16 @@ from urllib.parse import urlsplit, urlunsplit
 
 
 NAME_LIMIT = 120
+ACTIVE_STATUSES = frozenset(('starting', 'running', 'approval'))
 PROFILE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,40}')
+
+
+class NativeRequestRejected(RuntimeError):
+    """The native JSON-RPC server returned a definite request rejection."""
+
+
+class NativeRequestUnknown(RuntimeError):
+    """Transport loss left native request admission unconfirmed."""
 
 
 def _public_endpoint(endpoint):
@@ -185,7 +194,8 @@ class Store:
               created REAL, updated REAL, usage TEXT, error TEXT,
               name TEXT, name_source TEXT NOT NULL DEFAULT 'default',
               name_pending INTEGER NOT NULL DEFAULT 0, mode TEXT NOT NULL DEFAULT 'native',
-              thread_saved INTEGER NOT NULL DEFAULT 0);
+              thread_saved INTEGER NOT NULL DEFAULT 0,
+              archived INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS events(
               seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, payload TEXT NOT NULL);
             ''')
@@ -194,7 +204,8 @@ class Store:
                 ('name', 'TEXT'), ('name_source', "TEXT NOT NULL DEFAULT 'default'"),
                 ('name_pending', 'INTEGER NOT NULL DEFAULT 0'),
                 ('mode', "TEXT NOT NULL DEFAULT 'native'"),
-                ('thread_saved', 'INTEGER NOT NULL DEFAULT 0')):
+                ('thread_saved', 'INTEGER NOT NULL DEFAULT 0'),
+                ('archived', 'INTEGER NOT NULL DEFAULT 0')):
                 if column not in columns:
                     self.db.execute(f'ALTER TABLE sessions ADD COLUMN {column} {definition}')
             if 'thread_saved' not in columns:
@@ -236,9 +247,57 @@ class Store:
         with self.lock:
             cursor = self.db.execute("SELECT * FROM sessions ORDER BY updated DESC")
             keys = [c[0] for c in cursor.description]
-            return [dict(zip(keys, row)) for row in cursor]
+            rows = [dict(zip(keys, row)) for row in cursor]
+            for row in rows:
+                row['archived'] = bool(row['archived'])
+            return rows
     def get(self, identifier):
         return next((r for r in self.sessions() if r['id'] == identifier), None)
+    def archive(self, identifier, archived):
+        """Change local visibility only; preserve activity time and native binding."""
+        if not isinstance(identifier, str) or not identifier or identifier == 'native-catalog':
+            raise ValueError('Select an existing project session')
+        if type(archived) is not bool:
+            raise ValueError('Choose archive or unarchive with a boolean value')
+        with self.lock, self.db:
+            if self.db.execute('SELECT 1 FROM sessions WHERE id=?', (identifier,)).fetchone() is None:
+                raise ValueError('Session not found')
+            self.db.execute('UPDATE sessions SET archived=? WHERE id=?', (int(archived), identifier))
+        return {'id': identifier, 'archived': archived}
+    @staticmethod
+    def _canonical_cwd(cwd):
+        if not isinstance(cwd, (str, os.PathLike)) or not str(cwd).strip():
+            raise ValueError('Choose a project folder')
+        return os.path.normcase(str(Path(cwd).expanduser().resolve()))
+    def organized_sessions(self, cwd=None, title='', include_archived=False):
+        """Canonical project groups; active work never disappears behind archive."""
+        if not isinstance(title, str) or type(include_archived) is not bool:
+            raise ValueError('Use title text and a boolean archived option')
+        scoped = self._canonical_cwd(cwd) if cwd is not None else None
+        title = title.strip().casefold()
+        groups = {}
+        for row in self.sessions():
+            if row['id'] == 'native-catalog' or (title and title not in (row['name'] or '').casefold()):
+                continue
+            active = row['status'] in ACTIVE_STATUSES
+            if row['archived'] and not active and not include_archived:
+                continue
+            project = self._canonical_cwd(row['cwd'])
+            if scoped is not None and project != scoped:
+                continue
+            group = groups.setdefault(project, {'cwd': project, 'name': Path(project).name or project,
+                                                'active': [], 'recent': [], 'archived': []})
+            section = 'active' if active else 'archived' if row['archived'] else 'recent'
+            group[section].append(row)
+        recent_key = lambda row: (-(row['updated'] or 0), row['id'])
+        for group in groups.values():
+            group['active'].sort(key=lambda row: (row['status'] != 'approval', *recent_key(row)))
+            group['recent'].sort(key=recent_key)
+            group['archived'].sort(key=recent_key)
+        return sorted(groups.values(), key=lambda group: (
+            not bool(group['active']),
+            -max(row['updated'] or 0 for section in ('active', 'recent', 'archived') for row in group[section]),
+            group['cwd']))
 
 
 class Runtime:
@@ -262,7 +321,7 @@ class Runtime:
         self.reader.start()
         self.stderr_reader.start()
         try:
-            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a12"}, "capabilities": {"experimentalApi": True}})
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a13"}, "capabilities": {"experimentalApi": True}})
             self.send({"method": "initialized", "params": {}})
         except Exception:
             # A rejected handshake never reaches Desk's runtime registry.
@@ -279,13 +338,21 @@ class Runtime:
             result = queue.Queue(maxsize=1)
             self.pending[number] = result
         try:
-            self.send({"id": number, "method": method, "params": params})
+            try:
+                self.send({"id": number, "method": method, "params": params})
+            except (OSError, ValueError) as error:
+                raise NativeRequestUnknown('Native Codex request could not be confirmed; stop Desk and reopen the session') from error
             try:
                 message = result.get(timeout=timeout)
             except queue.Empty:
-                raise RuntimeError("Native Codex request timed out; stop Desk and reopen the session") from None
+                raise NativeRequestUnknown("Native Codex request timed out; stop Desk and reopen the session") from None
+            if 'transport_error' in message:
+                raise NativeRequestUnknown(message['transport_error'])
             if 'error' in message:
-                raise RuntimeError(message['error'].get('message', str(message['error'])))
+                error = message['error']
+                raise NativeRequestRejected(error.get('message', str(error)) if isinstance(error, dict) else str(error))
+            if 'result' not in message:
+                raise NativeRequestUnknown('Native Codex reply did not confirm the request')
             return message['result']
         finally:
             with self.lock:
@@ -308,6 +375,8 @@ class Runtime:
                     self._mark_exited()
             self.process.stdout.close()
     def _message(self, msg):
+        if getattr(self, 'closing', False):
+            return
         if 'method' not in msg and 'id' in msg:
             with self.lock:
                 target = self.pending.get(msg['id'])
@@ -352,7 +421,8 @@ class Runtime:
         with self.lock:
             for target in self.pending.values():
                 try:
-                    target.put_nowait({"error": {"message": "Codex app-server exited"}})
+                    target.put_nowait({"error": {"message": "Codex app-server exited"},
+                                       "transport_error": "Codex app-server exited"})
                 except queue.Full:
                     pass
     def _mark_exited(self):
@@ -454,10 +524,16 @@ class Runtime:
                         'settings': {'model': row['model'], 'developer_instructions': None}}
                 # The native reader needs lifecycle_lock to deliver this reply.
                 result = self.request('turn/start', params)
-            except Exception:
+                turn = result.get('turn') if isinstance(result, dict) else None
+                if not isinstance(turn, dict) or not isinstance(turn.get('id'), str) or not turn['id']:
+                    raise NativeRequestUnknown('Native Codex reply did not confirm the task start; review the session before continuing')
+            except Exception as error:
                 with self.lifecycle_lock:
                     if self.store.get(self.id)['status'] == 'starting':
-                        self.store.update(self.id, status=idle['status'], error=idle['error'])
+                        if isinstance(error, NativeRequestUnknown):
+                            self.store.update(self.id, status='interrupted', error=str(error))
+                        else:
+                            self.store.update(self.id, status=idle['status'], error=idle['error'])
                 raise
             with self.lifecycle_lock:
                 fields = {'mode': mode, 'thread_saved': 1}

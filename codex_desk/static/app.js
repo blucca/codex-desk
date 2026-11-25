@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 let state = {profiles: [], sessions: []}, selected = null, after = 0, items = new Map(), requests = new Map();
 const nodes = new Map();
-let modeSelected=null, generation=0, opening=false, refreshVersion=0;
+let modeSelected=null, generation=0, opening=false, refreshVersion=0, nativeFailureSignature='';
 const drafts=new Map(), submitting=new Set();
 let projectVersion=0, projectCursor=null, projectQuery=null, projectOpening=false;
 let latestUpdates=0, statePollAt=0;
@@ -75,33 +75,87 @@ async function api(path, data) {
 function error(e) { $('error').textContent = e.message; $('error').hidden = false; }
 function make(tag, text, cls) { const node = document.createElement(tag); if(text) node.textContent=text; if(cls) node.className=cls; return node; }
 function profileLabel(id){return state.profiles.find(p=>p.id===id || p.legacy_id===id)?.name || id;}
-function draw() {
-  const list=$('sessions'), left=list.scrollLeft, top=list.scrollTop;
-  $('sessions').replaceChildren();
-  for(const s of state.sessions) {
-    const b = make('button', '', 'session' + (s.id===selected?' selected':''));
-    b.title=s.cwd;
-    b.append(make('strong', s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1)), make('small', `${s.cwd.split(/[\\/]/).filter(Boolean).at(-1) || s.cwd} · ${profileLabel(s.profile)} · ${s.status}`));
-    b.onclick=()=>open(s.id); $('sessions').append(b);
+const archiving=new Set();
+function activeSession(s){return ['starting','running','approval'].includes(s.status);}
+function sidebarGroups(){
+  if(Array.isArray(state.organized))return state.organized;
+  const groups=new Map();
+  for(const s of state.sessions){
+    if(!groups.has(s.cwd))groups.set(s.cwd,{cwd:s.cwd,name:s.cwd.split(/[\\/]/).filter(Boolean).at(-1) || s.cwd,active:[],recent:[],archived:[]});
+    groups.get(s.cwd)[activeSession(s)?'active':s.archived?'archived':'recent'].push(s);
   }
+  return [...groups.values()].sort((a,b)=>Number(!!b.active.length)-Number(!!a.active.length));
+}
+function drawSidebar(){
+  const list=$('sessions'), left=list.scrollLeft, top=list.scrollTop;
+  list.replaceChildren();
+  const query=$('session-filter').value.trim().normalize('NFC').toLocaleLowerCase(), showArchived=$('show-archived').checked;
+  const current=new Map(state.sessions.map(s=>[s.id,s]));let visible=0;
+  for(const group of sidebarGroups()){
+    const sections={active:[],recent:[],archived:[]}, seen=new Set();
+    for(const saved of [...group.active,...group.recent,...group.archived]){
+      const s=current.get(saved.id);if(!s || seen.has(s.id))continue;seen.add(s.id);
+      const active=activeSession(s);
+      const matches=!query || `${s.name || ''} ${group.name} ${group.cwd}`.normalize('NFC').toLocaleLowerCase().includes(query);
+      if(!active && (!matches || (s.archived && !showArchived)))continue;
+      sections[active?'active':s.archived?'archived':'recent'].push(s);
+    }
+    if(!Object.values(sections).some(rows=>rows.length))continue;
+    const section=make('section','','project-group');section.dataset.cwd=group.cwd;
+    section.append(make('h3',group.name,'project-name'),make('p',group.cwd,'project-path'));
+    for(const [kind,rows] of Object.entries(sections)){
+      if(!rows.length)continue;
+      section.append(make('h4',`${kind[0].toUpperCase()+kind.slice(1)} · ${rows.length}`,'session-category'));
+      for(const s of rows){
+        const row=make('div','','session-row');row.dataset.session=s.id;
+        const b=make('button','','session'+(s.id===selected?' selected':''));b.title=s.cwd;
+        b.append(make('strong',s.name || group.name),make('small',`${profileLabel(s.profile)} · ${s.status}${s.archived?' · archived locally':''}`));
+        b.onclick=()=>open(s.id);
+        const archive=make('button',s.archived?'Restore':'Archive','session-archive');archive.type='button';
+        archive.setAttribute('aria-label',`${s.archived?'Restore':'Archive'} saved session ${s.name || group.name}`);
+        archive.disabled=archiving.has(s.id);archive.onclick=()=>setArchived(s.id,!s.archived);
+        row.append(b,archive);section.append(row);++visible;
+      }
+    }
+    list.append(section);
+  }
+  if(!visible)list.append(make('p',query?'No saved titles or project folders match.':'No recent saved sessions. Open a project or show archived sessions.','muted'));
+  $('session-count').textContent=`${visible} shown · ${state.sessions.length} saved${state.sessions.some(s=>activeSession(s))?' · active tasks stay visible':''}`;
   list.scrollLeft=left;list.scrollTop=top;
+}
+async function setArchived(id,archived){
+  if(archiving.has(id))return;
+  archiving.add(id);$('organization-error').hidden=true;draw();
+  try{await api('/api/archive',{session:id,archived});await refresh();}
+  catch(e){$('organization-error').textContent=e.message;$('organization-error').hidden=false;}
+  finally{archiving.delete(id);draw();}
+}
+$('session-filter').oninput=()=>drawSidebar();
+$('show-archived').onchange=()=>drawSidebar();
+$('archive-session').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)setArchived(s.id,!s.archived);};
+function draw() {
+  drawSidebar();
   const running=state.sessions.filter(s=>['running','approval','starting'].includes(s.status)).length;
   document.title=(running?`(${running} active) `:'')+'Codex Desk';
   $('activity-controls').hidden=!selected;
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
+  $('archive-session').hidden=false;$('archive-session').textContent=s.archived?'Restore session':'Archive session';
+  $('archive-session').disabled=archiving.has(s.id);
+  $('archive-status').hidden=!s.archived;
+  $('archive-status').textContent=activeSession(s)?'Archived locally. This active task stays visible.':'Archived locally. Restore it to show in Recent.';
   $('title').textContent=s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1);$('rename').hidden=false;
   $('binding').textContent=`${s.cwd}\n${profileLabel(s.profile)} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
   if(modeSelected!==selected){$('turn-mode').value=s.mode || 'native';modeSelected=selected;}
   const busy=opening || submitting.has(selected) || ['running','approval','starting'].includes(s.status);
-  $('turn-mode').disabled=busy;
-  $('status').textContent=opening?'Opening session…':s.status; $('send').disabled=busy;
+  DeskFollowups.status(selected,busy);$('prepare-followup').disabled=opening || submitting.has(selected);
+  $('turn-mode').disabled=opening;
+  $('status').textContent=opening?'Opening session…':s.status; $('send').disabled=busy || DeskFollowups.blocked(selected);
   $('stop').disabled=opening || !['running','approval'].includes(s.status);
   $('rename').disabled=opening;$('handoff').disabled=opening;
-  if(s.usage) {
-    const u=JSON.parse(s.usage), t=u.total || u;
-    $('usage').textContent=`Thread usage · input ${(t.inputTokens || 0).toLocaleString()} (cached ${(t.cachedInputTokens || 0).toLocaleString()}) · output ${(t.outputTokens || 0).toLocaleString()} · latest native cumulative total`;
-  } else $('usage').textContent='Usage appears after native Codex reports it.';
-  if(s.error && s.status==='failed' && !opening) error(new Error(s.error));
+  $('usage').textContent=DeskNativeState.usage(s.usage);
+  $('native-failure').hidden=!s.error || s.status!=='failed' || opening;
+  const failureKey=$('native-failure').hidden?'':JSON.stringify([selected,s.error]);
+  if(failureKey!==nativeFailureSignature){nativeFailureSignature=failureKey;$('native-failure').replaceChildren(...(failureKey?[DeskNativeState.card(s.error,false,make)]:[]));}
 }
 function itemText(i) {
   switch(i.type) {
@@ -165,19 +219,19 @@ function consume(m) {
     const i=items.get(p.itemId) || {id:p.itemId,type:'mcpToolCall',status:'inProgress'};
     i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i);
   }
-  if(m.method==='error') {const n=make('div',p.error?.message || JSON.stringify(p),'item');$('activity').append(n);}
+  if(m.method==='error')$('activity').append(DeskNativeState.card(p.error || p,!!p.willRetry,make));
 }
 async function refresh() {
   const current=generation, version=++refreshVersion, next=await api('/api/state');
   if(current!==generation || version!==refreshVersion)return;
-  state=next;requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();if($('profiles-dialog').open)drawProfiles();
+  state=next;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();if($('profiles-dialog').open)drawProfiles();
 }
 async function open(id) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
-  selected=id;$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();requests.clear();
-  $('error').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
+  selected=id;DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();requests.clear();
+  $('error').hidden=true;$('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
   const preparation=loadDraft(id,current);
   try {
@@ -266,6 +320,20 @@ $('project-more').onclick=()=>findProject(projectCursor);
 $('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
 $('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 $('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
+DeskFollowups.configure({api,make,selected:()=>selected,refresh});
+$('prepare-followup').onclick=async()=>{
+  if(!selected || opening || submitting.has(selected) || !$('prompt').value.trim())return;
+  const id=selected,current=generation,text=$('prompt').value,mode=$('turn-mode').value;
+  rememberDraft(id);const sentEdit=draftEdits.get(id) || 0;submitting.add(id);draw();
+  try{
+    if(!await persistDraft(id))return;
+    const sentRevision=draftRevisions.get(id);
+    await DeskFollowups.add(id,text,mode);
+    if((draftEdits.get(id) || 0)===sentEdit && draftRevisions.get(id)===sentRevision && drafts.get(id)===text && draftModes.get(id)===mode){draftEdits.set(id,(draftEdits.get(id) || 0)+1);drafts.set(id,'');if(selected===id && $('prompt').value===text)$('prompt').value='';await persistDraft(id);}
+    if(current===generation)$('followups').open=true;
+  }catch(err){if(current===generation)error(err);}
+  finally{submitting.delete(id);draw();}
+};
 $('task').onsubmit=async e=>{
   e.preventDefault();if(!selected || opening || submitting.has(selected) || $('send').disabled)return;
   const id=selected, current=generation, text=$('prompt').value, mode=$('turn-mode').value;
@@ -306,7 +374,7 @@ async function tick(){
   catch(e){if(++failures===1)error(new Error(connectionError));}
   finally{setTimeout(tick,failures?3000:800);}
 }
-(async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
+(async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last && (!s.archived || activeSession(s))))await open(last);tick();}catch(e){error(e)}})();
 
 let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;
 function nativeRow(t, resume, handoff, label='Resume with current settings') {

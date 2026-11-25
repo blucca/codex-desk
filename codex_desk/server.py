@@ -11,9 +11,18 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
-from .runtime import Runtime, Store, profiles, save_profile, update_profile, task_name, first_task, session_name, MissingRolloutError
+from .runtime import (Runtime, Store, profiles, save_profile, update_profile, task_name,
+                      first_task, session_name, MissingRolloutError, NativeRequestRejected, NativeRequestUnknown)
 from .handoff import build_handoff
 from .drafts import load_draft, save_draft, DraftConflict
+from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
+    remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
+
+
+class FollowupDispatchError(RuntimeError):
+    def __init__(self, message, snapshot):
+        self.snapshot = snapshot
+        super().__init__(message)
 
 
 class Desk:
@@ -22,6 +31,8 @@ class Desk:
         self.store = Store(Path(state) / "desk.sqlite3")
         self.runtimes = {}
         self.lock = threading.RLock()
+        self.admissions = {}
+        self.followup_sends = {}
     def open(self, identifier):
         with self.lock:
             runtime = self.runtimes.get(identifier)
@@ -66,6 +77,148 @@ class Desk:
     def runtime(self, identifier):
         self.open(identifier)
         return self.runtimes[identifier]
+    def admission_lock(self, identifier):
+        if not isinstance(identifier, str) or not identifier or identifier == 'native-catalog':
+            raise ValueError('Select an existing project session')
+        with self.lock:
+            return self.admissions.setdefault(identifier, threading.Lock())
+    def turn(self, identifier, text, mode='native'):
+        # The same explicit admission gate covers ordinary tasks and Send next.
+        gate = self.admission_lock(identifier)
+        if not gate.acquire(blocking=False):
+            raise ValueError('Finish or stop the current turn first')
+        try:
+            snapshot = followup_snapshot(self.store, identifier)
+            if snapshot['reservation']:
+                raise FollowupConflict(snapshot)
+            runtime = self.runtime(identifier)
+            records = self.store.events(identifier)
+            cursor = records[-1]['seq'] if records else 0
+            try:
+                return runtime.turn(text, mode)
+            except NativeRequestUnknown:
+                result = self.started_since(identifier, cursor)
+                if result is not None:
+                    return result
+                self.retire_runtime(identifier, runtime)
+                raise
+        finally:
+            gate.release()
+    def retire_runtime(self, identifier, runtime):
+        try:
+            runtime.close()
+        finally:
+            with self.lock:
+                if self.runtimes.get(identifier) is runtime:
+                    self.runtimes.pop(identifier, None)
+    def mutate_followups(self, operation, data):
+        identifier = data['session']
+        # Brief local commits remain available while native start is pending.
+        with self.lock:
+            if operation == 'add':
+                add_followup(self.store, identifier, data['text'], data.get('mode', 'native'))
+            elif operation == 'edit':
+                edit_followup(self.store, identifier, data['id'], data['text'], data['mode'], data['revision'])
+            elif operation == 'remove':
+                remove_followup(self.store, identifier, data['id'], data['revision'])
+            elif operation == 'reorder':
+                if not isinstance(data['order'], list):
+                    raise ValueError('Use the follow-up order you reviewed')
+                reorder_followups(self.store, identifier, data['ids'], data['order'])
+            elif operation == 'clear':
+                if not isinstance(data['order'], list):
+                    raise ValueError('Use the follow-up order you reviewed')
+                clear_followups(self.store, identifier, data['order'])
+            return followup_snapshot(self.store, identifier)
+    def started_since(self, identifier, cursor):
+        thread_id = self.store.get(identifier)['thread_id']
+        for record in reversed(self.store.events(identifier, cursor)):
+            event = record['event']
+            params = event.get('params', {})
+            turn = params.get('turn')
+            if (event.get('method') == 'turn/started' and params.get('threadId', thread_id) == thread_id
+                    and isinstance(turn, dict) and isinstance(turn.get('id'), str) and turn['id']):
+                return {'turn': turn}
+        return None
+    def send_followup(self, data):
+        identifier = data['session']
+        gate = self.admission_lock(identifier)
+        if not gate.acquire(blocking=False):
+            raise FollowupConflict(followup_snapshot(self.store, identifier))
+        reservation = None
+        try:
+            with self.lock:
+                reservation = reserve_followup(self.store, identifier, data['id'], data['revision'], first_only=True)
+                if reservation is None:
+                    raise FollowupConflict(followup_snapshot(self.store, identifier))
+                self.followup_sends[identifier] = reservation['token']
+            records = self.store.events(identifier)
+            cursor = records[-1]['seq'] if records else 0
+            invoked, result, error, runtime = False, None, None, None
+            try:
+                runtime = self.runtime(identifier)
+                # Attach/resume notifications describe prior work, not this
+                # prepared task's admission.
+                records = self.store.events(identifier)
+                cursor = records[-1]['seq'] if records else 0
+                invoked = True
+                result = runtime.turn(reservation['text'], reservation['mode'])
+                turn = result.get('turn') if isinstance(result, dict) else None
+                confirmed = isinstance(turn, dict) and isinstance(turn.get('id'), str) and bool(turn['id'])
+                if not confirmed:
+                    result = self.started_since(identifier, cursor)
+                    if result is None:
+                        error = 'Native task admission is unconfirmed; review this receipt before sending another task'
+            except Exception as failure:
+                error = str(failure)
+                # A genuine started event is admission proof even if its reply
+                # was lost or a very fast task already completed.
+                result = (self.started_since(identifier, cursor)
+                          if invoked and not isinstance(failure, ValueError) else None)
+                rejected = not invoked or isinstance(failure, (NativeRequestRejected, ValueError))
+            else:
+                rejected = False
+            outcome = 'accepted' if result is not None else 'rejected' if rejected else 'unknown'
+            receipt = record_followup_receipt(self.store, identifier, reservation['token'],
+                reservation['entry_id'], reservation['revision'], outcome)
+            if outcome == 'unknown' and runtime is not None:
+                # Retire an unconfirmed writer before explicit rejection can
+                # make another admission possible. Late retired events cannot
+                # become a second task's start/completion evidence.
+                self.retire_runtime(identifier, runtime)
+            snapshot = {**followup_snapshot(self.store, identifier), 'receipt': receipt}
+            if outcome == 'accepted':
+                snapshot['turn'] = result
+                return snapshot
+            raise FollowupDispatchError(error, snapshot)
+        finally:
+            if reservation is not None:
+                with self.lock:
+                    if self.followup_sends.get(identifier) == reservation['token']:
+                        self.followup_sends.pop(identifier, None)
+            gate.release()
+    def resolve_followup(self, data):
+        identifier = data['session']
+        if data['outcome'] not in ('accepted', 'rejected'):
+            raise ValueError('Confirm accepted or rejected task admission')
+        gate = self.admission_lock(identifier)
+        if not gate.acquire(blocking=False):
+            raise FollowupConflict(followup_snapshot(self.store, identifier))
+        try:
+            with self.lock:
+                snapshot = followup_snapshot(self.store, identifier)
+                runtime = self.runtimes.get(identifier)
+                if identifier in self.followup_sends:
+                    raise FollowupConflict(snapshot)
+                if (data['outcome'] == 'rejected' and runtime is not None
+                        and runtime.process.poll() is None
+                        and self.store.get(identifier)['status'] in ('starting', 'running', 'approval')):
+                    raise FollowupConflict(snapshot)
+                receipt = record_followup_receipt(self.store, identifier, data['token'], data['id'],
+                    data['revision'], data['outcome'])
+                return {**followup_snapshot(self.store, identifier), 'receipt': receipt}
+        finally:
+            gate.release()
     def rename(self, identifier, name):
         name = session_name(name)
         if not self.store.get(identifier) or identifier == 'native-catalog':
@@ -97,6 +250,7 @@ class Desk:
             existing = next((s for s in self.store.sessions()
                 if s['thread_id'] == thread_id and (s['profile'] if s['profile'] == 'default' or s['profile'].startswith('sidecar:') else 'sidecar:' + s['profile']) == profile), None)
             if existing:
+                self.store.archive(existing['id'], False)
                 self.store.update(existing['id'], thread_saved=1)
                 return {'id': existing['id'], 'thread': thread}
             # Import is read-only. Native resume happens only when the user opens it.
@@ -138,11 +292,24 @@ def handler(desk):
             try:
                 self.local()
                 url = urlsplit(self.path)
+                if url.path == '/api/followups':
+                    params = parse_qs(url.query)
+                    return self.reply(followup_snapshot(desk.store, params['session'][0]))
                 if url.path == '/api/draft':
                     params = parse_qs(url.query)
                     return self.reply(load_draft(desk.store, params['session'][0]))
                 if url.path == '/api/state':
-                    return self.reply({'profiles': profiles(desk.home), 'sessions': [s for s in desk.store.sessions() if s['id'] != 'native-catalog'], 'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
+                    return self.reply({'profiles': profiles(desk.home),
+                        'sessions': [s for s in desk.store.sessions() if s['id'] != 'native-catalog'],
+                        'organized': desk.store.organized_sessions(include_archived=True),
+                        'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
+                if url.path == '/api/organized':
+                    params = parse_qs(url.query, keep_blank_values=True)
+                    archived = params.get('include_archived', ['false'])[0].lower()
+                    if archived not in ('false', 'true', '0', '1'):
+                        raise ValueError('Choose whether to include archived sessions')
+                    return self.reply(desk.store.organized_sessions(cwd=params.get('cwd', [None])[0],
+                        title=params.get('title', [''])[0], include_archived=archived in ('true', '1')))
                 if url.path == '/api/native':
                     params = parse_qs(url.query, keep_blank_values=True)
                     options = {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
@@ -160,12 +327,12 @@ def handler(desk):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/followups.js', '/native-state.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
@@ -182,8 +349,18 @@ def handler(desk):
                     raise ValueError("Request size outside supported range")
                 data = json.loads(self.rfile.read(size))
                 path = urlsplit(self.path).path
-                if path == '/api/draft':
+                if path == '/api/followups':
+                    result = desk.mutate_followups('add', data)
+                elif path in ('/api/followups/edit', '/api/followups/remove', '/api/followups/reorder', '/api/followups/clear'):
+                    result = desk.mutate_followups(path.rsplit('/', 1)[-1], data)
+                elif path == '/api/followups/send':
+                    result = desk.send_followup(data)
+                elif path == '/api/followups/resolve':
+                    result = desk.resolve_followup(data)
+                elif path == '/api/draft':
                     result = save_draft(desk.store, data['session'], data['text'], data['mode'], data['revision'], data.get('writer'), data.get('sequence'))
+                elif path == '/api/archive':
+                    result = desk.store.archive(data['session'], data['archived'])
                 elif path == '/api/profiles':
                     result = save_profile(desk.home, data['name'], data['endpoint'], data['model'], data['key'])
                 elif path == '/api/profiles/update':
@@ -207,7 +384,7 @@ def handler(desk):
                         raise ValueError('Enter the next task and review the handoff before starting')
                     text = 'Next task: ' + goal + '\n\n' + text
                     result = desk.create(data['cwd'], data['profile'])
-                    desk.runtime(result['id']).turn(text)
+                    desk.turn(result['id'], text)
                 elif path == '/api/open':
                     result = desk.open(data['session'])
                 elif path == '/api/rename':
@@ -216,7 +393,7 @@ def handler(desk):
                     text = data['text'].strip()
                     if not text:
                         raise ValueError("Enter a project task")
-                    result = desk.runtime(data['session']).turn(text, data.get('mode', 'native'))
+                    result = desk.turn(data['session'], text, data.get('mode', 'native'))
                 elif path == '/api/approval':
                     result = desk.runtime(data['session']).approve(data['request'], data['decision'])
                 elif path == '/api/answer':
@@ -226,8 +403,10 @@ def handler(desk):
                 else:
                     return self.reply({'error': 'Not found'}, 404)
                 self.reply(result)
-            except DraftConflict as error:
+            except (DraftConflict, FollowupConflict) as error:
                 self.reply({'error': str(error), 'current': error.current}, 409)
+            except FollowupDispatchError as error:
+                self.reply({'error': str(error), **error.snapshot}, 400)
             except (ValueError, KeyError, OSError, RuntimeError) as error:
                 self.reply({'error': str(error)}, 400)
             except Exception as error:

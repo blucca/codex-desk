@@ -2,7 +2,7 @@
 
 [五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
 
-适用于 **v0.1.0a12**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+适用于 **v0.1.0a13**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
 
@@ -23,7 +23,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a12/codex_desk-0.1.0a12-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a13/codex_desk-0.1.0a13-py3-none-any.whl
 codex-desk
 ```
 
@@ -35,7 +35,7 @@ codex --version
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a12/codex_desk-0.1.0a12-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a13/codex_desk-0.1.0a13-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -149,3 +149,21 @@ Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQ
 在任务输入框准备下一步，并选择 **Work** 或 **Plan**。看到 **Draft saved locally** 后，文字和模式已保存在这个 Desk 会话的本地数据库；刷新页面或用相同 state directory 重启 Desk 后会恢复，不会自动执行。发送失败时保留草稿。若另一标签页修改了同一草稿，选择 **Keep this tab draft**（保留当前标签页）或 **Load saved draft**（读取已保存草稿），然后再继续。
 
 选择 **Manage API profiles** → **Edit profile**，可以修改 Desk 创建的接口地址／模型，或轮换密钥，供应商名称和已有会话绑定不变。密钥留空即保留原值。当前 Codex 配置及自定义原生配置文件仍由其原文件管理。已经加载该配置的原生后端不会被热切换；保存后若提示仍在使用，按 **Ctrl+C** 停止 Desk，再用原参数启动，便会加载新配置。
+
+## 按项目整理活跃／最近会话
+
+侧栏按项目分组。**Active** 显示正在运行和等待批准的任务，**Recent** 显示空闲会话。**Find saved work** 按本地标题或项目目录筛选，不切换当前会话。
+
+**Archive session** 只把空闲的 Desk 条目从最近列表隐藏，原生历史、供应商绑定、草稿和已准备的后续任务都保留。勾选 **Show archived** 后点击 **Restore** 可恢复；仍在运行的归档会话继续显示在 Active，便于批准或停止。从原生历史再次打开时，也会复用并恢复原绑定。
+
+## 提前准备多个后续任务
+
+在输入框写任务、选择 **Work** 或 **Plan**，再点 **Save as follow-up**。任务存入当前 Desk 会话和供应商的准备列表，即使上一项任务还在运行也可准备。展开 **Prepared follow-ups** 可以编辑、删除、上下移动或清空已准备的内容。
+
+上一项结束后，点 **Send next** 只提交一项到它所属的会话。提交途中切换项目不会改变目标；剩余内容保持暂停。重新打开页面或重启 Desk 都不会自动执行。
+
+若无法确认启动结果，列表保留当时提交的指令。先检查该会话活动记录，再选 **It started — record accepted**（已启动，记为接受）或 **It did not start — keep prepared**（未启动，保留准备）。未确认的启动会阻止下一次提交；提交后又编辑过的内容不会被旧回执删除。
+
+## 原生容量和失败状态
+
+用量区分别显示原生累计输入／输出、最新请求输入和模型报告的上下文窗口。累计用量不当作当前占用比例。原生自动重试显示 **Native retry in progress**；最终失败卡片保留错误正文、类型及 HTTP 信息，并按真实错误给出检查模型／密钥、等待限流或新会话交接的下一步。先前的任务和工具输出仍可阅读。
