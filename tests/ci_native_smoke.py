@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
-import tempfile
+from native_scratch import NativeScratch
 from unittest.mock import patch
 from codex_desk.runtime import Runtime, save_profile
 from codex_desk.server import Desk, resolve_codex
@@ -22,7 +22,7 @@ def metadata_only(self, method, params, *args, **kwargs):
     return original(self, method, params, *args, **kwargs)
 
 
-with tempfile.TemporaryDirectory(dir=root, prefix='desk-native-runner-') as folder:
+with NativeScratch(dir=root, prefix='desk-native-runner-') as folder:
     base = Path(folder)
     home, project = base / 'native home', base / 'project with spaces'
     home.mkdir(); project.mkdir()

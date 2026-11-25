@@ -7,6 +7,7 @@ on:
       - 'codex_desk/**'
       - 'pyproject.toml'
       - 'tests/ci_native_smoke.py'
+      - 'tests/native_scratch.py'
       - '.github/workflows/native-smoke.yml'
 permissions:
   contents: read
