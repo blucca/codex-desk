@@ -11,6 +11,7 @@ import time
 import unittest
 from unittest.mock import patch
 
+from codex_desk import __version__
 from codex_desk.server import Desk, ThreadingHTTPServer, handler
 
 
@@ -96,6 +97,20 @@ for line in sys.stdin:
             if child.poll() is None:
                 child.kill()
                 child.wait(timeout=5)
+
+    def test_native_initialize_reports_canonical_package_version(self):
+        identifier = self.desk.store.create(str(self.project), 'default')
+        self.desk.store.update(identifier, thread_id='native-original', status='completed')
+        self.assertEqual(self.desk.open(identifier)['thread']['id'], 'native-original')
+        requests = [json.loads(line) for line in
+                    (self.home / 'fixture-requests.jsonl').read_text().splitlines()]
+        initialize = [r for r in requests if r['method'] == 'initialize']
+        self.assertEqual(len(initialize), 1)
+        self.assertEqual(initialize[0]['params']['clientInfo'], {
+            'name': 'codex_desk', 'title': 'Codex Desk', 'version': __version__})
+        self.assertEqual(initialize[0]['params']['capabilities'], {'experimentalApi': True})
+        self.assertEqual([r['method'] for r in requests],
+                         ['initialize', 'initialized', 'thread/resume'])
 
     def test_rejected_initialize_reaps_child_and_reopens_same_saved_session(self):
         config = self.home / 'saved.config.toml'

@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
+from codex_desk import __version__
 from codex_desk import server as desk_server
 
 
@@ -22,6 +23,39 @@ ROOT.mkdir(parents=True, exist_ok=True)
 
 
 class CliTests(unittest.TestCase):
+    def test_version_exits_before_codex_preflight_state_server_or_browser(self):
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(sys, 'argv', ['codex-desk', '--version']), \
+                patch.object(desk_server, 'resolve_codex') as preflight, \
+                patch.object(desk_server, 'Desk') as desk, \
+                patch.object(desk_server, 'ThreadingHTTPServer') as server, \
+                patch.object(desk_server.webbrowser, 'open') as browser, \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            with self.assertRaises(SystemExit) as exit:
+                desk_server.main()
+        self.assertEqual(exit.exception.code, 0)
+        self.assertEqual(output.getvalue(), __version__ + '\n')
+        self.assertEqual(errors.getvalue(), '')
+        preflight.assert_not_called()
+        desk.assert_not_called()
+        server.assert_not_called()
+        browser.assert_not_called()
+
+    def test_module_version_succeeds_without_codex_or_created_state(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            root = Path(folder)
+            home, state = root / 'native-home', root / 'state'
+            source = str(Path(desk_server.__file__).parent.parent)
+            env = {**os.environ, 'PYTHONPATH': source, 'PATH': '', 'CODEX_HOME': str(home)}
+            result = subprocess.run([sys.executable, '-m', 'codex_desk.server',
+                '--codex', str(root / 'missing-codex'), '--state-dir', str(state), '--version'],
+                cwd=root, env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, __version__ + '\n')
+            self.assertEqual(result.stderr, '')
+            self.assertFalse(home.exists())
+            self.assertFalse(state.exists())
+
     def test_missing_executable_stops_before_state_or_browser(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             missing = str(Path(folder) / 'missing-codex')

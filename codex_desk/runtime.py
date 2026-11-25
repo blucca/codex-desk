@@ -13,7 +13,7 @@ import tomllib
 import uuid
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
-from . import recall
+from . import __version__, recall
 
 
 NAME_LIMIT = 120
@@ -339,7 +339,7 @@ class Runtime:
         self.reader.start()
         self.stderr_reader.start()
         try:
-            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a16"}, "capabilities": {"experimentalApi": True}})
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": __version__}, "capabilities": {"experimentalApi": True}})
             self.send({"method": "initialized", "params": {}})
         except Exception:
             # A rejected handshake never reaches Desk's runtime registry.

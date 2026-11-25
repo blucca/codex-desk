@@ -11,6 +11,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
+from . import __version__
 from .runtime import (Runtime, Store, profiles, save_profile, update_profile, task_name,
                       first_task, session_name, MissingRolloutError, NativeRequestRejected, NativeRequestUnknown)
 from .handoff import build_handoff
@@ -458,6 +459,8 @@ def resolve_codex(value):
 
 def main():
     parser = argparse.ArgumentParser(description="Open your daily native Codex project workbench")
+    parser.add_argument('--version', action='version', version=__version__,
+                        help='Show the Codex Desk version and exit')
     parser.add_argument('--codex', default='codex',
                         help='Codex executable name or path (relative to this launch directory)')
     parser.add_argument('--codex-home', default=os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))
