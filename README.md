@@ -55,7 +55,7 @@ The workbench saves project/profile/native-thread bindings and activity in a loc
 1. Choose **Open a project** → enter your project folder → **Find existing sessions**. Keep **Current Codex settings** for the first resume.
 2. Resume your saved conversation. Check its prior messages, command output and tool results before sending anything.
 3. Give it one small next task, such as “Find this project's verification command, run it, and report the exact pass/failure result. Do not edit files.” Approve the native command if asked.
-4. Close the browser, reopen Desk and choose the same named session. Continue from its actual saved history.
+4. Close the browser. While the Desk terminal is still running, return to its printed URL and choose the same named session. To stop Desk, press `Ctrl+C` in that terminal; this also stops its running native tasks. Next time, launch Desk with the same virtual environment and Codex home/state-directory settings, then choose that session.
 
 For a fresh task, choose **Start new conversation** instead of resuming an existing one.
 
