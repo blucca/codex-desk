@@ -4,13 +4,23 @@ A local project workbench for native Codex: reopen a project, continue its actua
 
 ## Development preview
 
-Requires Python 3.11+ and an existing complete Codex CLI installation. The current native integration was exercised with CLI **0.171.0 on Linux**.
+Requires Python 3.11+ and an existing complete Codex CLI installation. [Install and sign in to Codex CLI](https://developers.openai.com/codex/cli) first, then check `codex --version` in the shell you will use for Desk. The current native integration was exercised with CLI **0.171.0 on Linux**.
+
+**Linux/macOS/WSL:**
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a5
+python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a6
 codex-desk
+```
+
+**Windows PowerShell** (run the virtual environment directly):
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a6
+.\.venv\Scripts\codex-desk.exe
 ```
 
 Or run from source without installation:
@@ -25,6 +35,8 @@ The server prints `http://127.0.0.1:8787` and opens it in your browser. Select a
 codex-desk --codex /path/to/codex --no-browser
 codex-desk --codex-home /your/codex-home --state-dir /your/desk-state
 ```
+
+`--codex` accepts an executable on `PATH`, an absolute path, or a relative path from the shell where Desk starts (including `~/...`). Desk checks the executable before opening the browser and uses that same launcher in every selected project.
 
 Existing keys remain in your Codex configuration or inherited process environment. A newly added key is stored in a local provider sidecar with mode 0600 on Linux. Provider overrides go to the app-server through its private stdin protocol, keeping keys out of process command arguments. For a Trial sidecar using `ONRAMP_API_KEY`, launch Desk from the shell where that variable is set. The optional local provider form accepts your existing key without uploading or exporting it. Desk does not rewrite your main config, auth or native rollouts. Main MCP, trust and sandbox settings are inherited.
 
@@ -43,7 +55,8 @@ Already use MCP tools in Codex? Desk inherits those settings and shows their tex
 
 - Project-bound provider choice and persistent, named workspace list; importing the same native conversation/profile reopens its existing workspace.
 - First-task titles and editable session names, synced through native `thread/name/set` for saved conversations. Blank-workspace names stay local until the first turn persists.
-- Native `thread/start`, `thread/resume`, `turn/start` and interruption.
+- Native `thread/start`, `thread/resume`, `turn/start` and interruption. Failed opens can be retried with the existing native thread/profile.
+- Project-isolated unsent task drafts while navigating within the page; a late response from another session leaves the current draft and approvals intact. Drafts live in page memory until submitted or the page is closed.
 - Live native task, command, answer, failure and usage events.
 - Readable MCP calls, arguments, progress, text/structured results and failures; imported dynamic-tool evidence.
 - Media/resource descriptors instead of expanded binary payloads; application-private MCP metadata is excluded from the handoff.
@@ -68,9 +81,19 @@ If you already switch between enterprise/personal providers or lose the desktop 
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**26 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**32 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 A real MCP acceptance turn called a local read-only fixture twice: success with a structured result, then a deliberate failure. After restarting Desk, the same native thread showed both results in the browser and reviewed handoff without another inference turn. Controlled browser fixtures additionally cover dynamic-tool results, resource/media descriptors, progress preservation and 390px layout. The fixtures use synthetic data; an outside user's completed project task and return are recorded separately from these checks.
+
+The optional browser regression checks use controlled two-project responses, with no provider calls:
+
+```sh
+python3 -m pip install playwright
+python3 -m playwright install chromium
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_navigation.py
+```
+
+They cover a slow older open, rapid duplicate submission, switching projects while a turn/approval response is pending, unsent drafts, and retrying a failed open. Set `DESK_CHROMIUM` to use an existing Chromium executable.
 
 ## License
 

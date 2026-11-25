@@ -1,7 +1,8 @@
 const $ = id => document.getElementById(id);
 let state = {profiles: [], sessions: []}, selected = null, after = 0, items = new Map(), requests = new Map();
 const nodes = new Map();
-let modeSelected=null, generation=0;
+let modeSelected=null, generation=0, opening=false, refreshVersion=0;
+const drafts=new Map(), submitting=new Set();
 async function api(path, data) {
   const r = await fetch(path, data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
   const v = await r.json(); if (!r.ok) throw new Error(v.error || 'Request failed'); return v;
@@ -21,14 +22,16 @@ function draw() {
   $('title').textContent=s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1);$('rename').hidden=false;
   $('binding').textContent=`${s.cwd}\n${profileLabel(s.profile)} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
   if(modeSelected!==selected){$('turn-mode').value=s.mode || 'native';modeSelected=selected;}
-  $('turn-mode').disabled=['running','approval','starting'].includes(s.status);
-  $('status').textContent=s.status; $('send').disabled=['running','approval','starting'].includes(s.status);
-  $('stop').disabled=!['running','approval'].includes(s.status);
+  const busy=opening || submitting.has(selected) || ['running','approval','starting'].includes(s.status);
+  $('turn-mode').disabled=busy;
+  $('status').textContent=opening?'Opening session…':s.status; $('send').disabled=busy;
+  $('stop').disabled=opening || !['running','approval'].includes(s.status);
+  $('rename').disabled=opening;$('handoff').disabled=opening;
   if(s.usage) {
     const u=JSON.parse(s.usage), t=u.total || u;
     $('usage').textContent=`Thread usage · input ${(t.inputTokens || 0).toLocaleString()} (cached ${(t.cachedInputTokens || 0).toLocaleString()}) · output ${(t.outputTokens || 0).toLocaleString()} · latest native cumulative total`;
   } else $('usage').textContent='Usage appears after native Codex reports it.';
-  if(s.error && s.status==='failed') error(new Error(s.error));
+  if(s.error && s.status==='failed' && !opening) error(new Error(s.error));
 }
 function itemText(i) {
   switch(i.type) {
@@ -54,11 +57,12 @@ function approvals() {
   approvalsSignature=signature;
   $('approvals').replaceChildren();
   for(const [id,m] of requests) {
+    const session=selected, current=generation;
     const p=m.params || {}, box=make('div',`${m.method}\n${p.command || p.reason || 'Native Codex needs your input.'}`, 'approval');
     if(['item/commandExecution/requestApproval','item/fileChange/requestApproval'].includes(m.method)) {
       const buttons=make('div','','actions');
       for(const [label,decision] of [['Allow once','accept'],['Decline','decline']]) {
-        const b=make('button',label); b.onclick=async()=>{try{await api('/api/approval',{session:selected,request:id,decision});requests.delete(id);approvals();}catch(e){error(e)}};buttons.append(b);
+        const b=make('button',label); b.onclick=async()=>{try{await api('/api/approval',{session,request:id,decision});if(current===generation){requests.delete(id);approvals();}}catch(e){if(current===generation)error(e)}};buttons.append(b);
       } box.append(buttons);
     } else if(m.method==='item/tool/requestUserInput') {
       const form=make('form'), fields=new Map();
@@ -70,7 +74,7 @@ function approvals() {
         label.append(input);form.append(label);fields.set(q.id,input);
       }
       const submit=make('button','Send answers');form.append(submit);
-      form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const answers=Object.fromEntries([...fields].map(([id,input])=>[id,[input.value]]));await api('/api/answer',{session:selected,request:id,answers});requests.delete(id);approvals();await refresh();}catch(e){error(e);submit.disabled=false;}};
+      form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const answers=Object.fromEntries([...fields].map(([id,input])=>[id,[input.value]]));await api('/api/answer',{session,request:id,answers});if(current===generation){requests.delete(id);approvals();await refresh();}}catch(e){if(current===generation){error(e);submit.disabled=false;}}};
       box.append(form);
     } else box.append(make('p','Use Stop turn for this interaction; a dedicated UI is not implemented yet.'));
     $('approvals').append(box);
@@ -93,13 +97,29 @@ function consume(m) {
   }
   if(m.method==='error') {const n=make('div',p.error?.message || JSON.stringify(p),'item');$('activity').append(n);}
 }
-async function refresh() {state=await api('/api/state');requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();}
+async function refresh() {
+  const current=generation, version=++refreshVersion, next=await api('/api/state');
+  if(current!==generation || version!==refreshVersion)return;
+  state=next;requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();
+}
 async function open(id) {
+  if(selected)drafts.set(selected,$('prompt').value);
+  const current=++generation;
+  selected=id;$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();requests.clear();
+  $('error').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
+  $('activity').replaceChildren();approvals();draw();
   try {
-    $('error').hidden=true; const opened=await api('/api/open',{session:id});
-    selected=id;modeSelected=null;generation++;$('task').hidden=true;localStorage.setItem('codex-desk-session',id);after=0;items.clear();nodes.clear();requests.clear();
-    $('activity').replaceChildren();for(const t of opened.thread.turns || [])for(const i of t.items || [])renderItem(i);$('welcome').hidden=true;await refresh();$('task').hidden=false;$('handoff').hidden=false;
-  } catch(e) {error(e);}
+    const opened=await api('/api/open',{session:id});
+    if(current!==generation)return;
+    localStorage.setItem('codex-desk-session',id);
+    for(const t of opened.thread.turns || [])for(const i of t.items || [])renderItem(i);
+    $('prompt').value=drafts.get(id) || '';$('welcome').hidden=true;
+    await refresh();
+    if(current!==generation)return;
+    opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
+  } catch(e) {
+    if(current===generation){opening=false;draw();error(e);}
+  }
 }
 function profileInfo() {
   const p=state.profiles.find(p=>p.id===$('profile').value);
@@ -108,10 +128,22 @@ function profileInfo() {
 $('new').onclick=()=>{ $('profile').replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));profileInfo();$('project').showModal();};
 $('profile').onchange=profileInfo;$('cancel').onclick=()=>$('project').close();
 $('create').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const r=await api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null});$('project').close();await open(r.id);}catch(err){$('project').close();error(err);}finally{b.disabled=false;}};
-$('task').onsubmit=async e=>{e.preventDefault();$('error').hidden=true;try{await api('/api/turn',{session:selected,text:$('prompt').value,mode:$('turn-mode').value});$('prompt').value='';await refresh();}catch(err){error(err);}};
-$('stop').onclick=async()=>{try{await api('/api/stop',{session:selected});requests.clear();approvals();await refresh();}catch(e){error(e);}};
+$('prompt').oninput=()=>{if(selected)drafts.set(selected,$('prompt').value);};
+$('task').onsubmit=async e=>{
+  e.preventDefault();if(!selected || opening || submitting.has(selected) || $('send').disabled)return;
+  const id=selected, current=generation, text=$('prompt').value, mode=$('turn-mode').value;
+  drafts.set(id,text);submitting.add(id);$('error').hidden=true;draw();
+  try {
+    await api('/api/turn',{session:id,text,mode});
+    if(drafts.get(id)===text)drafts.delete(id);
+    if(selected===id && $('prompt').value===text)$('prompt').value='';
+    if(current===generation)await refresh();
+  } catch(err) {if(current===generation)error(err);}
+  finally {submitting.delete(id);draw();}
+};
+$('stop').onclick=async()=>{if(opening)return;const session=selected,current=generation;try{await api('/api/stop',{session});if(current===generation){requests.clear();approvals();await refresh();}}catch(e){if(current===generation)error(e);}};
 let failures=0;
-async function tick(){try{if(selected){const current=generation;const rows=await api(`/api/events?session=${selected}&after=${after}`);if(current!==generation)return;for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
+async function tick(){try{if(selected && !opening){const current=generation;const rows=await api(`/api/events?session=${selected}&after=${after}`);if(current!==generation)return;for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
 (async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
 
 let nativeCursor=null;
@@ -128,7 +160,8 @@ async function nativeList(cursor=null) {
 }
 function fillProfiles(select) {select.replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));}
 async function showHandoff(thread,cwd) {
-  try {const r=await api('/api/handoff',{thread});$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){error(e);}
+  const current=generation;
+  try {const r=await api('/api/handoff',{thread});if(current!==generation)return;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation)error(e);}
 }
 $('browse').onclick=async()=>{try{$('history').showModal();await nativeList();}catch(e){$('history').close();error(e);}};
 $('more').onclick=async()=>{try{await nativeList(nativeCursor);}catch(e){error(e);}};

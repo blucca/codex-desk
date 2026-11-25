@@ -26,12 +26,16 @@ class Desk:
                 return runtime.thread_result
             if not self.store.get(identifier):
                 raise ValueError("Session not found")
-            runtime = Runtime(self.store, identifier, self.binary, self.home)
-            self.runtimes[identifier] = runtime
+            if runtime:
+                runtime.close()
+            runtime = None
             try:
+                runtime = Runtime(self.store, identifier, self.binary, self.home)
+                self.runtimes[identifier] = runtime
                 return runtime.attach()
             except Exception:
-                runtime.close()
+                if runtime is not None:
+                    runtime.close()
                 self.runtimes.pop(identifier, None)
                 self.store.update(identifier, status="failed", error="Native session could not open")
                 raise
@@ -65,6 +69,8 @@ class Desk:
                 self.store.create(str(Path.cwd()), 'default', identifier)
             runtime = self.runtimes.get(identifier)
             if not runtime or runtime.process.poll() is not None:
+                if runtime:
+                    runtime.close()
                 runtime = Runtime(self.store, identifier, self.binary, self.home)
                 self.runtimes[identifier] = runtime
             return runtime
@@ -198,16 +204,29 @@ def handler(desk):
     return Handler
 
 
+def resolve_codex(value):
+    # Native sessions run in the selected project, not the launch directory.
+    # Keep the launcher path (including symlinks), but make it absolute now.
+    executable = shutil.which(os.path.expanduser(value))
+    if not executable:
+        raise ValueError(f'Codex executable not found or not executable: {value}. '
+                         'Install Codex CLI first, or pass --codex /path/to/codex')
+    return os.path.abspath(executable)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Open your daily native Codex project workbench")
-    parser.add_argument('--codex', default=shutil.which('codex'))
+    parser.add_argument('--codex', default='codex',
+                        help='Codex executable name or path (relative to this launch directory)')
     parser.add_argument('--codex-home', default=os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))
     parser.add_argument('--state-dir', default=str(Path.home() / '.local' / 'state' / 'codex-desk'))
     parser.add_argument('--port', type=int, default=8787)
     parser.add_argument('--no-browser', action='store_true')
     args = parser.parse_args()
-    if not args.codex:
-        parser.error('Install Codex CLI first, or pass --codex /path/to/codex')
+    try:
+        args.codex = resolve_codex(args.codex)
+    except ValueError as error:
+        parser.error(str(error))
     desk = Desk(args.codex, args.codex_home, args.state_dir)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(desk))
     url = f'http://127.0.0.1:{server.server_port}'

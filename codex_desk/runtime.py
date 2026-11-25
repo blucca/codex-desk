@@ -164,6 +164,8 @@ class Runtime:
         self.pending, self.approvals = {}, {}
         self.lock, self.write_lock = threading.Lock(), threading.Lock()
         self.name_lock = threading.RLock()
+        self.lifecycle_lock = threading.Lock()
+        self.closing = False
         self.persisted = False
         self.counter = 0
         row = store.get(identifier)
@@ -171,10 +173,17 @@ class Runtime:
         self.process = subprocess.Popen([binary, "app-server", "--stdio"],
             cwd=row['cwd'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
-        threading.Thread(target=self._read, daemon=True).start()
-        threading.Thread(target=self._stderr, daemon=True).start()
-        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a5"}, "capabilities": {"experimentalApi": True}})
-        self.send({"method": "initialized", "params": {}})
+        self.reader = threading.Thread(target=self._read, daemon=True)
+        self.stderr_reader = threading.Thread(target=self._stderr, daemon=True)
+        self.reader.start()
+        self.stderr_reader.start()
+        try:
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a6"}, "capabilities": {"experimentalApi": True}})
+            self.send({"method": "initialized", "params": {}})
+        except Exception:
+            # A rejected handshake never reaches Desk's runtime registry.
+            self.close()
+            raise
     def send(self, payload):
         with self.write_lock:
             self.process.stdin.write(json.dumps(payload) + '\n')
@@ -198,53 +207,77 @@ class Runtime:
             with self.lock:
                 self.pending.pop(number, None)
     def _read(self):
-        for line in self.process.stdout:
-            try:
-                msg = json.loads(line)
-            except ValueError:
-                continue
-            if 'method' not in msg and 'id' in msg:
-                with self.lock:
-                    target = self.pending.get(msg['id'])
+        try:
+            for line in self.process.stdout:
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                with self.lifecycle_lock:
+                    if self.closing:
+                        break
+                    self._message(msg)
+        finally:
+            with self.lifecycle_lock:
+                self._fail_pending()
+                if not self.closing:
+                    self._mark_exited()
+            self.process.stdout.close()
+    def _message(self, msg):
+        if 'method' not in msg and 'id' in msg:
+            with self.lock:
+                target = self.pending.get(msg['id'])
                 if target:
-                    target.put(msg)
-                continue
-            self.store.event(self.id, msg)
-            method, params = msg.get('method'), msg.get('params', {})
-            if 'id' in msg:
-                self.approvals[str(msg['id'])] = msg
-                self.store.update(self.id, status="approval")
-            elif method == 'serverRequest/resolved':
-                self.approvals.pop(str(params.get('requestId')), None)
-                if not self.approvals:
-                    self.store.update(self.id, status='running')
-            elif method == 'thread/tokenUsage/updated':
-                # Native totals are cumulative snapshots, never sum them.
-                self.store.update(self.id, usage=json.dumps(params.get('tokenUsage', {})))
-            elif method == 'turn/started':
-                self.store.update(self.id, status="running", error=None)
-            elif method == 'turn/completed':
-                turn = params.get('turn', {})
-                self.store.update(self.id, status=turn.get('status', 'completed'),
-                                  error=json.dumps(turn['error']) if turn.get('error') else None)
-                self.persisted = True
-                # The reader must stay available for the name/set response.
-                threading.Thread(target=self._flush_name, daemon=True).start()
-            elif method == 'thread/name/updated' and params.get('threadId') == self.store.get(self.id)['thread_id']:
-                name = params.get('threadName')
-                row = self.store.get(self.id)
-                if name and (not row['name_pending'] or name == row['name']):
-                    self.store.update(self.id, name=task_name(name), name_source='native', name_pending=0)
+                    try:
+                        target.put_nowait(msg)
+                    except queue.Full:
+                        pass
+            return
+        self.store.event(self.id, msg)
+        method, params = msg.get('method'), msg.get('params', {})
+        if 'id' in msg:
+            self.approvals[str(msg['id'])] = msg
+            self.store.update(self.id, status="approval")
+        elif method == 'serverRequest/resolved':
+            self.approvals.pop(str(params.get('requestId')), None)
+            if not self.approvals:
+                self.store.update(self.id, status='running')
+        elif method == 'thread/tokenUsage/updated':
+            # Native totals are cumulative snapshots, never sum them.
+            self.store.update(self.id, usage=json.dumps(params.get('tokenUsage', {})))
+        elif method == 'turn/started':
+            self.store.update(self.id, status="running", error=None)
+        elif method == 'turn/completed':
+            turn = params.get('turn', {})
+            self.store.update(self.id, status=turn.get('status', 'completed'),
+                              error=json.dumps(turn['error']) if turn.get('error') else None)
+            self.persisted = True
+            # The reader must stay available for the name/set response.
+            threading.Thread(target=self._flush_name, daemon=True).start()
+        elif method == 'thread/name/updated' and params.get('threadId') == self.store.get(self.id)['thread_id']:
+            name = params.get('threadName')
+            row = self.store.get(self.id)
+            if name and (not row['name_pending'] or name == row['name']):
+                self.store.update(self.id, name=task_name(name), name_source='native', name_pending=0)
+    def _fail_pending(self):
         with self.lock:
             for target in self.pending.values():
-                if target.empty():
-                    target.put({"error": {"message": "Codex app-server exited"}})
+                try:
+                    target.put_nowait({"error": {"message": "Codex app-server exited"}})
+                except queue.Full:
+                    pass
+    def _mark_exited(self):
         row = self.store.get(self.id)
         if row['status'] in ('starting', 'running', 'approval'):
             self.store.update(self.id, status="interrupted", error="Codex app-server exited; reopen to resume")
     def _stderr(self):
-        for _ in self.process.stderr:
-            pass  # Native diagnostics arrive through typed events; don't leak auth-bearing logs.
+        try:
+            for _ in self.process.stderr:
+                if self.closing:
+                    break
+                # Native diagnostics arrive through typed events.
+        finally:
+            self.process.stderr.close()
     def attach(self):
         row = self.store.get(self.id)
         config = profile_config(self.home, row['profile'])
@@ -265,7 +298,7 @@ class Runtime:
         self.thread_result = result
         thread = result['thread']
         self.store.update(self.id, thread_id=thread['id'], model=result.get('model'),
-                          provider=result.get('modelProvider'), status="ready")
+                          provider=result.get('modelProvider'), status="ready", error=None)
         if row['name_pending']:
             self._flush_name()
         elif thread.get('name'):
@@ -356,6 +389,12 @@ class Runtime:
             raise ValueError("No running turn")
         return self.request('turn/interrupt', {'threadId': self.store.get(self.id)['thread_id'], 'turnId': turn_id})
     def close(self):
+        with self.lifecycle_lock:
+            if self.closing:
+                return
+            self.closing = True
+            self._mark_exited()
+        self._fail_pending()
         if self.process.poll() is None:
             self.process.terminate()
             try:
@@ -363,6 +402,12 @@ class Runtime:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+        self.process.stdin.close()
+        # A native command can retain inherited pipes after app-server exits.
+        # Retired readers ignore its output and close their own streams at EOF.
+        deadline = time.monotonic() + 1
+        for reader in (self.reader, self.stderr_reader):
+            reader.join(timeout=max(0, deadline - time.monotonic()))
 
 
 def save_profile(home, name, endpoint, model, key):
