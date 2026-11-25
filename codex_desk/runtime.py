@@ -55,11 +55,11 @@ def overrides(home, profile):
     def flatten(prefix, value):
         if isinstance(value, dict):
             for k, v in value.items():
-                flatten(prefix + "." + json.dumps(k) if prefix else json.dumps(k), v)
+                flatten(prefix + "." + k if prefix else k, v)
         else:
             args.extend(["-c", prefix + "=" + json.dumps(value, ensure_ascii=False)])
     for key, value in allowed.items():
-        flatten(json.dumps(key), value)
+        flatten(key, value)
     return args
 
 

@@ -22,7 +22,7 @@ class PersistenceTests(unittest.TestCase):
             (home/'trial.config.toml').write_text('model="trial"\nmodel_provider="relay"\n[model_providers.relay]\nbase_url="https://secret:password@example.com/v1?key=private"\nexperimental_bearer_token="private-key"\n')
             before=base.read_bytes();rows=profiles(home);args=overrides(home,'trial')
             self.assertNotIn('private',str(rows));self.assertNotIn('password',str(rows));self.assertNotIn('secret',str(rows))
-            self.assertIn('trial',str(args));self.assertNotIn('mcp_servers',str(args));self.assertEqual(base.read_bytes(),before)
+            self.assertIn('model="trial"',args);self.assertIn('model_providers.relay.base_url="https://secret:password@example.com/v1?key=private"',args);self.assertNotIn('mcp_servers',str(args));self.assertEqual(base.read_bytes(),before)
             self.assertEqual(overrides(home,'default'),[])
             with self.assertRaises(ValueError):overrides(home,'../../other')
 
