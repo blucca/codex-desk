@@ -9,7 +9,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
-from .runtime import Runtime, Store, profiles
+from .runtime import Runtime, Store, profiles, save_profile
+from .handoff import build_handoff
 
 
 class Desk:
@@ -22,7 +23,7 @@ class Desk:
         with self.lock:
             runtime = self.runtimes.get(identifier)
             if runtime and runtime.process.poll() is None:
-                return {"thread": {"id": self.store.get(identifier)['thread_id']}}
+                return runtime.thread_result
             if not self.store.get(identifier):
                 raise ValueError("Session not found")
             runtime = Runtime(self.store, identifier, self.binary, self.home)
@@ -46,6 +47,30 @@ class Desk:
     def runtime(self, identifier):
         self.open(identifier)
         return self.runtimes[identifier]
+    def catalog(self):
+        with self.lock:
+            identifier = 'native-catalog'
+            if not self.store.get(identifier):
+                self.store.create(str(Path.cwd()), 'default', identifier)
+            runtime = self.runtimes.get(identifier)
+            if not runtime or runtime.process.poll() is not None:
+                runtime = Runtime(self.store, identifier, self.binary, self.home)
+                self.runtimes[identifier] = runtime
+            return runtime
+    def history(self, thread_id):
+        return self.catalog().request('thread/read', {'threadId': thread_id, 'includeTurns': True})['thread']
+    def import_thread(self, thread_id, profile):
+        thread = self.history(thread_id)
+        cwd = Path(thread['cwd'])
+        if not cwd.is_dir():
+            raise ValueError('The saved project folder no longer exists; open a new workspace and hand off there')
+        if profile not in {p['id'] for p in profiles(self.home)}:
+            raise ValueError('Select an existing profile')
+        # Import is read-only. Native resume happens only when the user opens it.
+        identifier = self.store.create(str(cwd), profile)
+        self.store.update(identifier, thread_id=thread['id'], model=thread.get('model'),
+                          provider=thread.get('modelProvider'), status='saved')
+        return {'id': identifier, 'thread': thread}
     def close(self):
         for runtime in list(self.runtimes.values()):
             runtime.close()
@@ -76,7 +101,18 @@ def handler(desk):
                 self.local()
                 url = urlsplit(self.path)
                 if url.path == '/api/state':
-                    return self.reply({'profiles': profiles(desk.home), 'sessions': desk.store.sessions(), 'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
+                    return self.reply({'profiles': profiles(desk.home), 'sessions': [s for s in desk.store.sessions() if s['id'] != 'native-catalog'], 'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
+                if url.path == '/api/native':
+                    params = parse_qs(url.query)
+                    options = {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
+                    if params.get('cwd'):
+                        options['cwd'] = params['cwd'][0]
+                    if params.get('cursor'):
+                        options['cursor'] = params['cursor'][0]
+                    return self.reply(desk.catalog().request('thread/list', options))
+                if url.path == '/api/native/thread':
+                    params = parse_qs(url.query)
+                    return self.reply(desk.history(params['id'][0]))
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
@@ -90,7 +126,7 @@ def handler(desk):
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
                 self.wfile.write(data)
-            except (ValueError, KeyError) as error:
+            except (ValueError, KeyError, RuntimeError, OSError) as error:
                 self.reply({'error': str(error)}, 400)
         def do_POST(self):
             try:
@@ -102,8 +138,22 @@ def handler(desk):
                     raise ValueError("Request size outside supported range")
                 data = json.loads(self.rfile.read(size))
                 path = urlsplit(self.path).path
-                if path == '/api/sessions':
+                if path == '/api/profiles':
+                    result = save_profile(desk.home, data['name'], data['endpoint'], data['model'], data['key'])
+                elif path == '/api/sessions':
                     result = desk.create(data['cwd'], data['profile'])
+                elif path == '/api/import':
+                    result = desk.import_thread(data['thread'], data['profile'])
+                elif path == '/api/handoff':
+                    result = {'text': build_handoff(desk.history(data['thread']))}
+                elif path == '/api/handoff/start':
+                    text = data['text'].strip()
+                    goal = data['goal'].strip()
+                    if not text or not goal:
+                        raise ValueError('Enter the next task and review the handoff before starting')
+                    text = 'Next task: ' + goal + '\n\n' + text
+                    result = desk.create(data['cwd'], data['profile'])
+                    desk.runtime(result['id']).turn(text)
                 elif path == '/api/open':
                     result = desk.open(data['session'])
                 elif path == '/api/turn':
@@ -113,6 +163,8 @@ def handler(desk):
                     result = desk.runtime(data['session']).turn(text)
                 elif path == '/api/approval':
                     result = desk.runtime(data['session']).approve(data['request'], data['decision'])
+                elif path == '/api/answer':
+                    result = desk.runtime(data['session']).answer(data['request'], data['answers'])
                 elif path == '/api/stop':
                     result = desk.runtime(data['session']).interrupt()
                 else:

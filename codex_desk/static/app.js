@@ -31,7 +31,7 @@ function itemText(i) {
     case 'agentMessage':return i.text || '';
     case 'commandExecution':return `$ ${i.command || ''}\n${i.aggregatedOutput || ''}${i.exitCode == null ? '' : '\nExit '+i.exitCode}`;
     case 'fileChange':return (i.changes || []).map(c=>`${c.kind?.type || 'change'} ${c.path}\n${c.diff || ''}`).join('\n');
-    case 'reasoning':return [...(i.summary || []), ...(i.content || [])].join('\n');
+    case 'reasoning':return (i.summary || []).join('\n');
     default:return i.text || JSON.stringify(i, null, 2);
   }
 }
@@ -40,7 +40,11 @@ function renderItem(i) {
   if(!node) {node=make('div', '', 'item '+i.type);nodes.set(i.id,node);$('activity').append(node);}
   node.textContent=itemText(i);
 }
+let approvalsSignature='';
 function approvals() {
+  const signature=JSON.stringify([selected,[...requests]]);
+  if(signature===approvalsSignature)return;
+  approvalsSignature=signature;
   $('approvals').replaceChildren();
   for(const [id,m] of requests) {
     const p=m.params || {}, box=make('div',`${m.method}\n${p.command || p.reason || 'Native Codex needs your input.'}`, 'approval');
@@ -49,6 +53,18 @@ function approvals() {
       for(const [label,decision] of [['Allow once','accept'],['Decline','decline']]) {
         const b=make('button',label); b.onclick=async()=>{try{await api('/api/approval',{session:selected,request:id,decision});requests.delete(id);approvals();}catch(e){error(e)}};buttons.append(b);
       } box.append(buttons);
+    } else if(m.method==='item/tool/requestUserInput') {
+      const form=make('form'), fields=new Map();
+      for(const q of p.questions || []) {
+        const label=make('label',q.header+' — '+q.question);
+        const input=make(q.options?.length && !q.isOther?'select':'input');
+        if(input.tagName==='SELECT') for(const o of q.options) {const option=make('option',o.label+' — '+o.description);option.value=o.label;input.append(option);}
+        else {input.type=q.isSecret?'password':'text';input.required=true;input.autocomplete='off';if(q.options?.length)input.placeholder=q.options.map(o=>o.label).join(' / ');}
+        label.append(input);form.append(label);fields.set(q.id,input);
+      }
+      const submit=make('button','Send answers');form.append(submit);
+      form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const answers=Object.fromEntries([...fields].map(([id,input])=>[id,[input.value]]));await api('/api/answer',{session:selected,request:id,answers});requests.delete(id);approvals();await refresh();}catch(e){error(e);submit.disabled=false;}};
+      box.append(form);
     } else box.append(make('p','Use Stop turn for this interaction; a dedicated UI is not implemented yet.'));
     $('approvals').append(box);
   }
@@ -69,9 +85,9 @@ function consume(m) {
 async function refresh() {state=await api('/api/state');requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();}
 async function open(id) {
   try {
-    $('error').hidden=true; await api('/api/open',{session:id});
+    $('error').hidden=true; const opened=await api('/api/open',{session:id});
     selected=id;localStorage.setItem('codex-desk-session',id);after=0;items.clear();nodes.clear();requests.clear();
-    $('activity').replaceChildren();$('welcome').hidden=true;$('task').hidden=false;await refresh();
+    $('activity').replaceChildren();for(const t of opened.thread.turns || [])for(const i of t.items || [])renderItem(i);$('welcome').hidden=true;$('task').hidden=false;$('handoff').hidden=false;await refresh();
   } catch(e) {error(e);}
 }
 function profileInfo() {
@@ -86,3 +102,29 @@ $('stop').onclick=async()=>{try{await api('/api/stop',{session:selected});reques
 let failures=0;
 async function tick(){try{if(selected){const rows=await api(`/api/events?session=${selected}&after=${after}`);for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
 (async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
+
+let nativeCursor=null;
+async function nativeList(cursor=null) {
+  const data=await api('/api/native'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
+  if(!cursor)$('native-list').replaceChildren();
+  for(const t of data.data || []) {
+    const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
+    const action=make('div','','actions'),view=make('button','Resume with current settings'),handoff=make('button','Review handoff');
+    view.onclick=async()=>{try{const r=await api('/api/import',{thread:t.id,profile:'default'});$('history').close();await open(r.id);}catch(e){error(e);}};
+    handoff.onclick=()=>showHandoff(t.id,t.cwd);action.append(view,handoff);box.append(action);$('native-list').append(box);
+  }
+  nativeCursor=data.nextCursor;$('more').hidden=!nativeCursor;
+}
+function fillProfiles(select) {select.replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));}
+async function showHandoff(thread,cwd) {
+  try {const r=await api('/api/handoff',{thread});$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){error(e);}
+}
+$('browse').onclick=async()=>{try{$('history').showModal();await nativeList();}catch(e){$('history').close();error(e);}};
+$('more').onclick=async()=>{try{await nativeList(nativeCursor);}catch(e){error(e);}};
+$('history-close').onclick=()=>$('history').close();$('preview-close').onclick=()=>$('preview').close();
+$('handoff').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)showHandoff(s.thread_id,s.cwd);};
+$('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal:$('handoff-goal').value});$('preview').close();await open(r.id);}catch(e){error(e);}finally{b.disabled=false;}};
+
+$('add-provider').onclick=()=>$('provider').showModal();
+$('provider-close').onclick=()=>{$('provider-key').value='';$('provider').close();};
+$('provider-form').onsubmit=async e=>{e.preventDefault();$('provider-save').disabled=true;try{await api('/api/profiles',{name:$('provider-name').value,endpoint:$('provider-endpoint').value,model:$('provider-model').value,key:$('provider-key').value});$('provider-key').value='';$('provider').close();await refresh();}catch(e){$('provider').close();error(e);}finally{$('provider-key').value='';$('provider-save').disabled=false;}};

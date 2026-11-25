@@ -4,13 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-desk"
-version = "0.1.0.dev0"
+version = "0.1.0a1"
 description = "A local, project-bound daily workbench for native Codex sessions"
 requires-python = ">=3.11"
 license = "MIT"
 
+[project.urls]
+Homepage = "https://github.com/blucca/codex-desk"
+Issues = "https://github.com/blucca/codex-desk/issues"
+
+[project.optional-dependencies]
+control = ["websockets>=14,<17"]
+
 [project.scripts]
 codex-desk = "codex_desk.server:main"
+
+[tool.setuptools]
+packages = ["codex_desk"]
 
 [tool.setuptools.package-data]
 codex_desk = ["static/*"]

@@ -42,31 +42,24 @@ def profiles(home):
     return result
 
 
-def overrides(home, profile):
+def profile_config(home, profile):
     if profile == "default":
-        return []
+        return None
     if profile not in {row['id'] for row in profiles(home)}:
         raise ValueError("Choose an existing Codex profile")
     data = tomllib.loads((Path(home) / (profile + ".config.toml")).read_text(encoding="utf-8-sig"))
-    # Provider-only sidecars retain main MCP, trust, sandbox and user preferences.
-    allowed = {k: v for k, v in data.items() if k in (
+    return {k: v for k, v in data.items() if k in (
         "model", "model_provider", "model_reasoning_effort", "model_providers", "model_catalog_json")}
-    args = []
-    def flatten(prefix, value):
-        if isinstance(value, dict):
-            for k, v in value.items():
-                flatten(prefix + "." + k if prefix else k, v)
-        else:
-            args.extend(["-c", prefix + "=" + json.dumps(value, ensure_ascii=False)])
-    for key, value in allowed.items():
-        flatten(key, value)
-    return args
 
 
 class Store:
     def __init__(self, path):
         path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not path.exists():
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(fd)
+        os.chmod(path, 0o600)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.lock = threading.RLock()
         with self.db:
@@ -78,8 +71,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS events(
               seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, payload TEXT NOT NULL);
             ''')
-    def create(self, cwd, profile):
-        identifier = uuid.uuid4().hex
+    def create(self, cwd, profile, identifier=None):
+        identifier = identifier or uuid.uuid4().hex
         now = time.time()
         with self.lock, self.db:
             self.db.execute("INSERT INTO sessions(id,cwd,profile,status,created,updated) VALUES(?,?,?,?,?,?)",
@@ -110,18 +103,18 @@ class Store:
 
 class Runtime:
     def __init__(self, store, identifier, binary, home):
-        self.store, self.id = store, identifier
+        self.store, self.id, self.home = store, identifier, home
         self.pending, self.approvals = {}, {}
         self.lock, self.write_lock = threading.Lock(), threading.Lock()
         self.counter = 0
         row = store.get(identifier)
         env = {**os.environ, "CODEX_HOME": str(home)}
-        self.process = subprocess.Popen([binary, "app-server", "--stdio", *overrides(home, row['profile'])],
+        self.process = subprocess.Popen([binary, "app-server", "--stdio"],
             cwd=row['cwd'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._stderr, daemon=True).start()
-        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0"}})
+        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a1"}})
         self.send({"method": "initialized", "params": {}})
     def send(self, payload):
         with self.write_lock:
@@ -135,7 +128,10 @@ class Runtime:
             self.pending[number] = result
         try:
             self.send({"id": number, "method": method, "params": params})
-            message = result.get(timeout=timeout)
+            try:
+                message = result.get(timeout=timeout)
+            except queue.Empty:
+                raise RuntimeError("Native Codex request timed out; stop Desk and reopen the session") from None
             if 'error' in message:
                 raise RuntimeError(message['error'].get('message', str(message['error'])))
             return message['result']
@@ -159,6 +155,10 @@ class Runtime:
             if 'id' in msg:
                 self.approvals[str(msg['id'])] = msg
                 self.store.update(self.id, status="approval")
+            elif method == 'serverRequest/resolved':
+                self.approvals.pop(str(params.get('requestId')), None)
+                if not self.approvals:
+                    self.store.update(self.id, status='running')
             elif method == 'thread/tokenUsage/updated':
                 # Native totals are cumulative snapshots, never sum them.
                 self.store.update(self.id, usage=json.dumps(params.get('tokenUsage', {})))
@@ -180,18 +180,21 @@ class Runtime:
             pass  # Native diagnostics arrive through typed events; don't leak auth-bearing logs.
     def attach(self):
         row = self.store.get(self.id)
+        config = profile_config(self.home, row['profile'])
+        params = {'config': config} if config else {}
         if row['thread_id']:
             try:
-                result = self.request('thread/resume', {'threadId': row['thread_id']})
+                result = self.request('thread/resume', {'threadId': row['thread_id'], **params})
             except RuntimeError as error:
                 used = any(e['event'].get('method') == 'turn/started' for e in self.store.events(self.id))
                 if 'no rollout found' not in str(error) or used:
                     raise
                 # Codex writes its rollout lazily on the first turn. A blank workspace
                 # may be reopened with a fresh native thread, never a used conversation.
-                result = self.request('thread/start', {'cwd': row['cwd']})
+                result = self.request('thread/start', {'cwd': row['cwd'], **params})
         else:
-            result = self.request('thread/start', {'cwd': row['cwd']})
+            result = self.request('thread/start', {'cwd': row['cwd'], **params})
+        self.thread_result = result
         thread = result['thread']
         self.store.update(self.id, thread_id=thread['id'], model=result.get('model'),
                           provider=result.get('modelProvider'), status="ready")
@@ -213,6 +216,27 @@ class Runtime:
         self.send({'id': msg['id'], 'result': {'decision': decision}})
         self.approvals.pop(str(request_id))
         self.store.update(self.id, status="running")
+    def answer(self, request_id, answers):
+        msg = self.approvals.get(str(request_id))
+        if not msg or msg['method'] != 'item/tool/requestUserInput':
+            raise ValueError('This question is no longer pending')
+        questions = msg['params']['questions']
+        result = {}
+        for question in questions:
+            values = answers.get(question['id'])
+            if not isinstance(values, list) or not values or any(not isinstance(v, str) or not v.strip() for v in values):
+                raise ValueError('Answer every question before continuing')
+            options = question.get('options') or []
+            if options and not question.get('isOther'):
+                labels = {o['label'] for o in options}
+                if any(v not in labels for v in values):
+                    raise ValueError('Choose one of the offered answers')
+            result[question['id']] = {'answers': values}
+        self.send({'id': msg['id'], 'result': {'answers': result}})
+        self.approvals.pop(str(request_id), None)
+        self.store.update(self.id, status='running' if not self.approvals else 'approval')
+        return {'answered': True}
+
     def interrupt(self):
         events = self.store.events(self.id)
         turn_id = next((r['event']['params']['turn']['id'] for r in reversed(events)
@@ -228,3 +252,31 @@ class Runtime:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+
+
+def save_profile(home, name, endpoint, model, key):
+    """Create one native provider-only sidecar; keep the key out of responses/argv."""
+    import re
+    from urllib.parse import urlsplit
+    name, endpoint, model, key = name.strip(), endpoint.strip().rstrip('/'), model.strip(), key.strip()
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,40}', name):
+        raise ValueError('Profile name: 1–41 letters, numbers, underscores or hyphens')
+    url = urlsplit(endpoint)
+    if url.scheme not in ('http','https') or not url.hostname:
+        raise ValueError('Enter the full HTTP(S) API base URL')
+    if not model or not key:
+        raise ValueError('Enter a model and your existing API key')
+    home = Path(home)
+    home.mkdir(parents=True, exist_ok=True)
+    text = ('model = ' + json.dumps(model) + '\nmodel_provider = "desk_provider"\n'
+            + '[model_providers.desk_provider]\nname = ' + json.dumps(name)
+            + '\nbase_url = ' + json.dumps(endpoint) + '\nwire_api = "responses"\n'
+            + 'experimental_bearer_token = ' + json.dumps(key) + '\n')
+    path = home / (name + '.config.toml')
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise ValueError('This profile already exists; choose a new name') from None
+    with os.fdopen(fd, 'w', encoding='utf-8') as file:
+        file.write(text)
+    return {'id':name}
