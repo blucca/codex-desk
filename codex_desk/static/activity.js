@@ -1,7 +1,8 @@
 /* A local, DOM-only activity reader. Message text never becomes HTML. */
 (function(root) {
   const readers = new WeakMap();
-  const toolTypes = new Set(['commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall']);
+  const collaborationTypes = new Set(['collabAgentToolCall', 'subAgentActivity']);
+  const toolTypes = new Set(['commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall', ...collaborationTypes]);
   function element(tag, text, cls) {
     const node = document.createElement(tag);
     if(text !== undefined)node.textContent = text;
@@ -198,7 +199,24 @@
   }
   const brief = text => String(text || '').replace(/\s+/g, ' ').trim();
   const shorten = text => text.length > 180 ? text.slice(0, 177) + '…' : text;
+  const nativeLabel = value => typeof value === 'string' ? shorten(brief(value)) : '';
+  const labelFrom = (labels, value, fallback) => typeof value === 'string' && Object.hasOwn(labels, value) ? labels[value] : fallback;
+  function collaborationSummary(item) {
+    if(item.type === 'subAgentActivity') {
+      // Lifecycle events are facts, not the current state of a child thread.
+      const label = labelFrom({started:'Started', interacted:'Interacted with', interrupted:'Interrupted', completed:'Completed'}, item.kind, 'Subagent activity');
+      return label + ' · ' + (nativeLabel(item.agentPath) || nativeLabel(item.agentThreadId) || 'Agent');
+    }
+    const label = labelFrom({spawnAgent:'Spawn agent', sendInput:'Send input', resumeAgent:'Resume agent', wait:'Wait for agents', closeAgent:'Close agent', sendMessage:'Send message', followupTask:'Follow-up task', interruptAgent:'Interrupt agent', listAgents:'List agents'}, item.tool, 'Agent tool');
+    const current = labelFrom({inProgress:'In progress', completed:'Completed', failed:'Failed', interrupted:'Interrupted'}, item.status, 'Status unknown');
+    const targets = Array.isArray(item.receiverThreadIds) ? item.receiverThreadIds.filter(id => typeof id === 'string' && id.trim()) : [];
+    const target = targets.length > 1 ? targets.length + ' agents' : nativeLabel(targets[0]);
+    const states = item.agentsStates && typeof item.agentsStates === 'object' && !Array.isArray(item.agentsStates) ? Object.entries(item.agentsStates).filter(([key]) => key !== '_meta').map(([,state]) => state) : [];
+    const errors = states.filter(state => state?.status === 'errored' || state?.status === 'notFound').length;
+    return label + (target ? ' · ' + target : '') + ' · ' + current + (errors ? ' · ' + errors + (errors === 1 ? ' agent error' : ' agent errors') : '');
+  }
   function summary(item) {
+    if(collaborationTypes.has(item.type))return collaborationSummary(item);
     const current = status(item);
     if(item.type === 'commandExecution')return '$ ' + shorten(brief(item.command) || 'Command') + ' · ' + current + (item.exitCode == null ? '' : ' · exit ' + item.exitCode);
     if(item.type === 'fileChange') {
@@ -208,10 +226,11 @@
     return (item.type === 'mcpToolCall' ? 'MCP · ' + (brief(item.server) || 'server') : 'Tool' + (item.namespace ? ' · ' + brief(item.namespace) : '')) + ' / ' + (brief(item.tool) || 'tool') + ' · ' + current + (item.success === false ? ' · unsuccessful' : '');
   }
   function render(node, item, value) {
-    const text = String(value ?? '');
-    const mode = toolTypes.has(item.type) ? 'tool' : item.type === 'agentMessage' ? 'markdown' : 'plain';
+    const collaboration = collaborationTypes.has(item.type);
+    const text = String(collaboration ? root.DeskEvidence.collaboration(item) : value ?? '');
+    const mode = collaboration ? 'collaboration' : toolTypes.has(item.type) ? 'tool' : item.type === 'agentMessage' ? 'markdown' : 'plain';
     let reader = readers.get(node);
-    node.dataset.itemId = item.id;node.classList.add('activity-reader');node.hidden = mode !== 'tool' && !text.trim();
+    node.dataset.itemId = item.id;node.classList.add('activity-reader');node.hidden = !toolTypes.has(item.type) && !text.trim();
     if(!reader || reader.mode !== mode) {
       reader = {mode, text:null, preference:null};readers.set(node, reader);node.replaceChildren();
       if(mode === 'tool') {
@@ -222,6 +241,12 @@
         reader.details.addEventListener('toggle', () => {
           if(reader.details.open !== reader.expectedOpen)reader.preference = reader.details.open;
         });
+      } else if(mode === 'collaboration') {
+        // The turn-level disclosure is the only control for child activity.
+        // Opening it reveals public prompts/results without a second click.
+        reader.summary = element('div', undefined, 'activity-collaboration-label');
+        reader.body = element('pre', undefined, 'activity-evidence');
+        node.append(reader.summary, reader.body);
       } else {
         reader.body = element('div', undefined, 'activity-' + mode);node.append(reader.body);
       }
@@ -233,6 +258,7 @@
       reader.details.open = reader.expectedOpen;
       reader.summary.textContent = summary(item);
     }
+    if(mode === 'collaboration')reader.summary.textContent = summary(item);
     if(reader.text === text)return;
     reader.text = text;
     if(mode === 'markdown') {reader.body.replaceChildren();blocks(reader.body, text.replace(/\r\n?/g, '\n').split('\n'));}

@@ -2,7 +2,7 @@
 
 [五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
 
-适用于 **v0.1.0a14**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+适用于 **v0.1.0a15**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
 
@@ -23,7 +23,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a14/codex_desk-0.1.0a14-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
 codex-desk
 ```
 
@@ -35,7 +35,7 @@ codex --version
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a14/codex_desk-0.1.0a14-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 

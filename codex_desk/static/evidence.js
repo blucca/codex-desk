@@ -1,12 +1,34 @@
 /* Native tool evidence stays local. Binary payloads and application-private _meta
    are not task text and are never expanded or fetched by this renderer. */
 (function(root) {
+  function inlineDescription(value, label='Inline media') {
+    if(typeof value!=='string')return `[${label}: unavailable payload]`;
+    if(value.toLowerCase().startsWith('data:')) {
+      const comma=value.indexOf(','), header=comma<0?value:value.slice(0,comma), body=comma<0?'':value.slice(comma+1);
+      const mime=Array.from(header.slice(5).split(';')[0]).slice(0,80).join('') || 'unspecified MIME type';
+      return `[${label}: ${mime}; inline payload ${Array.from(body).length} characters]`;
+    }
+    return `[${label}: inline payload ${Array.from(value).length} characters]`;
+  }
+  function reviewLocation(value) {
+    if(typeof value!=='string')return '[Unavailable URI]';
+    if(value.toLowerCase().startsWith('data:'))return inlineDescription(value,'Media');
+    const clean=value.replace(/[\t\r\n]/g,'').replace(/^[\x00-\x20]+/,'');
+    const parts=/^([a-z][a-z0-9+.-]*:)?(\/\/([^/?#]*))?([^?#]*)/i.exec(clean);
+    const scheme=(parts[1] || '').toLowerCase(), host=(parts[3] || '').split('@').pop(), path=parts[4] || '';
+    if(host.includes('[') || host.includes(']')) {
+      try {new URL((scheme || 'https:')+'//'+host);}catch {return '[Invalid URI]';}
+    }
+    const network=host || (scheme && ['file:','http:','https:','ftp:','ws:','wss:'].includes(scheme));
+    return scheme+(network?'//'+host+(path && !path.startsWith('/')?'/':''):'')+path;
+  }
   function review(value) {
-    if(typeof value==='string' && value.toLowerCase().startsWith('data:'))return location(value);
+    if(typeof value==='string' && value.toLowerCase().startsWith('data:'))return inlineDescription(value);
     if(Array.isArray(value))return value.map(review);
     if(value && typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([key])=>key!=='_meta').map(([key,v])=>[key,
-      key==='blob' || (key==='data' && ['image','audio'].includes(value.type))?'[Binary payload omitted]':
-      ['uri','url','imageUrl','audioUrl'].includes(key) && typeof v==='string'?location(v):review(v)]));
+      key==='blob' && typeof v==='string'?inlineDescription(v,'Resource blob'):
+      key==='data' && ['image','audio'].includes(value.type)?inlineDescription(v,value.type==='image'?'Image':'Audio'):
+      ['uri','url','imageUrl','audioUrl'].includes(key) && typeof v==='string'?reviewLocation(v):review(v)]));
     return value;
   }
   function json(value) {return JSON.stringify(review(value), null, 2) ?? 'null';}
@@ -44,6 +66,41 @@
     if(Array.isArray(item.progress) && item.progress.length)lines.push('Progress\n'+item.progress.join('\n'));
     return lines.filter(Boolean).join('\n');
   }
-  root.DeskEvidence={tool,content};
+  function reported(value, fallback='unknown') {return typeof value==='string' && value?value:fallback;}
+  function collaborationOutput(value) {
+    if(typeof value==='string')return value;
+    if(value && typeof value==='object')return json(value);
+    return '[Unavailable output]';
+  }
+  function collaboration(item) {
+    if(!item || typeof item!=='object' || Array.isArray(item))return '[Unsupported collaboration item]';
+    if(item.type==='subAgentActivity') {
+      const lines=['Subagent activity','Kind: '+reported(item.kind),
+        'Agent path: '+reported(item.agentPath,'unavailable'),'Agent thread: '+reported(item.agentThreadId,'unavailable')];
+      for(const [key,label] of [['model','Resolved model'],['reasoningEffort','Resolved effort']]) {
+        if(typeof item[key]==='string' && item[key])lines.push(label+': '+item[key]);
+      }
+      return lines.join('\n');
+    }
+    if(item.type!=='collabAgentToolCall')return '[Unsupported collaboration item]';
+    const lines=['Collaboration tool: '+reported(item.tool),'Status: '+reported(item.status),
+      'Source thread: '+reported(item.senderThreadId,'unavailable')];
+    for(const [key,label] of [['model','Requested model'],['reasoningEffort','Requested effort']]) {
+      if(typeof item[key]==='string' && item[key])lines.push(label+': '+item[key]);
+    }
+    if(item.prompt!=null)lines.push('Prompt sent:',typeof item.prompt==='string'?item.prompt:'[Unavailable text content]');
+    const states=item.agentsStates && typeof item.agentsStates==='object' && !Array.isArray(item.agentsStates)?Object.fromEntries(Object.entries(item.agentsStates).filter(([key])=>key!=='_meta')):{};
+    const receivers=Array.isArray(item.receiverThreadIds)?item.receiverThreadIds.filter(v=>typeof v==='string' && v):[];
+    receivers.push(...Object.keys(states).filter(v=>v && !receivers.includes(v)));
+    if(!receivers.length)lines.push('Receiver threads: none reported');
+    for(const receiver of receivers) {
+      const state=Object.hasOwn(states,receiver)?states[receiver]:null;
+      const object=state && typeof state==='object' && !Array.isArray(state);
+      lines.push('Receiver thread: '+receiver,'Last known status: '+reported(object?state.status:null,'unavailable'));
+      if(object && state.message!=null)lines.push('Output:',collaborationOutput(state.message));
+    }
+    return lines.join('\n');
+  }
+  root.DeskEvidence={tool,content,collaboration};
   if(typeof module!=='undefined')module.exports=root.DeskEvidence;
 })(typeof globalThis==='undefined'?this:globalThis);

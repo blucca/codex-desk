@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 let state = {profiles: [], sessions: []}, selected = null, after = 0, items = new Map(), requests = new Map();
-const nodes = new Map();
+const nodes = new Map(), itemTurns = new Map(), collaborationGroups = new Map();
+const collaborationTypes = new Set(['collabAgentToolCall', 'subAgentActivity']);
+let nativeThreadId = null, currentTurn = null;
 let modeSelected=null, generation=0, opening=false, refreshVersion=0, nativeFailureSignature='';
 const drafts=new Map(), submitting=new Set();
 let projectVersion=0, projectCursor=null, projectQuery=null, projectOpening=false;
@@ -167,13 +169,51 @@ function itemText(i) {
     case 'fileChange':return (i.changes || []).map(c=>`${c.kind?.type || 'change'} ${c.path}\n${c.diff || ''}`).join('\n');
     case 'reasoning':return (i.summary || []).join('\n');
     case 'mcpToolCall':case 'dynamicToolCall':return DeskEvidence.tool(i);
+    case 'collabAgentToolCall':case 'subAgentActivity':return DeskEvidence.collaboration(i);
     default:return i.text || JSON.stringify(i, null, 2);
   }
 }
-function renderItem(i) {
+function updateCollaboration(group) {
+  const agents=new Set();let errors=false;
+  for(const id of group.ids) {
+    const item=items.get(id);
+    if(!item)continue;
+    if(typeof item.agentThreadId==='string' && item.agentThreadId)agents.add(item.agentThreadId);
+    for(const id of Array.isArray(item.receiverThreadIds)?item.receiverThreadIds:[])if(typeof id==='string' && id)agents.add(id);
+    if(item.status==='failed')errors=true;
+    const states=item.agentsStates && typeof item.agentsStates==='object' && !Array.isArray(item.agentsStates)?item.agentsStates:{};
+    for(const [id,value] of Object.entries(states)) {
+      if(id==='_meta' || !value || typeof value!=='object' || Array.isArray(value))continue;
+      if(id)agents.add(id);
+      if(value?.status==='errored' || value?.status==='notFound')errors=true;
+    }
+  }
+  group.summary.textContent='Sub-agents' + (agents.size?' · '+agents.size+' '+(agents.size===1?'agent':'agents'):'') +
+    ' · '+group.ids.size+' '+(group.ids.size===1?'activity':'activities')+(errors?' · Errors reported':'');
+}
+function collaborationGroup(turn) {
+  let group=collaborationGroups.get(turn);
+  if(!group) {
+    const node=make('details','','activity-collaboration'), summary=make('summary'), body=make('div','','activity-collaboration-items');
+    node.dataset.collaborationTurn=turn;
+    node.append(summary,body);$('activity').append(node);
+    group={node,summary,body,ids:new Set()};collaborationGroups.set(turn,group);
+    // The outer disclosure stays quiet during live work and completion. Native
+    // details state preserves the reader's deliberate open/closed choice.
+  }
+  return group;
+}
+function renderItem(i,turnId) {
   const prior=items.get(i.id);if(prior?.progress && !i.progress)i.progress=prior.progress;
-  items.set(i.id, i); let node=nodes.get(i.id);const text=itemText(i);
-  if(!node) {node=make('div', '', 'item '+i.type);nodes.set(i.id,node);$('activity').append(node);}
+  const turn=turnId || itemTurns.get(i.id) || currentTurn || 'unscoped';
+  itemTurns.set(i.id,turn);items.set(i.id,i);
+  let node=nodes.get(i.id);const text=itemText(i);
+  if(!node) {node=make('div','','item '+i.type);nodes.set(i.id,node);}
+  if(collaborationTypes.has(i.type)) {
+    const group=collaborationGroup(turn);
+    if(node.parentNode!==group.body)group.body.append(node);
+    group.ids.add(i.id);updateCollaboration(group);
+  } else if(!node.parentNode)$('activity').append(node);
   DeskActivity.render(node,i,text);
 }
 let approvalsSignature='';
@@ -208,18 +248,22 @@ function approvals() {
 }
 function consume(m) {
   const p=m.params || {};
+  // Old cached streams may contain owned child notifications. Keep native
+  // requests/resolutions, but never display a child as the selected parent.
+  if(p.threadId && nativeThreadId && p.threadId!==nativeThreadId && m.id===undefined && m.method!=='serverRequest/resolved')return;
+  if(m.method==='turn/started')currentTurn=p.turn?.id || p.turnId || currentTurn;
   if(m.id !== undefined && m.method) {requests.set(String(m.id),m);approvals();}
   if(m.method==='serverRequest/resolved') {requests.delete(String(p.requestId));approvals();}
-  if(m.method==='item/started' || m.method==='item/completed') renderItem(p.item);
+  if(m.method==='item/started' || m.method==='item/completed') renderItem(p.item,p.turnId);
   if(m.method==='item/agentMessage/delta') {
-    const i=items.get(p.itemId) || {id:p.itemId,type:'agentMessage',text:''};i.text+=p.delta || '';renderItem(i);
+    const i=items.get(p.itemId) || {id:p.itemId,type:'agentMessage',text:''};i.text+=p.delta || '';renderItem(i,p.turnId);
   }
   if(m.method==='item/commandExecution/outputDelta') {
-    const i=items.get(p.itemId) || {id:p.itemId,type:'commandExecution',aggregatedOutput:''};i.aggregatedOutput=(i.aggregatedOutput || '')+(p.delta || '');renderItem(i);
+    const i=items.get(p.itemId) || {id:p.itemId,type:'commandExecution',aggregatedOutput:''};i.aggregatedOutput=(i.aggregatedOutput || '')+(p.delta || '');renderItem(i,p.turnId);
   }
   if(m.method==='item/mcpToolCall/progress') {
     const i=items.get(p.itemId) || {id:p.itemId,type:'mcpToolCall',status:'inProgress'};
-    i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i);
+    i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i,p.turnId);
   }
   if(m.method==='error')$('activity').append(DeskNativeState.card(p.error || p,!!p.willRetry,make));
 }
@@ -232,7 +276,7 @@ async function open(id) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
-  selected=id;DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();requests.clear();
+  selected=id;DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
   $('error').hidden=true;$('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
   const preparation=loadDraft(id,current);
@@ -240,7 +284,8 @@ async function open(id) {
     const opened=await api('/api/open',{session:id});
     if(current!==generation)return;
     localStorage.setItem('codex-desk-session',id);
-    for(const t of opened.thread.turns || [])for(const i of t.items || [])renderItem(i);
+    nativeThreadId=opened.thread.id;
+    for(const [index,t] of (opened.thread.turns || []).entries())for(const i of t.items || [])renderItem(i,t.id || 'snapshot:'+index);
     $('prompt').value=drafts.get(id) || '';$('welcome').hidden=true;
     await refresh();
     if(current!==generation)return;

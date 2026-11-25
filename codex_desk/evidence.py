@@ -149,3 +149,59 @@ def tool_text(item):
     if not dynamic and isinstance(result, dict) and 'structuredContent' in result:
         lines.extend(['Structured content:', review_json(result['structuredContent'])])
     return '\n'.join(lines)
+
+
+def _reported(value, fallback='unknown'):
+    return value if isinstance(value, str) and value else fallback
+
+
+def _collaboration_output(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return review_json(value)
+    return '[Unavailable output]'
+
+
+def collaboration_text(item):
+    """Format only the public fields carried by a native collaboration item."""
+    if not isinstance(item, dict):
+        return '[Unsupported collaboration item]'
+    kind = item.get('type')
+    if kind == 'subAgentActivity':
+        lines = ['Subagent activity', 'Kind: ' + _reported(item.get('kind')),
+                 'Agent path: ' + _reported(item.get('agentPath'), 'unavailable'),
+                 'Agent thread: ' + _reported(item.get('agentThreadId'), 'unavailable')]
+        # These fields are resolved at creation, rather than tool requests.
+        for key, label in (('model', 'Resolved model'), ('reasoningEffort', 'Resolved effort')):
+            if isinstance(item.get(key), str) and item[key]:
+                lines.append(label + ': ' + item[key])
+        return '\n'.join(lines)
+    if kind != 'collabAgentToolCall':
+        return '[Unsupported collaboration item]'
+
+    lines = ['Collaboration tool: ' + _reported(item.get('tool')),
+             'Status: ' + _reported(item.get('status')),
+             'Source thread: ' + _reported(item.get('senderThreadId'), 'unavailable')]
+    for key, label in (('model', 'Requested model'), ('reasoningEffort', 'Requested effort')):
+        if isinstance(item.get(key), str) and item[key]:
+            lines.append(label + ': ' + item[key])
+    if item.get('prompt') is not None:
+        prompt = item['prompt'] if isinstance(item['prompt'], str) else '[Unavailable text content]'
+        lines.extend(['Prompt sent:', prompt])
+
+    states = item.get('agentsStates')
+    states = {key: value for key, value in states.items() if key != '_meta'} if isinstance(states, dict) else {}
+    receivers = item.get('receiverThreadIds')
+    receivers = [value for value in receivers if isinstance(value, str) and value] if isinstance(receivers, list) else []
+    # Keep target order and include states reported outside the target list.
+    receivers += [value for value in states if isinstance(value, str) and value and value not in receivers]
+    if not receivers:
+        lines.append('Receiver threads: none reported')
+    for receiver in receivers:
+        state = states.get(receiver)
+        lines.append('Receiver thread: ' + receiver)
+        lines.append('Last known status: ' + _reported(state.get('status') if isinstance(state, dict) else None, 'unavailable'))
+        if isinstance(state, dict) and state.get('message') is not None:
+            lines.extend(['Output:', _collaboration_output(state['message'])])
+    return '\n'.join(lines)

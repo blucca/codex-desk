@@ -1,5 +1,5 @@
 """Build an editable handoff from visible native task evidence."""
-from .evidence import tool_text
+from .evidence import collaboration_text, tool_text
 
 def visible_text(item):
     kind = item.get('type')
@@ -11,6 +11,8 @@ def visible_text(item):
         return 'Command\n' + item.get('command', '') + '\nExit: ' + str(item.get('exitCode')) + '\n' + item.get('aggregatedOutput', '')
     if kind in ('mcpToolCall', 'dynamicToolCall'):
         return tool_text(item)
+    if kind in ('collabAgentToolCall', 'subAgentActivity'):
+        return collaboration_text(item)
     if kind == 'fileChange':
         return 'File changes\n' + '\n'.join(c.get('path', '') + '\n' + c.get('diff', '') for c in item.get('changes', []))
     return ''

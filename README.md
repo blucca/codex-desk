@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a14/codex_desk-0.1.0a14-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a14/codex_desk-0.1.0a14-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -86,6 +86,12 @@ If another tab changes the same draft, choose **Keep this tab draft** or **Load 
 The sidebar groups saved Desk sessions by project. **Active** keeps running tasks and approval requests visible; **Recent** holds idle conversations. **Find saved work** filters local titles or project folders without changing your current conversation.
 
 **Archive session** hides an idle Desk entry from Recent, preserving its native history, provider binding, drafts and prepared follow-ups. **Show archived** → **Restore** returns it to the project list. An archived task that is still running stays in Active so you can approve or stop it. Returning through native history reuses and restores the original binding.
+
+### Read delegated work without coordination clutter
+
+Native sub-agent activity appears in one collapsed **Sub-agents** group per turn. Your prompts and Codex replies stay visible while the native lifecycle rows remain available on expansion. The group stays closed during work unless you open it; streaming updates and state refresh preserve your choice.
+
+Expanded entries show reported agent paths/IDs, lifecycle events, models, prompts and legacy receiver states/results. The same visible collaboration evidence is included in the editable handoff. Native child completion and usage updates keep their own thread scope; they do not finish the parent task or replace its usage. Child approval requests retain their original native request IDs.
 
 ### Prepared follow-ups
 
@@ -142,7 +148,7 @@ Startup tests cover a broken npm launcher, a missing interpreter and a bounded v
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**108 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**139 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 Two browser windows importing the same saved thread and profile now share one complete local binding. A slow native history read leaves other open sessions responsive. A separate controlled native-stdio/HTTP fixture exercises retained-profile import, same-thread continuation, reviewed distinct-provider handoff and Desk restart without provider calls. Project organization, prepared follow-up and native state browser checks exercise session scope, explicit admission/review, restart and 390/1250 layouts. Profile edit and draft browser checks exercise local persistence, canceled/delayed responses, two-tab draft conflicts and 390/1280 layouts.
 

@@ -134,6 +134,16 @@ def first_task(turns):
     return ''
 
 
+def _thread_scope(params):
+    if not isinstance(params, dict):
+        return None
+    thread_id = params.get('threadId')
+    if isinstance(thread_id, str) and thread_id:
+        return thread_id
+    thread = params.get('thread')
+    return thread.get('id') if isinstance(thread, dict) and isinstance(thread.get('id'), str) else None
+
+
 def profiles(home):
     home = Path(home)
     result = [{"id": "default", "name": "Current Codex settings", "editable": False}]
@@ -386,11 +396,33 @@ class Runtime:
                     except queue.Full:
                         pass
             return
+        method, params = msg.get('method'), msg.get('params') or {}
+        row = self.store.get(self.id)
+        thread_id = _thread_scope(params)
+        foreign = bool(row['thread_id'] and thread_id and thread_id != row['thread_id'])
+        if foreign and 'id' not in msg:
+            if method == 'serverRequest/resolved':
+                if str(params.get('requestId')) not in self.approvals:
+                    return
+            elif method == 'turn/completed':
+                # A child finish retires only that child's interactions. It is
+                # not a parent turn boundary, usage snapshot, or name flush.
+                retired = [key for key, request in self.approvals.items()
+                           if _thread_scope(request.get('params')) == thread_id]
+                for key in retired:
+                    self.approvals.pop(key)
+                if retired and not self.approvals and row['status'] == 'approval':
+                    self.store.update(self.id, status='running')
+                return
+            else:
+                return
         self.store.event(self.id, msg)
-        method, params = msg.get('method'), msg.get('params', {})
         if 'id' in msg:
             self.approvals[str(msg['id'])] = msg
-            self.store.update(self.id, status="approval")
+            # Child requests can still be answered by their original IDs, but
+            # late child activity must not reopen a finished parent turn.
+            if not foreign or row['status'] in ACTIVE_STATUSES:
+                self.store.update(self.id, status="approval")
         elif method == 'serverRequest/resolved':
             resolved = self.approvals.pop(str(params.get('requestId')), None)
             # A response already sent by Desk, or a late notification after
@@ -559,7 +591,7 @@ class Runtime:
                 raise ValueError("Choose a one-time decision")
             self.send({'id': msg['id'], 'result': {'decision': decision}})
             self.approvals.pop(str(request_id))
-            self.store.update(self.id, status='running' if not self.approvals else 'approval')
+            self._interaction_finished(msg)
     def answer(self, request_id, answers):
         with self.lifecycle_lock:
             msg = self.approvals.get(str(request_id))
@@ -579,16 +611,27 @@ class Runtime:
                 result[question['id']] = {'answers': values}
             self.send({'id': msg['id'], 'result': {'answers': result}})
             self.approvals.pop(str(request_id))
-            self.store.update(self.id, status='running' if not self.approvals else 'approval')
+            self._interaction_finished(msg)
             return {'answered': True}
+
+    def _interaction_finished(self, message):
+        thread_id = _thread_scope(message.get('params'))
+        if thread_id:
+            row = self.store.get(self.id)
+            if row['thread_id'] and thread_id != row['thread_id'] and row['status'] not in ACTIVE_STATUSES:
+                return
+        self.store.update(self.id, status='running' if not self.approvals else 'approval')
 
     def interrupt(self):
         events = self.store.events(self.id)
+        thread_id = self.store.get(self.id)['thread_id']
         turn_id = next((r['event']['params']['turn']['id'] for r in reversed(events)
-            if r['event'].get('method') == 'turn/started'), None)
+            if r['event'].get('method') == 'turn/started'
+            and (not _thread_scope(r['event'].get('params'))
+                 or _thread_scope(r['event'].get('params')) == thread_id)), None)
         if not turn_id:
             raise ValueError("No running turn")
-        return self.request('turn/interrupt', {'threadId': self.store.get(self.id)['thread_id'], 'turnId': turn_id})
+        return self.request('turn/interrupt', {'threadId': thread_id, 'turnId': turn_id})
     def close(self):
         with self.lifecycle_lock:
             if self.closing:
