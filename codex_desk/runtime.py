@@ -103,14 +103,15 @@ class Store:
               thread_id TEXT, model TEXT, provider TEXT, status TEXT,
               created REAL, updated REAL, usage TEXT, error TEXT,
               name TEXT, name_source TEXT NOT NULL DEFAULT 'default',
-              name_pending INTEGER NOT NULL DEFAULT 0);
+              name_pending INTEGER NOT NULL DEFAULT 0, mode TEXT NOT NULL DEFAULT 'native');
             CREATE TABLE IF NOT EXISTS events(
               seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, payload TEXT NOT NULL);
             ''')
             columns = {r[1] for r in self.db.execute('PRAGMA table_info(sessions)')}
             for column, definition in (
                 ('name', 'TEXT'), ('name_source', "TEXT NOT NULL DEFAULT 'default'"),
-                ('name_pending', 'INTEGER NOT NULL DEFAULT 0')):
+                ('name_pending', 'INTEGER NOT NULL DEFAULT 0'),
+                ('mode', "TEXT NOT NULL DEFAULT 'native'")):
                 if column not in columns:
                     self.db.execute(f'ALTER TABLE sessions ADD COLUMN {column} {definition}')
             # Backfill in place: keep IDs, binding, event sequence, and list order.
@@ -168,7 +169,7 @@ class Runtime:
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._stderr, daemon=True).start()
-        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a2"}})
+        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a3"}, "capabilities": {"experimentalApi": True}})
         self.send({"method": "initialized", "params": {}})
     def send(self, payload):
         with self.write_lock:
@@ -289,7 +290,9 @@ class Runtime:
             self.store.update(self.id, name=name, name_source='user', name_pending=1)
             self._sync_name()
         return {'name': name, 'namePending': bool(self.store.get(self.id)['name_pending'])}
-    def turn(self, text):
+    def turn(self, text, mode="native"):
+        if mode not in ("native", "plan"):
+            raise ValueError("Choose Work or Plan mode")
         row = self.store.get(self.id)
         if row['status'] in ('running', 'approval'):
             raise ValueError("Finish or stop the current turn first")
@@ -300,8 +303,15 @@ class Runtime:
                 if title:
                     self.store.update(self.id, name=title, name_source='task', name_pending=1)
                     self._sync_name()
-        return self.request('turn/start', {'threadId': row['thread_id'],
-            'input': [{'type': 'text', 'text': text}]})
+        params = {'threadId': row['thread_id'], 'input': [{'type': 'text', 'text': text}]}
+        if mode == 'plan' or row.get('mode') == 'plan':
+            if not row.get('model'):
+                raise ValueError('Reopen the session to load its native model before choosing Plan')
+            params['collaborationMode'] = {'mode': 'plan' if mode == 'plan' else 'default',
+                'settings': {'model': row['model'], 'developer_instructions': None}}
+        result = self.request('turn/start', params)
+        self.store.update(self.id, mode=mode)
+        return result
     def approve(self, request_id, decision):
         msg = self.approvals.get(str(request_id))
         if not msg:

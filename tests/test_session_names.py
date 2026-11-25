@@ -141,7 +141,8 @@ class SessionNamesTests(unittest.TestCase):
         self.assertEqual(self.store.get(identifier)['name_pending'], 1)
 
     def test_native_history_import_uses_name_or_first_user_task_without_writes(self):
-        desk = Desk('unused', self.path, self.path / 'import-state')
+        desk = Desk('unused', os.path.relpath(self.path), self.path / 'import-state')
+        self.assertEqual(desk.home, self.path.resolve())
         self.addCleanup(desk.store.db.close)
         desk.history = Mock(return_value={'id':'native-a', 'cwd':str(self.path), 'name':'Native name', 'turns':[]})
         named = desk.import_thread('native-a', 'default')
@@ -152,6 +153,23 @@ class SessionNamesTests(unittest.TestCase):
         self.assertEqual(desk.store.get(unnamed['id'])['name'], 'First user task')
         self.assertEqual(desk.runtimes, {})
         self.assertEqual(desk.store.get(named['id'])['thread_id'], 'native-a')
+
+    def test_plan_mode_and_explicit_return_to_native(self):
+        identifier = self.store.create(str(self.path), 'default')
+        self.store.update(identifier, thread_id='original', status='ready', model='fixture-model')
+        runtime = self.runtime(identifier, lambda method, params: {'turn':{'id':'turn'}})
+        runtime.turn('Make a plan', mode='plan')
+        runtime.request.assert_called_with('turn/start', {'threadId':'original',
+            'input':[{'type':'text','text':'Make a plan'}], 'collaborationMode':{
+                'mode':'plan','settings':{'model':'fixture-model','developer_instructions':None}}})
+        self.assertEqual(self.store.get(identifier)['mode'], 'plan')
+        runtime.turn('Execute the selected step', mode='native')
+        params=runtime.request.call_args.args[1]
+        self.assertEqual(params['collaborationMode']['mode'], 'default')
+        self.assertEqual(self.store.get(identifier)['mode'], 'native')
+        runtime.turn('Continue in native mode')
+        self.assertNotIn('collaborationMode', runtime.request.call_args.args[1])
+        with self.assertRaises(ValueError):runtime.turn('bad mode', mode='unknown')
 
     def test_name_validation(self):
         self.assertEqual(session_name(' One\n useful name '), 'One useful name')

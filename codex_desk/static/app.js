@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let state = {profiles: [], sessions: []}, selected = null, after = 0, items = new Map(), requests = new Map();
 const nodes = new Map();
+let modeSelected=null, generation=0;
 async function api(path, data) {
   const r = await fetch(path, data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
   const v = await r.json(); if (!r.ok) throw new Error(v.error || 'Request failed'); return v;
@@ -18,6 +19,8 @@ function draw() {
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
   $('title').textContent=s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1);$('rename').hidden=false;
   $('binding').textContent=`${s.cwd}\n${s.profile} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
+  if(modeSelected!==selected){$('turn-mode').value=s.mode || 'native';modeSelected=selected;}
+  $('turn-mode').disabled=['running','approval','starting'].includes(s.status);
   $('status').textContent=s.status; $('send').disabled=['running','approval','starting'].includes(s.status);
   $('stop').disabled=!['running','approval'].includes(s.status);
   if(s.usage) {
@@ -87,8 +90,8 @@ async function refresh() {state=await api('/api/state');requests=new Map((state.
 async function open(id) {
   try {
     $('error').hidden=true; const opened=await api('/api/open',{session:id});
-    selected=id;localStorage.setItem('codex-desk-session',id);after=0;items.clear();nodes.clear();requests.clear();
-    $('activity').replaceChildren();for(const t of opened.thread.turns || [])for(const i of t.items || [])renderItem(i);$('welcome').hidden=true;$('task').hidden=false;$('handoff').hidden=false;await refresh();
+    selected=id;modeSelected=null;generation++;$('task').hidden=true;localStorage.setItem('codex-desk-session',id);after=0;items.clear();nodes.clear();requests.clear();
+    $('activity').replaceChildren();for(const t of opened.thread.turns || [])for(const i of t.items || [])renderItem(i);$('welcome').hidden=true;await refresh();$('task').hidden=false;$('handoff').hidden=false;
   } catch(e) {error(e);}
 }
 function profileInfo() {
@@ -98,10 +101,10 @@ function profileInfo() {
 $('new').onclick=()=>{ $('profile').replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));profileInfo();$('project').showModal();};
 $('profile').onchange=profileInfo;$('cancel').onclick=()=>$('project').close();
 $('create').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const r=await api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null});$('project').close();await open(r.id);}catch(err){$('project').close();error(err);}finally{b.disabled=false;}};
-$('task').onsubmit=async e=>{e.preventDefault();$('error').hidden=true;try{await api('/api/turn',{session:selected,text:$('prompt').value});$('prompt').value='';await refresh();}catch(err){error(err);}};
+$('task').onsubmit=async e=>{e.preventDefault();$('error').hidden=true;try{await api('/api/turn',{session:selected,text:$('prompt').value,mode:$('turn-mode').value});$('prompt').value='';await refresh();}catch(err){error(err);}};
 $('stop').onclick=async()=>{try{await api('/api/stop',{session:selected});requests.clear();approvals();await refresh();}catch(e){error(e);}};
 let failures=0;
-async function tick(){try{if(selected){const rows=await api(`/api/events?session=${selected}&after=${after}`);for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
+async function tick(){try{if(selected){const current=generation;const rows=await api(`/api/events?session=${selected}&after=${after}`);if(current!==generation)return;for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
 (async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
 
 let nativeCursor=null;

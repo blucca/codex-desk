@@ -15,7 +15,7 @@ from .handoff import build_handoff
 
 class Desk:
     def __init__(self, binary, home, state):
-        self.binary, self.home = binary, Path(home)
+        self.binary, self.home = binary, Path(home).expanduser().resolve()
         self.store = Store(Path(state) / "desk.sqlite3")
         self.runtimes = {}
         self.lock = threading.RLock()
@@ -172,7 +172,7 @@ def handler(desk):
                     text = data['text'].strip()
                     if not text:
                         raise ValueError("Enter a project task")
-                    result = desk.runtime(data['session']).turn(text)
+                    result = desk.runtime(data['session']).turn(text, data.get('mode', 'native'))
                 elif path == '/api/approval':
                     result = desk.runtime(data['session']).approve(data['request'], data['decision'])
                 elif path == '/api/answer':
