@@ -252,6 +252,7 @@ class Desk:
             if existing:
                 self.store.archive(existing['id'], False)
                 self.store.update(existing['id'], thread_saved=1)
+                self.store.recall_snapshot(existing['id'], thread)
                 return {'id': existing['id'], 'thread': thread}
             # Import is read-only. Native resume happens only when the user opens it.
             identifier = self.store.create(str(cwd), profile)
@@ -262,7 +263,10 @@ class Desk:
             title = title or first_task(thread.get('turns', [])) or task_name(thread.get('preview') or '')
             if title:
                 self.store.update(identifier, name=title, name_source=source, name_pending=0)
+            self.store.recall_snapshot(identifier, thread)
             return {'id': identifier, 'thread': thread}
+    def recall(self, q, cwd=None, include_archived=False, limit=30):
+        return self.store.recall(q, cwd, include_archived, limit)
     def close(self):
         for runtime in list(self.runtimes.values()):
             runtime.close()
@@ -292,6 +296,16 @@ def handler(desk):
             try:
                 self.local()
                 url = urlsplit(self.path)
+                if url.path == '/api/recall':
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=10)
+                    if any(key not in ('q', 'cwd', 'archived', 'limit') or len(values) != 1
+                           for key, values in params.items()):
+                        raise ValueError('Use each recall query option once')
+                    archived = params.get('archived', ['false'])[0].lower()
+                    if archived not in ('true', 'false', '0', '1'):
+                        raise ValueError('Choose whether to include archived sessions')
+                    return self.reply(desk.recall(params.get('q', [''])[0], params.get('cwd', [None])[0],
+                        archived in ('true', '1'), int(params.get('limit', ['30'])[0])))
                 if url.path == '/api/followups':
                     params = parse_qs(url.query)
                     return self.reply(followup_snapshot(desk.store, params['session'][0]))
@@ -327,12 +341,12 @@ def handler(desk):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/followups.js', '/native-state.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/followups.js', '/native-state.js', '/recall.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()

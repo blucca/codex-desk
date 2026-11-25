@@ -13,6 +13,7 @@ import tomllib
 import uuid
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
+from . import recall
 
 
 NAME_LIMIT = 120
@@ -230,6 +231,7 @@ class Store:
                 self.db.execute('UPDATE sessions SET name=?,name_source=?,name_pending=? WHERE id=?',
                     (title or default_name(cwd, created or 0, identifier),
                      'task' if title else 'default', int(bool(title)), identifier))
+            recall.initialize(self)
     def create(self, cwd, profile, identifier=None, name=None):
         identifier = identifier or uuid.uuid4().hex
         now = time.time()
@@ -248,7 +250,13 @@ class Store:
                             [*fields.values(), identifier])
     def event(self, identifier, payload):
         with self.lock, self.db:
-            self.db.execute("INSERT INTO events(session_id,payload) VALUES(?,?)", (identifier, json.dumps(payload)))
+            cursor = self.db.execute("INSERT INTO events(session_id,payload) VALUES(?,?)", (identifier, json.dumps(payload)))
+            recall.record_event(self, identifier, payload, cursor.lastrowid)
+    def recall_snapshot(self, identifier, thread):
+        with self.lock, self.db:
+            recall.save_snapshot(self, identifier, thread)
+    def recall(self, q, cwd=None, include_archived=False, limit=30):
+        return recall.search(self, q, cwd, include_archived, limit)
     def events(self, identifier, after=0):
         with self.lock:
             return [{"seq": r[0], "event": json.loads(r[1])} for r in self.db.execute(
@@ -331,7 +339,7 @@ class Runtime:
         self.reader.start()
         self.stderr_reader.start()
         try:
-            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a13"}, "capabilities": {"experimentalApi": True}})
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a16"}, "capabilities": {"experimentalApi": True}})
             self.send({"method": "initialized", "params": {}})
         except Exception:
             # A rejected handshake never reaches Desk's runtime registry.
@@ -499,6 +507,7 @@ class Runtime:
         self.store.update(self.id, thread_id=thread['id'], model=result.get('model'),
                           provider=result.get('modelProvider'), status="ready", error=None,
                           thread_saved=thread_saved)
+        self.store.recall_snapshot(self.id, thread)
         if row['name_pending']:
             self._flush_name()
         elif thread.get('name'):

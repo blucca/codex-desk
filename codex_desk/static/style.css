@@ -58,3 +58,23 @@ aside{min-width:0}
 #followups{border-top:1px solid #344356;padding:16px 0;margin-top:20px}#followups[hidden],#followup-review[hidden]{display:none}#followups summary{cursor:pointer;font-weight:600;color:#bdd5cf}#followup-count{font-size:12px;border:1px solid #396458;border-radius:12px;padding:2px 8px;margin-left:8px}#followup-list{max-height:55vh;overflow:auto}.followup-entry{padding:14px 0;border-bottom:1px solid #344356;min-width:0}.followup-entry pre,#followup-pending-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;max-height:180px;overflow:auto}.followup-entry h3{font-size:13px;margin:0}.followup-entry .actions{flex-wrap:wrap;justify-content:flex-start;gap:6px}.followup-entry button{font-size:12px;padding:7px 10px}.followup-entry textarea{min-height:100px}.followup-entry select{padding:8px}.followup-entry label{margin-top:10px}#followup-error{color:#ffccd0;overflow-wrap:anywhere}#followup-review{border:1px solid #b48948;background:#30281c;padding:14px;border-radius:8px}#followup-review h3{margin:0;font-size:15px}#followup-send{background:#29765c;border-color:#429a7d}#prepare-followup{font-size:12px}#followups button:focus-visible{outline:2px solid #8cddc3;outline-offset:2px}
 
 #usage{white-space:pre-wrap;overflow-wrap:anywhere}.native-error-card{border:1px solid #ac6468;background:#302329;color:#ffccd0;padding:16px;margin:12px 0;border-radius:8px;overflow-wrap:anywhere}.native-error-card p{white-space:pre-wrap;margin:8px 0}.native-error-card small{color:#d3b6a4}.native-error-card pre{white-space:pre-wrap;max-height:240px;overflow:auto}#native-failure[hidden]{display:none}
+
+/* Saved-content recall is separate from native title discovery. */
+#search-saved-content{width:100%;font-size:12px;margin-top:10px;background:#203e39;border-color:#3b7767}
+#recall{width:min(820px,95vw);max-height:90vh;overflow:auto}
+#recall h2{margin-top:0}#recall-form{border-bottom:1px solid #344356;padding-bottom:16px}
+#recall-form>label:first-child{margin-top:12px}#recall-project{max-width:100%;text-overflow:ellipsis}
+#recall-query-info{margin:8px 0}#recall-summary,#recall-coverage{overflow-wrap:anywhere;white-space:pre-wrap}
+#recall-error{border:1px solid #ac6468;background:#3a2529;color:#ffccd0;padding:12px;border-radius:8px;overflow-wrap:anywhere}
+.recall-result{min-width:0;padding:16px 0;border-bottom:1px solid #344356}
+.recall-result h3{margin:0 0 6px;font-size:15px;overflow-wrap:anywhere}
+.recall-kind{font-size:12px;color:#a6d4c3;margin:4px 0}
+.recall-binding{white-space:pre-wrap;overflow-wrap:anywhere;color:#97aabd;font-size:11px;line-height:1.6;margin:4px 0 10px}
+.recall-snippet{margin:0 0 10px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;line-height:1.7;background:#101923;border-radius:7px;max-width:100%}
+.recall-snippet mark{background:#ead08c;color:#1b222b;border-radius:2px;padding:1px 0}
+.recall-updated{display:block;color:#97aabd;font-size:11px;margin-bottom:9px}
+.recall-open{font-size:12px;max-width:100%;overflow-wrap:anywhere}
+.recall-result-status{font-size:12px;color:#e5d2a8;line-height:1.6;overflow-wrap:anywhere}
+.recall-target{outline:3px solid #e6cb82!important;outline-offset:4px;scroll-margin-block:28px}
+#recall button:focus-visible,#recall input:focus-visible,#recall select:focus-visible,#search-saved-content:focus-visible{outline:2px solid #8cddc3;outline-offset:3px}
+@media(max-width:760px){#recall{padding:20px 16px}.recall-snippet{padding:10px}.recall-result h3{font-size:14px}#recall-form .actions{justify-content:flex-start}}

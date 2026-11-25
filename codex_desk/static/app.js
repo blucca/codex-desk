@@ -37,7 +37,7 @@ function persistDraft(id){
     if(draftConflicts.has(id))return false;
     if(!draftRevisions.has(id))return false;
     const text=drafts.get(id) || '', mode=draftModes.get(id) || 'native', saved=draftSaved.get(id);
-    if(saved && saved.text===text && saved.mode===mode)return true;
+    if(saved && saved.text===text && saved.mode===mode){draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);return true;}
     draftMessages.set(id,'Saving draft…');draftStatus(id);
     try{
       const next=await api('/api/draft',{session:id,text,mode,revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0});
@@ -270,13 +270,13 @@ function consume(m) {
 async function refresh() {
   const current=generation, version=++refreshVersion, next=await api('/api/state');
   if(current!==generation || version!==refreshVersion)return;
-  state=next;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();if($('profiles-dialog').open)drawProfiles();
+  state=next;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();DeskRecall.stateChanged();if($('profiles-dialog').open)drawProfiles();
 }
-async function open(id) {
+async function open(id,{revealLatest=true}={}) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
-  selected=id;DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
+  selected=id;DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
   $('error').hidden=true;$('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
   const preparation=loadDraft(id,current);
@@ -291,7 +291,7 @@ async function open(id) {
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
-    requestAnimationFrame(()=>{if(current===generation)goLatest();});
+    if(revealLatest)requestAnimationFrame(()=>{if(current===generation)goLatest();});
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
   }
@@ -368,6 +368,9 @@ $('project-new').onclick=()=>{if($('create').reportValidity())return openProject
 $('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 $('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 DeskFollowups.configure({api,make,selected:()=>selected,refresh});
+DeskRecall.configure({api,make,state:()=>state,selected:()=>selected,generation:()=>generation,
+  loaded:()=>!opening && !!nativeThreadId && !$('task').hidden,open,refresh,profileLabel,
+  itemNode:id=>nodes.get(id),itemTurn:id=>itemTurns.get(id),refreshFollowups:id=>DeskFollowups.refresh(id)});
 $('prepare-followup').onclick=async()=>{
   if(!selected || opening || submitting.has(selected) || !$('prompt').value.trim())return;
   const id=selected,current=generation,text=$('prompt').value,mode=$('turn-mode').value;

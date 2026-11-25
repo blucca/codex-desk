@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a16/codex_desk-0.1.0a16-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a15/codex_desk-0.1.0a15-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a16/codex_desk-0.1.0a16-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -74,6 +74,16 @@ In **Open a project**, enter part of a conversation title in **Search conversati
 Project results match the conversation's exact saved working directory (`cwd`): a session started in a subfolder requires that folder or the global browser. Global browsing uses the selected Codex home. Search matches native extracted titles, not message text, command output or MCP results.
 
 Editing the query clears old results and pagination; submit it again to search. Leave the title field blank to list conversations in that scope. **Load more** continues the same submitted title query and scope.
+
+### Find a decision or test result in saved work
+
+Choose **Search saved content**, enter a phrase from an earlier task, reply or tool result, then **Search**. Select one saved project for an exact folder scope, or search across your Desk projects. **Include archived** makes locally archived work available too.
+
+Results show the project, conversation and a matching snippet. **Open** returns to that existing native conversation and reveals the matched evidence, including collapsed command/MCP or sub-agent activity. For a saved draft or prepared follow-up, it reveals the existing instruction; it does not send it. Opening an archived result restores its Desk entry.
+
+Content recall reads your private local Desk database: readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. Native title browsing remains separate; conversations listed there become content-searchable after you open them. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
+
+Queries are literal, Unicode-normalized and case-insensitive. The dialog reports content coverage and a bounded set of recent matches.
 
 ### Prepare a task and come back later
 
@@ -120,6 +130,7 @@ This is useful when the old provider is unavailable and you want to carry useful
 ## Daily workbench
 
 - Project-grouped active/recent sessions, local title/folder filtering and reversible archives.
+- Literal saved-content recall across readable cached activity, drafts and prepared follow-ups, with exact evidence navigation and cold SQLite return.
 - Named project sessions, saved native history and same-thread reopen.
 - Retained API profile editing and key rotation without changing profile or session identity.
 - Native tasks, command/file approvals, questions, interruption and Work/Plan modes.
@@ -148,7 +159,7 @@ Startup tests cover a broken npm launcher, a missing interpreter and a bounded v
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**139 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**159 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 Two browser windows importing the same saved thread and profile now share one complete local binding. A slow native history read leaves other open sessions responsive. A separate controlled native-stdio/HTTP fixture exercises retained-profile import, same-thread continuation, reviewed distinct-provider handoff and Desk restart without provider calls. Project organization, prepared follow-up and native state browser checks exercise session scope, explicit admission/review, restart and 390/1250 layouts. Profile edit and draft browser checks exercise local persistence, canceled/delayed responses, two-tab draft conflicts and 390/1280 layouts.
 
@@ -162,6 +173,7 @@ python3 -m playwright install chromium
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_navigation.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_onboarding.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_search.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_recall.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_activity.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_monitor.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_errors.py
@@ -172,6 +184,8 @@ DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_drafts.py
 The dialog-error check exercises real loopback failures for a duplicate provider name, a missing handoff folder and a missing saved project. Errors remain visible in the open dialog, provider retry keeps nonsecret inputs, and cancel clears the key. The missing-history tests preserve an imported thread through failure/restart and resume it after restoration, without creating a replacement.
 
 The activity-reader check replays three synthetic turns through the loopback UI: safe Markdown, exact copyable code, complete collapsible tool evidence, live/manual expansion, final-result replacement and message ordering. The monitor check covers another project requesting approval and finishing while the selected conversation is quiet, reading-position preservation and following fresh output. Backend HTTP fixtures cover approval/completion races and concurrent task submissions from two browser tabs.
+
+The saved-content recall check uses real local HTTP with controlled native history and private SQLite: literal/Unicode snippets, exact project and archive scopes, command/MCP/collaboration navigation, current-session reuse, saved draft/follow-up preservation, stale search/selection/content responses and 390/1250 layouts. Backend checks cover imported/live evidence, terminal-turn sealing, old-event backfill, cached restart and read-only preparation. Native title discovery remains separate from saved-content recall.
 
 The title-search check covers project/global title filters, query-bound pagination, stale search/page/dialog/handoff responses and provider retention. Metadata-only search against actual owned Codex CLI 0.163.0 history included the matching saved thread, excluded an unmatched title and preserved exact cwd filtering, with no thread start/read/resume or model turn.
 
