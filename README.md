@@ -10,7 +10,7 @@ A local project workbench for native Codex: reopen a project, continue its actua
 
 ## Install the preview
 
-[中文：打开第一个项目并继续已有会话](docs/first-project.zh-CN.md)
+[90-second illustrated project walkthrough](docs/task-walkthrough.md) · [中文：打开第一个项目并继续已有会话](docs/first-project.zh-CN.md)
 
 Requires Python 3.11+ and an existing complete Codex CLI installation. [Install and sign in to Codex CLI](https://developers.openai.com/codex/cli) first, then check `codex --version` in the shell you will use for Desk. The current native integration was exercised with CLI **0.171.0 on Linux**.
 
