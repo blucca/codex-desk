@@ -54,6 +54,8 @@ codex-desk --codex-home /your/codex-home --state-dir /your/desk-state
 
 Existing keys remain in your Codex configuration or inherited process environment. A newly added key is stored in a local provider sidecar with mode 0600 on Linux. Provider overrides go to the app-server through its private stdin protocol, keeping keys out of process command arguments. For a Trial sidecar using `ONRAMP_API_KEY`, launch Desk from the shell where that variable is set. The optional local provider form accepts your existing key without uploading or exporting it. Desk does not rewrite your main config, auth or native rollouts. Main MCP, trust and sandbox settings are inherited.
 
+The [native launcher/profile smoke](https://github.com/blucca/codex-desk/actions/runs/45624593694) passes on actual Ubuntu, Windows and macOS runners with **Python3.11, Node22 and Codex0.171.0**. It exercises the installed native launcher, two blank native thread creations, current settings versus a sidecar named `default`, a project path with spaces, and unchanged configuration/auth. These are metadata-only operations with no model turns.
+
 The workbench saves project/profile/native-thread bindings and activity in a local SQLite file (`~/.local/state/codex-desk/desk.sqlite3` by default). Activity includes your task text and local command output. It is not sent to a hosted Desk service.
 
 ## Bring your existing work
