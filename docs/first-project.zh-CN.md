@@ -92,6 +92,8 @@ Set-Location "$HOME\codex-desk-install"
 
 ## 5. 当前配置、提供商 profile 与交接
 
+[提供商切换任务指南（英文）](https://blucca.github.io/guides/switch-codex-api-provider/)：核对本地 API profile，审阅旧会话证据，运行一个验证任务，再次打开新会话。
+
 **Current Codex settings** 使用主配置。已有的原生文件 profile 会出现在下拉框；**Add API provider** 可保存新的本地 profile。表单填写 **Profile name**（1–41 个英文字母、数字、下划线或连字符，首字符为字母或数字）、**API base URL**、账户可用的准确 **Model** 和已有 **API key**，点击 **Save local profile**。该账户需支持 Responses API，base URL 使用提供商为 Codex 指定的完整地址。
 
 在项目对话框选择 profile 后点击 **Resume this conversation**，仍然续接原来的原生 thread，只是使用所选配置；这不是交接到新 thread。名为 `default` 的文件 profile 与 **Current Codex settings** 是不同选项。

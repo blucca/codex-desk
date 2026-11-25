@@ -75,9 +75,11 @@ Editing the query clears old results and pagination; submit it again to search. 
 
 ### When changing provider
 
+[Step-by-step provider-switch task guide](https://blucca.github.io/guides/switch-codex-api-provider/): verify the local API profile, review the saved evidence, run one next task, and return to the new conversation.
+
 Choose **Continue with another provider** in an open session, or **Review handoff** beside a saved conversation. Review the visible messages, commands, file changes and MCP results; state the next goal and select the target profile. Desk starts a **distinct native thread** with that reviewed text, leaving the original rollout intact. Reading a handoff does not run a model turn or attempt compaction through the old provider. Encrypted reasoning is not replayed into the new thread.
 
-This is useful when the old provider is unavailable and you want to carry useful task evidence into a fresh conversation. The target profile must name the endpoint/model you intend to use. Same-thread resume uses the current selected settings.
+This is useful when the old provider is unavailable and you want to carry useful task evidence into a fresh conversation. Verify the target profile’s endpoint/model in **Open a project** before selecting its name in the handoff. Same-thread resume uses the current selected settings.
 
 <a name="current-vertical-slice"></a>
 
