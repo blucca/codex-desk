@@ -11,8 +11,9 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
-from .runtime import Runtime, Store, profiles, save_profile, task_name, first_task, session_name, MissingRolloutError
+from .runtime import Runtime, Store, profiles, save_profile, update_profile, task_name, first_task, session_name, MissingRolloutError
 from .handoff import build_handoff
+from .drafts import load_draft, save_draft, DraftConflict
 
 
 class Desk:
@@ -90,21 +91,24 @@ class Desk:
         if not cwd.is_dir():
             raise ValueError('The saved project folder no longer exists; open a new workspace and hand off there')
         profile = self.profile_id(profile)
-        existing = next((s for s in self.store.sessions()
-            if s['thread_id'] == thread_id and (s['profile'] if s['profile'] == 'default' or s['profile'].startswith('sidecar:') else 'sidecar:' + s['profile']) == profile), None)
-        if existing:
-            self.store.update(existing['id'], thread_saved=1)
-            return {'id': existing['id'], 'thread': thread}
-        # Import is read-only. Native resume happens only when the user opens it.
-        identifier = self.store.create(str(cwd), profile)
-        self.store.update(identifier, thread_id=thread['id'], model=thread.get('model'),
-                          provider=thread.get('modelProvider'), status='saved', thread_saved=1)
-        title = task_name(thread.get('name') or '')
-        source = 'native' if title else 'task'
-        title = title or first_task(thread.get('turns', [])) or task_name(thread.get('preview') or '')
-        if title:
-            self.store.update(identifier, name=title, name_source=source, name_pending=0)
-        return {'id': identifier, 'thread': thread}
+        # Native history is read before the lock; only the local binding
+        # decision/commit must be atomic across concurrent browser windows.
+        with self.lock:
+            existing = next((s for s in self.store.sessions()
+                if s['thread_id'] == thread_id and (s['profile'] if s['profile'] == 'default' or s['profile'].startswith('sidecar:') else 'sidecar:' + s['profile']) == profile), None)
+            if existing:
+                self.store.update(existing['id'], thread_saved=1)
+                return {'id': existing['id'], 'thread': thread}
+            # Import is read-only. Native resume happens only when the user opens it.
+            identifier = self.store.create(str(cwd), profile)
+            self.store.update(identifier, thread_id=thread['id'], model=thread.get('model'),
+                              provider=thread.get('modelProvider'), status='saved', thread_saved=1)
+            title = task_name(thread.get('name') or '')
+            source = 'native' if title else 'task'
+            title = title or first_task(thread.get('turns', [])) or task_name(thread.get('preview') or '')
+            if title:
+                self.store.update(identifier, name=title, name_source=source, name_pending=0)
+            return {'id': identifier, 'thread': thread}
     def close(self):
         for runtime in list(self.runtimes.values()):
             runtime.close()
@@ -134,6 +138,9 @@ def handler(desk):
             try:
                 self.local()
                 url = urlsplit(self.path)
+                if url.path == '/api/draft':
+                    params = parse_qs(url.query)
+                    return self.reply(load_draft(desk.store, params['session'][0]))
                 if url.path == '/api/state':
                     return self.reply({'profiles': profiles(desk.home), 'sessions': [s for s in desk.store.sessions() if s['id'] != 'native-catalog'], 'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
                 if url.path == '/api/native':
@@ -175,8 +182,18 @@ def handler(desk):
                     raise ValueError("Request size outside supported range")
                 data = json.loads(self.rfile.read(size))
                 path = urlsplit(self.path).path
-                if path == '/api/profiles':
+                if path == '/api/draft':
+                    result = save_draft(desk.store, data['session'], data['text'], data['mode'], data['revision'], data.get('writer'), data.get('sequence'))
+                elif path == '/api/profiles':
                     result = save_profile(desk.home, data['name'], data['endpoint'], data['model'], data['key'])
+                elif path == '/api/profiles/update':
+                    with desk.lock:
+                        result = update_profile(desk.home, data['id'], data['endpoint'], data['model'], data.get('key', ''))
+                        stored = {row['id']: row['profile'] for row in desk.store.sessions()}
+                        result['restartRequired'] = any(runtime.process.poll() is None and
+                            (stored[identifier] if stored[identifier] == 'default' or stored[identifier].startswith('sidecar:')
+                             else 'sidecar:' + stored[identifier]) == result['id']
+                            for identifier, runtime in desk.runtimes.items() if identifier in stored)
                 elif path == '/api/sessions':
                     result = desk.create(data['cwd'], data['profile'], data.get('name') or None)
                 elif path == '/api/import':
@@ -209,6 +226,8 @@ def handler(desk):
                 else:
                     return self.reply({'error': 'Not found'}, 404)
                 self.reply(result)
+            except DraftConflict as error:
+                self.reply({'error': str(error), 'current': error.current}, 409)
             except (ValueError, KeyError, OSError, RuntimeError) as error:
                 self.reply({'error': str(error)}, 400)
             except Exception as error:

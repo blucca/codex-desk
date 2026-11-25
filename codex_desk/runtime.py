@@ -3,16 +3,92 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 import tomllib
 import uuid
 from datetime import datetime
+from urllib.parse import urlsplit, urlunsplit
 
 
 NAME_LIMIT = 120
+PROFILE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,40}')
+
+
+def _public_endpoint(endpoint):
+    """Display host/path only; an unrelated malformed profile stays listable."""
+    if not isinstance(endpoint, str):
+        return ''
+    try:
+        parsed = urlsplit(endpoint)
+        host = parsed.hostname or ''
+        if parsed.scheme not in ('http', 'https') or not host:
+            return ''
+        if ':' in host:
+            host = '[' + host + ']'
+        if parsed.port is not None:
+            host += ':' + str(parsed.port)
+        return urlunsplit((parsed.scheme, host, parsed.path, '', ''))
+    except ValueError:
+        return ''
+
+
+def _profile_values(endpoint, model, key, require_key=True):
+    if not all(isinstance(v, str) for v in (endpoint, model, key)):
+        raise ValueError('Enter an API base URL, model and key as text')
+    endpoint, model, key = endpoint.strip().rstrip('/'), model.strip(), key.strip()
+    try:
+        url = urlsplit(endpoint)
+        port = url.port
+        if (url.scheme not in ('http', 'https') or not url.hostname
+                or (port is not None and port == 0)
+                or any(c.isspace() or ord(c) < 32 for c in endpoint)):
+            raise ValueError
+    except ValueError:
+        raise ValueError('Enter the full HTTP(S) API base URL') from None
+    if url.username is not None or url.password is not None or '?' in endpoint or '#' in endpoint:
+        raise ValueError('Use a base URL without credentials, query or fragment; enter the key separately')
+    if not model or (require_key and not key):
+        raise ValueError('Enter a model and your existing API key')
+    try:
+        for value in (endpoint, model, key):
+            value.encode('utf-8')
+    except UnicodeEncodeError:
+        raise ValueError('Use valid Unicode text for the API provider') from None
+    return endpoint, model, key
+
+
+def _desk_provider(data):
+    """Only the provider-only shape written by Add API provider is editable."""
+    if set(data) != {'model', 'model_provider', 'model_providers'} or data['model_provider'] != 'desk_provider':
+        return None
+    providers = data['model_providers']
+    if not isinstance(providers, dict) or set(providers) != {'desk_provider'}:
+        return None
+    provider = providers['desk_provider']
+    if (not isinstance(provider, dict)
+            or set(provider) != {'name', 'base_url', 'wire_api', 'experimental_bearer_token'}
+            or provider['wire_api'] != 'responses'
+            or not isinstance(provider['name'], str) or not PROFILE_NAME.fullmatch(provider['name'])):
+        return None
+    try:
+        _profile_values(provider['base_url'], data['model'], provider['experimental_bearer_token'])
+    except ValueError:
+        return None
+    return provider
+
+
+def _profile_text(name, endpoint, model, key):
+    # Literal Unicode avoids JSON surrogate-pair escapes, which TOML rejects.
+    quoted = lambda value: json.dumps(value, ensure_ascii=False)
+    return ('model = ' + quoted(model) + '\nmodel_provider = "desk_provider"\n'
+            + '[model_providers.desk_provider]\nname = ' + quoted(name)
+            + '\nbase_url = ' + quoted(endpoint) + '\nwire_api = "responses"\n'
+            + 'experimental_bearer_token = ' + quoted(key) + '\n')
 
 
 class MissingRolloutError(RuntimeError):
@@ -51,7 +127,7 @@ def first_task(turns):
 
 def profiles(home):
     home = Path(home)
-    result = [{"id": "default", "name": "Current Codex settings"}]
+    result = [{"id": "default", "name": "Current Codex settings", "editable": False}]
     for path in [home / "config.toml", *sorted(home.glob("*.config.toml"))]:
         if not path.is_file():
             continue
@@ -62,19 +138,16 @@ def profiles(home):
         native_name = path.name.removesuffix(".config.toml")
         identifier = "default" if path.name == "config.toml" else "sidecar:" + native_name
         provider = data.get("model_provider", "openai")
-        endpoint = data.get("model_providers", {}).get(provider, {}).get("base_url", "")
-        # Endpoint credentials/query strings never leave the process.
-        from urllib.parse import urlsplit, urlunsplit
-        parsed = urlsplit(endpoint)
-        host = parsed.hostname or ""
-        if ':' in host:
-            host = '[' + host + ']'
-        if parsed.port:
-            host += ':' + str(parsed.port)
-        endpoint = urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+        provider = provider if isinstance(provider, str) else ''
+        providers = data.get('model_providers', {})
+        settings = providers.get(provider, {}) if isinstance(providers, dict) else {}
+        endpoint = _public_endpoint(settings.get('base_url', '') if isinstance(settings, dict) else '')
+        model = data.get('model', '')
         row = {"id": identifier, "name": native_name if identifier != "default" else "Current Codex settings",
                "legacy_id": native_name if identifier != "default" else "default",
-               "model": data.get("model", ""), "provider": provider, "endpoint": endpoint}
+               "model": model if isinstance(model, str) else '', "provider": provider, "endpoint": endpoint,
+               "editable": (identifier != 'default' and not path.is_symlink()
+                            and bool(PROFILE_NAME.fullmatch(native_name)) and _desk_provider(data) is not None)}
         if identifier == "default":
             result[0] = row
         else:
@@ -189,7 +262,7 @@ class Runtime:
         self.reader.start()
         self.stderr_reader.start()
         try:
-            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a11"}, "capabilities": {"experimentalApi": True}})
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a12"}, "capabilities": {"experimentalApi": True}})
             self.send({"method": "initialized", "params": {}})
         except Exception:
             # A rejected handshake never reaches Desk's runtime registry.
@@ -464,22 +537,13 @@ class Runtime:
 
 def save_profile(home, name, endpoint, model, key):
     """Create one native provider-only sidecar; keep the key out of responses/argv."""
-    import re
-    from urllib.parse import urlsplit
-    name, endpoint, model, key = name.strip(), endpoint.strip().rstrip('/'), model.strip(), key.strip()
-    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,40}', name):
+    if not isinstance(name, str) or not PROFILE_NAME.fullmatch(name.strip()):
         raise ValueError('Profile name: 1–41 letters, numbers, underscores or hyphens')
-    url = urlsplit(endpoint)
-    if url.scheme not in ('http','https') or not url.hostname:
-        raise ValueError('Enter the full HTTP(S) API base URL')
-    if not model or not key:
-        raise ValueError('Enter a model and your existing API key')
+    name = name.strip()
+    endpoint, model, key = _profile_values(endpoint, model, key)
     home = Path(home)
     home.mkdir(parents=True, exist_ok=True)
-    text = ('model = ' + json.dumps(model) + '\nmodel_provider = "desk_provider"\n'
-            + '[model_providers.desk_provider]\nname = ' + json.dumps(name)
-            + '\nbase_url = ' + json.dumps(endpoint) + '\nwire_api = "responses"\n'
-            + 'experimental_bearer_token = ' + json.dumps(key) + '\n')
+    text = _profile_text(name, endpoint, model, key)
     path = home / (name + '.config.toml')
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -488,3 +552,39 @@ def save_profile(home, name, endpoint, model, key):
     with os.fdopen(fd, 'w', encoding='utf-8') as file:
         file.write(text)
     return {'id':'sidecar:' + name}
+
+
+def update_profile(home, id, endpoint, model, key=''):
+    """Replace an existing Desk sidecar atomically; blank key retains its secret."""
+    if (not isinstance(id, str) or not id.startswith('sidecar:')
+            or not PROFILE_NAME.fullmatch(id.removeprefix('sidecar:'))):
+        raise ValueError('Choose an editable API provider')
+    path = Path(home) / (id.removeprefix('sidecar:') + '.config.toml')
+    if path.is_symlink():
+        raise ValueError('This Codex profile is read-only')
+    try:
+        data = tomllib.loads(path.read_text(encoding='utf-8-sig'))
+    except FileNotFoundError:
+        raise ValueError('This API provider no longer exists; refresh the provider list') from None
+    except ValueError:
+        raise ValueError('This Codex profile is read-only') from None
+    provider = _desk_provider(data)
+    if provider is None:
+        raise ValueError('This Codex profile is read-only')
+    endpoint, model, key = _profile_values(endpoint, model, key, require_key=False)
+    key = key or provider['experimental_bearer_token']
+    text = _profile_text(provider['name'], endpoint, model, key)
+    fd, temporary = tempfile.mkstemp(prefix='.' + path.name + '.', suffix='.tmp', dir=path.parent)
+    temporary = Path(temporary)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as file:
+            file.write(text)
+            file.flush()
+            os.fsync(file.fileno())
+        os.chmod(temporary, 0o600)
+        if not path.is_file() or path.is_symlink():
+            raise ValueError('This API provider no longer exists; refresh the provider list')
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {'id': id}

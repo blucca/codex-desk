@@ -21,6 +21,12 @@ async def check():
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=root, prefix='desk-navigation-') as folder:
         desk = Desk('not-called', Path(folder) / 'home', Path(folder) / 'state')
+        # Draft persistence uses the shipped HTTP route and real private Store;
+        # only the native open/turn/approval calls below are controlled.
+        for identifier in ('a', 'b'):
+            desk.store.create('/project/' + identifier, 'default', identifier=identifier,
+                              name='Project ' + identifier.upper())
+            desk.store.update(identifier, status='ready', thread_id='native-' + identifier)
         server = ThreadingHTTPServer(('127.0.0.1', 0), handler(desk))
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
@@ -41,6 +47,7 @@ async def check():
                         state=snapshot;selected='b';$('prompt').value='Unsent B';$('prompt').dispatchEvent(new Event('input'));
                         api=async(path,data)=>{
                           calls.push({path,data});
+                          if(path==='/api/draft' || path.startsWith('/api/draft?'))return original(path,data);
                           if(path==='/api/open')return new Promise(resolve=>controls[data.session]=resolve);
                           if(path==='/api/state')return snapshot;
                           if(path.startsWith('/api/events'))return [];
@@ -58,15 +65,17 @@ async def check():
                     }''')
                     # A late successful turn response must never erase Project B's new draft.
                     submission = await page.evaluate('''async () => {
-                        const original=api, calls=[], turnResolvers=[];
+                        const original=api, calls=[], turnResolvers=[];let turnEntered;
+                        const started=new Promise(resolve=>turnEntered=resolve);
                         const snapshot={profiles:[{id:'default',name:'Current Codex'}],sessions:[
                           {id:'a',name:'Project A',cwd:'/project/a',profile:'default',status:'ready'},
                           {id:'b',name:'Project B',cwd:'/project/b',profile:'default',status:'ready'}],pending:{}};
                         api=async(path,data)=>{
                           calls.push({path,data});
+                          if(path==='/api/draft' || path.startsWith('/api/draft?'))return original(path,data);
                           if(path==='/api/open')return {thread:{turns:[]}};
                           if(path==='/api/state')return snapshot;
-                          if(path==='/api/turn')return new Promise(resolve=>turnResolvers.push(resolve));
+                          if(path==='/api/turn')return new Promise(resolve=>{turnResolvers.push(resolve);turnEntered();});
                           if(path.startsWith('/api/events'))return [];
                           throw Error('Unexpected '+path);
                         };
@@ -76,6 +85,7 @@ async def check():
                         const sendDisabledWhilePending=$('send').disabled;
                         // A rapid second submit must not create another native turn.
                         const duplicate=$('task').onsubmit({preventDefault(){}});
+                        await started; // Sending now correctly waits for successful draft persistence.
                         await open('b');$('prompt').value='Unsent task for B';$('prompt').dispatchEvent(new Event('input'));
                         for(const resolve of turnResolvers)resolve({});await submit;await duplicate;
                         const keptDraft=$('prompt').value;
@@ -90,7 +100,8 @@ async def check():
                         const snapshot={profiles:[{id:'default',name:'Current Codex'}],sessions:[
                           {id:'a',name:'Project A',cwd:'/project/a',profile:'default',status:'failed',error:'Native session could not open'}],pending:{}};
                         state=snapshot;
-                        api=async(path)=>{
+                        api=async(path,data)=>{
+                          if(path==='/api/draft' || path.startsWith('/api/draft?'))return original(path,data);
                           if(path==='/api/open'){
                             if(++attempts===1)throw Error('Fixture initialize rejected');
                             snapshot.sessions[0].status='ready';snapshot.sessions[0].error=null;
@@ -112,7 +123,8 @@ async def check():
                           a:[{id:9,method:'item/commandExecution/requestApproval',params:{command:'Verify A'}}],
                           b:[{id:9,method:'item/tool/requestUserInput',params:{questions:[{id:'choice',header:'B',question:'Next task?',isOther:true}]}}]}};
                         state=snapshot;
-                        api=async(path)=>{
+                        api=async(path,data)=>{
+                          if(path==='/api/draft' || path.startsWith('/api/draft?'))return original(path,data);
                           if(path==='/api/open')return {thread:{turns:[]}};
                           if(path==='/api/approval')return new Promise(resolve=>resolveApproval=resolve);
                           if(path==='/api/state')return snapshot;
@@ -132,6 +144,7 @@ async def check():
                     assert submission['sendDisabledWhilePending'] and submission['keptDraft']=='Unsent task for B' and submission['revisitedDraft']=='Unsent task for B' and submission['submittedDraft']=='', result
                     assert all(retry.values()) and all(approval.values()), result
                     assert len(submission['turnCalls'])==1 and submission['turnCalls'][0]['data']['session']=='a' and not errors, result
+                    assert not desk.runtimes, 'Controlled navigation must not start a native process'
                 finally:
                     await browser.close()
         finally:

@@ -2,7 +2,7 @@
 
 [五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
 
-适用于 **v0.1.0a11**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+适用于 **v0.1.0a12**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
 
@@ -23,7 +23,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a12/codex_desk-0.1.0a12-py3-none-any.whl
 codex-desk
 ```
 
@@ -35,7 +35,7 @@ codex --version
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a12/codex_desk-0.1.0a12-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -143,3 +143,9 @@ Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQ
 如果打开已保存会话时提示 `no rollout found`，Desk 保留原会话绑定。恢复该会话的历史文件，或用原来的 `--codex-home` 重新启动 Desk 后再打开；要开始无旧上下文的新工作，请明确选择 **Start new conversation**。新建但从未运行任务的空会话才可能自动重建。
 
 添加同名提供商、打开不存在的交接目录或恢复已删除的项目失败时，错误显示在当前对话框内。修改后重试即可；提供商表单保留名称、地址和模型，API key 需重新输入。
+
+## 保留下一步任务和供应商配置
+
+在任务输入框准备下一步，并选择 **Work** 或 **Plan**。看到 **Draft saved locally** 后，文字和模式已保存在这个 Desk 会话的本地数据库；刷新页面或用相同 state directory 重启 Desk 后会恢复，不会自动执行。发送失败时保留草稿。若另一标签页修改了同一草稿，选择 **Keep this tab draft**（保留当前标签页）或 **Load saved draft**（读取已保存草稿），然后再继续。
+
+选择 **Manage API profiles** → **Edit profile**，可以修改 Desk 创建的接口地址／模型，或轮换密钥，供应商名称和已有会话绑定不变。密钥留空即保留原值。当前 Codex 配置及自定义原生配置文件仍由其原文件管理。已经加载该配置的原生后端不会被热切换；保存后若提示仍在使用，按 **Ctrl+C** 停止 Desk，再用原参数启动，便会加载新配置。

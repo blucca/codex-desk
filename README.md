@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a12/codex_desk-0.1.0a12-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a11/codex_desk-0.1.0a11-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a12/codex_desk-0.1.0a12-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -73,6 +73,18 @@ Project results match the conversation's exact saved working directory (`cwd`): 
 
 Editing the query clears old results and pagination; submit it again to search. Leave the title field blank to list conversations in that scope. **Load more** continues the same submitted title query and scope.
 
+### Prepare a task and come back later
+
+Write your next task and select Work or Plan. **Draft saved locally** confirms the text and mode are saved for this specific Desk session. Reopen the page or restart Desk with the same state directory to recover them; restoration does not send a task. A failed task submission keeps its preparation.
+
+If another tab changes the same draft, choose **Keep this tab draft** or **Load saved draft** before saving or sending again. Sending clears only the preparation actually accepted; newer edits stay in their own session.
+
+### Maintain a retained API profile
+
+Choose **Manage API profiles** → **Edit profile** to correct a Desk-created endpoint/model or rotate its key. The profile name and saved thread bindings stay unchanged. Leave the key blank to retain its saved value. Current Codex settings and custom native profile files remain read-only in this form.
+
+Saving does not reconfigure a running native backend. If the profile is already loaded, stop Desk and relaunch it to load the new settings there; the form reports this after saving. New native sessions use the updated profile.
+
 ### When changing provider
 
 [Step-by-step provider-switch task guide](https://blucca.github.io/guides/switch-codex-api-provider/): verify the local API profile, review the saved evidence, run one next task, and return to the new conversation.
@@ -86,12 +98,13 @@ This is useful when the old provider is unavailable and you want to carry useful
 ## Daily workbench
 
 - Named project sessions, saved native history and same-thread reopen.
+- Retained API profile editing and key rotation without changing profile or session identity.
 - Native tasks, command/file approvals, questions, interruption and Work/Plan modes.
 - Readable assistant messages with headings, lists, links and local copyable code blocks.
 - Compact, expandable native command/file/MCP evidence. Live calls open automatically; your deliberate expansion or collapse survives output updates.
 - Background project approval/completion status, active-task browser title and latest cumulative native thread usage.
 - New output follows when you are already at the bottom; reading older results keeps your place. **Latest output ↓** returns to the next-task box.
-- Project-bound unsent drafts while switching sessions in the page.
+- Project-bound unsent text and Work/Plan drafts saved in the private local database, restored after page or Desk restart.
 - Reviewed provider handoffs with visible tool evidence; media/resource descriptors without external fetching.
 
 The ordinary workbench owns its app-server processes. Closing the browser leaves its backend task running; stopping the Desk server terminates its owned app-servers. An already-running Desktop backend is inspected separately below.
@@ -110,7 +123,9 @@ Startup tests cover a broken npm launcher, a missing interpreter and a bounded v
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**54 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**75 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+
+Two browser windows importing the same saved thread and profile now share one complete local binding. A slow native history read leaves other open sessions responsive. A separate controlled native-stdio/HTTP fixture exercises retained-profile import, same-thread continuation, reviewed distinct-provider handoff and Desk restart without provider calls. Profile edit and draft browser checks exercise local persistence, canceled/delayed responses, two-tab draft conflicts and 390/1280 layouts.
 
 A real MCP acceptance turn called a local read-only fixture twice: success with a structured result, then a deliberate failure. After restarting Desk, the same native thread showed both results in the browser and reviewed handoff without another inference turn. Controlled browser fixtures additionally cover dynamic-tool results, resource/media descriptors, progress preservation and 390px layout. The fixtures use synthetic data; an outside user's completed project task and return are recorded separately from these checks.
 
@@ -125,6 +140,8 @@ DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_search.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_activity.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_monitor.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_errors.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_profiles.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_drafts.py
 ```
 
 The dialog-error check exercises real loopback failures for a duplicate provider name, a missing handoff folder and a missing saved project. Errors remain visible in the open dialog, provider retry keeps nonsecret inputs, and cancel clears the key. The missing-history tests preserve an imported thread through failure/restart and resume it after restoration, without creating a replacement.

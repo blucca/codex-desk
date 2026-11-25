@@ -5,6 +5,60 @@ let modeSelected=null, generation=0, opening=false, refreshVersion=0;
 const drafts=new Map(), submitting=new Set();
 let projectVersion=0, projectCursor=null, projectQuery=null, projectOpening=false;
 let latestUpdates=0, statePollAt=0;
+const draftWriter=crypto.randomUUID();
+const draftEdits=new Map(), draftRevisions=new Map(), draftModes=new Map(), draftSaved=new Map(), draftLoads=new Map(), draftSaves=new Map(), draftTimers=new Map(), draftConflicts=new Map(), draftMessages=new Map();
+function draftStatus(id=selected){
+  if(id!==selected)return;
+  $('draft-status').textContent=draftMessages.get(id) || 'Unsent task drafts stay private in your local Desk database.';
+  $('draft-conflict').hidden=!draftConflicts.has(id);
+}
+function rememberDraft(id){if(!id || (opening && !draftRevisions.has(id)))return;const text=$('prompt').value,mode=$('turn-mode').value;if(drafts.get(id)!==text || draftModes.get(id)!==mode)draftEdits.set(id,(draftEdits.get(id) || 0)+1);drafts.set(id,text);draftModes.set(id,mode);}
+async function loadDraft(id,current=generation){
+  if(draftRevisions.has(id)){if(current===generation && selected===id){$('prompt').value=drafts.get(id) || '';if(draftModes.has(id)){$('turn-mode').value=draftModes.get(id);modeSelected=id;}draftStatus(id);}return;}
+  if(!draftLoads.has(id))draftLoads.set(id,(async()=>{
+    try{
+      const saved=await api('/api/draft?session='+encodeURIComponent(id));
+      draftRevisions.set(id,saved.revision);draftSaved.set(id,saved);
+      if(!drafts.has(id)){drafts.set(id,saved.text);draftModes.set(id,saved.mode);}
+      draftMessages.set(id,saved.text?'Saved draft restored. Nothing has been sent.':'Unsent task drafts stay private in your local Desk database.');
+    }catch(e){draftMessages.set(id,'Draft not saved: '+e.message);}
+    finally{draftLoads.delete(id);}
+  })());
+  await draftLoads.get(id);
+  if(current===generation && selected===id){$('prompt').value=drafts.get(id) || '';if(draftModes.has(id)){$('turn-mode').value=draftModes.get(id);modeSelected=id;}draftStatus(id);}
+}
+function persistDraft(id){
+  clearTimeout(draftTimers.get(id));draftTimers.delete(id);
+  const previous=draftSaves.get(id) || Promise.resolve();
+  const pending=previous.then(async()=>{
+    await loadDraft(id,-1);
+    if(draftConflicts.has(id))return false;
+    if(!draftRevisions.has(id))return false;
+    const text=drafts.get(id) || '', mode=draftModes.get(id) || 'native', saved=draftSaved.get(id);
+    if(saved && saved.text===text && saved.mode===mode)return true;
+    draftMessages.set(id,'Saving draft…');draftStatus(id);
+    try{
+      const next=await api('/api/draft',{session:id,text,mode,revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0});
+      draftRevisions.set(id,next.revision);draftSaved.set(id,next);
+      draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);return true;
+    }catch(e){
+      if(e.status===409 && e.current){draftConflicts.set(id,e.current);draftMessages.set(id,'This session’s draft changed in another tab. Choose which preparation to keep.');}
+      else draftMessages.set(id,'Draft not saved: '+e.message);
+      draftStatus(id);return false;
+    }
+  });
+  draftSaves.set(id,pending);return pending;
+}
+function scheduleDraft(id){
+  clearTimeout(draftTimers.get(id));draftMessages.set(id,'Unsaved draft…');draftStatus(id);
+  draftTimers.set(id,setTimeout(()=>persistDraft(id),350));
+}
+$('draft-keep').onclick=()=>{const id=selected,current=draftConflicts.get(id);if(!current)return;draftRevisions.set(id,current.revision);draftSaved.set(id,current);draftConflicts.delete(id);draftEdits.set(id,(draftEdits.get(id) || 0)+1);persistDraft(id);};
+$('draft-load').onclick=()=>{const id=selected,current=draftConflicts.get(id);if(!current)return;draftRevisions.set(id,current.revision);draftSaved.set(id,current);drafts.set(id,current.text);draftModes.set(id,current.mode);draftConflicts.delete(id);draftEdits.set(id,(draftEdits.get(id) || 0)+1);$('prompt').value=current.text;$('turn-mode').value=current.mode;modeSelected=id;draftMessages.set(id,'Saved draft loaded. Nothing has been sent.');draftStatus(id);};
+window.addEventListener('pagehide',()=>{
+  if(selected)rememberDraft(selected);
+  for(const [id] of draftTimers){clearTimeout(draftTimers.get(id));if(draftRevisions.has(id) && !draftConflicts.has(id))fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:id,text:drafts.get(id) || '',mode:draftModes.get(id) || 'native',revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0}),keepalive:true}).catch(()=>{});}
+});
 function nearLatest(){return window.scrollY+window.innerHeight >= document.documentElement.scrollHeight-140;}
 function latestLabel(){
   $('latest-output').textContent=latestUpdates?`${latestUpdates} new update${latestUpdates===1?'':'s'} · Latest output ↓`:'Latest output ↓';
@@ -16,7 +70,7 @@ function goLatest(){
 $('latest-output').onclick=goLatest;
 async function api(path, data) {
   const r = await fetch(path, data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
-  const v = await r.json(); if (!r.ok) throw new Error(v.error || 'Request failed'); return v;
+  const v = await r.json(); if (!r.ok) {const e=new Error(v.error || 'Request failed');e.status=r.status;e.current=v.current;throw e;} return v;
 }
 function error(e) { $('error').textContent = e.message; $('error').hidden = false; }
 function make(tag, text, cls) { const node = document.createElement(tag); if(text) node.textContent=text; if(cls) node.className=cls; return node; }
@@ -116,15 +170,16 @@ function consume(m) {
 async function refresh() {
   const current=generation, version=++refreshVersion, next=await api('/api/state');
   if(current!==generation || version!==refreshVersion)return;
-  state=next;requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();
+  state=next;requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();if($('profiles-dialog').open)drawProfiles();
 }
 async function open(id) {
-  if(selected)drafts.set(selected,$('prompt').value);
+  if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
   selected=id;$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();requests.clear();
   $('error').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
-  $('activity').replaceChildren();approvals();draw();
+  $('activity').replaceChildren();approvals();draw();draftStatus();
+  const preparation=loadDraft(id,current);
   try {
     const opened=await api('/api/open',{session:id});
     if(current!==generation)return;
@@ -133,6 +188,7 @@ async function open(id) {
     $('prompt').value=drafts.get(id) || '';$('welcome').hidden=true;
     await refresh();
     if(current!==generation)return;
+    await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
     requestAnimationFrame(()=>{if(current===generation)goLatest();});
   } catch(e) {
@@ -208,15 +264,17 @@ $('project').addEventListener('close',()=>{if(!$('project').open)resetProject();
 $('create').onsubmit=async e=>{e.preventDefault();await findProject();};
 $('project-more').onclick=()=>findProject(projectCursor);
 $('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
-$('prompt').oninput=()=>{if(selected)drafts.set(selected,$('prompt').value);};
+$('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
+$('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 $('task').onsubmit=async e=>{
   e.preventDefault();if(!selected || opening || submitting.has(selected) || $('send').disabled)return;
   const id=selected, current=generation, text=$('prompt').value, mode=$('turn-mode').value;
-  drafts.set(id,text);submitting.add(id);$('error').hidden=true;draw();
+  rememberDraft(id);const sentEdit=draftEdits.get(id) || 0;submitting.add(id);$('error').hidden=true;draw();
   try {
+    if(!await persistDraft(id))return;
+    const sentRevision=draftRevisions.get(id);
     await api('/api/turn',{session:id,text,mode});
-    if(drafts.get(id)===text)drafts.delete(id);
-    if(selected===id && $('prompt').value===text)$('prompt').value='';
+    if((draftEdits.get(id) || 0)===sentEdit && draftRevisions.get(id)===sentRevision && drafts.get(id)===text && draftModes.get(id)===mode){draftEdits.set(id,(draftEdits.get(id) || 0)+1);drafts.set(id,'');if(selected===id && $('prompt').value===text)$('prompt').value='';await persistDraft(id);}
     if(current===generation)await refresh();
   } catch(err) {if(current===generation)error(err);}
   finally {submitting.delete(id);draw();}
@@ -316,10 +374,62 @@ $('history-close').onclick=()=>$('history').close();$('preview-close').onclick=(
 $('handoff').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)showHandoff(s.thread_id,s.cwd);};
 $('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;$('handoff-error').hidden=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal:$('handoff-goal').value});$('preview').close();await open(r.id);}catch(e){$('handoff-error').textContent=e.message;$('handoff-error').hidden=false;}finally{b.disabled=false;}};
 
-$('add-provider').onclick=()=>{$('provider-error').hidden=true;$('provider').showModal();};
+let providerEditing=null, providerVersion=0, providerReturn=false;
+function drawProfiles(){
+  const list=$('profiles-list');list.replaceChildren();
+  for(const p of state.profiles){
+    const row=make('div','','native-row');row.dataset.profile=p.id;
+    row.append(make('strong',p.name),make('small',`${p.provider || 'Native settings'} / ${p.model || 'Configured model'}${p.endpoint?' · '+p.endpoint:''}`));
+    const count=state.sessions.filter(s=>s.profile===p.id || (p.id!=='default' && p.legacy_id!=='default' && s.profile===p.legacy_id)).length;
+    row.append(make('small',`${count} saved session${count===1?'':'s'}`));
+    if(p.editable){const edit=make('button','Edit profile');edit.type='button';edit.onclick=()=>showProvider(p);row.append(edit);}
+    else row.append(make('small',p.id==='default'?'Managed by your current Codex settings.':'Custom native file — edit in your Codex home.'));
+    list.append(row);
+  }
+}
+function showProvider(profile=null){
+  ++providerVersion;providerEditing=profile?.id || null;
+  providerReturn=$('profiles-dialog').open;
+  if(providerReturn)$('profiles-dialog').close();
+  $('provider-form').reset();$('provider-error').hidden=true;
+  $('provider-heading').textContent=profile?'Edit API profile':'Add your API provider';
+  $('provider-edit-info').hidden=!profile;
+  $('provider-name').readOnly=!!profile;
+  $('provider-name').value=profile?.name || '';
+  $('provider-endpoint').value=profile?.endpoint || '';
+  $('provider-model').value=profile?.model || '';
+  $('provider-key').required=!profile;
+  $('provider-key').placeholder=profile?'Leave blank to keep saved key':'';
+  for(const id of ['provider-name','provider-endpoint','provider-model','provider-key','provider-save'])$(id).disabled=false;
+  $('provider-save').textContent=profile?'Save profile changes':'Save local profile';
+  $('provider').showModal();
+}
+$('manage-profiles').onclick=()=>{$('profiles-error').hidden=true;$('profiles-notice').hidden=true;drawProfiles();$('profiles-dialog').showModal();};
+$('profiles-close').onclick=()=>$('profiles-dialog').close();
+$('profiles-add').onclick=()=>showProvider();
+$('add-provider').onclick=()=>showProvider();
 $('provider-close').onclick=()=>$('provider').close();
-$('provider').addEventListener('close',()=>{$('provider-key').value='';});
-$('provider-form').onsubmit=async e=>{e.preventDefault();$('provider-save').disabled=true;$('provider-error').hidden=true;try{await api('/api/profiles',{name:$('provider-name').value,endpoint:$('provider-endpoint').value,model:$('provider-model').value,key:$('provider-key').value});$('provider-key').value='';$('provider').close();await refresh();}catch(e){$('provider-error').textContent=e.message;$('provider-error').hidden=false;}finally{$('provider-key').value='';$('provider-save').disabled=false;}};
+$('provider').addEventListener('close',()=>{
+  ++providerVersion;$('provider-key').value='';
+  if(providerReturn){providerReturn=false;drawProfiles();$('profiles-dialog').showModal();}
+});
+$('provider-form').onsubmit=async e=>{
+  e.preventDefault();if($('provider-save').disabled)return;
+  const version=providerVersion, editing=providerEditing;
+  const data={endpoint:$('provider-endpoint').value,model:$('provider-model').value,key:$('provider-key').value};
+  if(editing)data.id=editing;else data.name=$('provider-name').value;
+  for(const id of ['provider-name','provider-endpoint','provider-model','provider-key','provider-save'])$(id).disabled=true;
+  $('provider-key').value='';$('provider-error').hidden=true;
+  try{
+    const result=await api(editing?'/api/profiles/update':'/api/profiles',data);
+    if(version===providerVersion && $('provider').open){
+      $('provider').close();
+      if(editing){$('profiles-notice').textContent=result.restartRequired?'Profile saved. A native session already has these settings loaded. Stop Desk and relaunch it to use the updated profile there.':'Profile saved. New native sessions use the updated settings.';$('profiles-notice').hidden=false;}
+    }
+    await refresh();
+  }catch(e){if(version===providerVersion && $('provider').open){$('provider-error').textContent=e.message;$('provider-error').hidden=false;}}
+  finally{if(version===providerVersion){$('provider-key').value='';for(const id of ['provider-name','provider-endpoint','provider-model','provider-key','provider-save'])$(id).disabled=false;}}
+};
 
 $('rename').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(!s)return;$('rename-name').value=s.name || '';$('rename-error').hidden=true;$('rename-dialog').showModal();$('rename-name').focus();$('rename-name').select();};
 $('rename-cancel').onclick=()=>$('rename-dialog').close();

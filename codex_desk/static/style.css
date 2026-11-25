@@ -39,3 +39,7 @@ aside{min-width:0}
 @media(max-width:760px){.item.activity-reader{padding:12px}.activity-markdown{font-size:14px}}
 
 .activity-markdown .activity-literal{white-space:pre-wrap}
+
+#profiles-dialog,#provider{max-height:90vh;overflow:auto}#profiles-list{max-height:55vh;overflow:auto}#profiles-list button{font-size:12px;margin-top:10px}#profiles-notice{border:1px solid #396458;border-radius:8px;padding:12px;overflow-wrap:anywhere}#provider-edit-info{overflow-wrap:anywhere}#profiles-error{color:#ffccd0;overflow-wrap:anywhere}
+
+#draft-status{font-size:12px;overflow-wrap:anywhere}#draft-conflict{display:flex;flex-wrap:wrap;gap:8px}#draft-conflict[hidden]{display:none}#draft-conflict button{font-size:12px}
