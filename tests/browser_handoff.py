@@ -43,6 +43,15 @@ async def check():
                            'status': 'inProgress', 'aggregatedOutput': None,
                            'exitCode': None, 'durationMs': None}
         histories['b']['turns'][0]['items'].append(pending_command)
+        # Native thread/read preserves the final error separately from items.
+        histories['b']['turns'][0].update(status='failed', error={
+            'message': 'Provider stream disconnected before build verification',
+            'codexErrorInfo': {'responseStreamDisconnected': {
+                'httpStatusCode': 503,
+                'uri': 'https://native-user:native-key@relay.example/error?access=native-token#private',
+                '_meta': {'key': 'private-native-metadata'}}},
+            'additionalDetails': 'Retry limit reached; retain the partial command evidence',
+            '_meta': {'key': 'private-root-error-metadata'}})
         desk = Desk('not-called', folder / 'home', folder / 'state')
         desk.history = lambda thread: next(t for t in histories.values() if t['id'] == thread)
 
@@ -99,6 +108,16 @@ async def check():
                             'status': 'Status: inProgress' in b_evidence,
                             'exit': 'Exit: not reported' in b_evidence,
                             'output': '[No command output reported.]' in b_evidence}
+                        failure_evidence = {
+                            'turn': 'Turn prior-b\nStatus: failed' in b_evidence,
+                            'message': 'Provider stream disconnected before build verification' in b_evidence,
+                            'code': 'responseStreamDisconnected' in b_evidence,
+                            'http': '"httpStatusCode": 503' in b_evidence,
+                            'details': 'Retry limit reached' in b_evidence,
+                            'publicUri': 'https://relay.example/error' in b_evidence,
+                            'noAccessPayload': not any(value in b_evidence for value in (
+                                'native-user', 'native-key', 'native-token', '?access=',
+                                '#private', 'private-native-metadata', 'private-root-error-metadata'))}
                         b_evidence += '\nReviewed remaining: run the project B build.'
                         await page.fill('#handoff-text', b_evidence)
                         await page.fill('#handoff-goal', 'Verify only project B build')
@@ -124,6 +143,7 @@ async def check():
                                   'sameSourceGoal': same_source_goal,
                                   'completedGoal': completed_goal, 'failedStart': failure,
                                   'pendingCommandEvidence': pending_evidence,
+                                  'nativeFailureEvidence': failure_evidence,
                                   'retainedSourceGoal': retained_source_goal,
                                   'target': captured[-1], 'mobileOverflow': overflow,
                                   'javascriptErrors': errors}
@@ -138,6 +158,7 @@ async def check():
                         assert result['completedGoal'] == '', result
                         assert result['retainedSourceGoal'] == 'Change only project A login', result
                         assert all(result['pendingCommandEvidence'].values()), result
+                        assert all(result['nativeFailureEvidence'].values()), result
                         failure = result['failedStart']
                         assert failure['open'] and failure['errorVisible'], result
                         assert failure['goal'] == 'Verify only project B build', result
@@ -147,6 +168,12 @@ async def check():
                         assert target['cwd'] == str(projects['b']), result
                         assert target['text'].startswith('Next task: Verify only project B build\n\n'), result
                         assert 'Verified project B evidence' in target['text'] and 'project A login' not in target['text'], result
+                        for value in ('Turn prior-b\nStatus: failed', 'responseStreamDisconnected',
+                                      '"httpStatusCode": 503', 'https://relay.example/error'):
+                            assert value in target['text'], result
+                        for value in ('native-key', 'native-token', 'private-native-metadata',
+                                      'private-root-error-metadata'):
+                            assert value not in target['text'], result
                         assert not result['javascriptErrors'] and not result['mobileOverflow'], result
                     assert len(captured) == 2 and not desk.runtimes
                 finally:

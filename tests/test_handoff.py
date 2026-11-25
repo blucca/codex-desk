@@ -2,6 +2,34 @@ import unittest
 from codex_desk.handoff import build_handoff
 
 class HandoffTests(unittest.TestCase):
+    def test_recent_failed_turn_outcome_survives_large_earlier_evidence(self):
+        thread = {'id': 'native-id', 'cwd': '/project', 'modelProvider': 'relay',
+                  'turns': [{'id': 'failed-turn', 'status': 'failed',
+                             'error': {'message': 'Account usage limit reached',
+                                       'codexErrorInfo': 'usageLimitExceeded',
+                                       'additionalDetails': None,
+                                       '_meta': 'PRIVATE-ERROR-METADATA'},
+                             'items': [{'id': 'large-command', 'type': 'commandExecution',
+                                        'command': 'python verify.py', 'exitCode': 0,
+                                        'aggregatedOutput': 'x' * 10000}]}]}
+        text = build_handoff(thread, max_chars=2000)
+        self.assertLess(len(text), 2000)
+        for value in ('Turn failed-turn\nStatus: failed', 'Account usage limit reached',
+                      'usageLimitExceeded', 'shortened'):
+            self.assertIn(value, text)
+        self.assertNotIn('PRIVATE-ERROR-METADATA', text)
+        self.assertNotIn('additionalDetails', text)
+
+    def test_interrupted_turn_without_error_is_not_presented_as_completed(self):
+        thread = {'id': 'native-id', 'cwd': '/project', 'modelProvider': 'relay',
+                  'turns': [{'id': 'stopped-turn', 'status': 'interrupted', 'error': None,
+                             'items': [{'id': 'partial', 'type': 'agentMessage',
+                                        'text': 'Verification still needs to run.'}]}]}
+        text = build_handoff(thread)
+        self.assertIn('Verification still needs to run.', text)
+        self.assertIn('Turn stopped-turn\nStatus: interrupted', text)
+        self.assertNotIn('Native error:', text)
+
     def test_native_command_without_output_keeps_reviewable_pending_evidence(self):
         thread = {'id': 'native-id', 'cwd': '/project', 'modelProvider': 'relay',
                   'turns': [{'items': [

@@ -1,5 +1,5 @@
 """Build an editable handoff from visible native task evidence."""
-from .evidence import collaboration_text, tool_text
+from .evidence import collaboration_text, review_json, tool_text
 
 def visible_text(item):
     kind = item.get('type')
@@ -22,6 +22,21 @@ def visible_text(item):
     return ''
 
 
+def turn_text(turn):
+    """Keep the reported outcome after a turn's partial messages and tools."""
+    status, error = turn.get('status'), turn.get('error')
+    fields = {key: error[key] for key in ('message', 'codexErrorInfo', 'additionalDetails')
+              if key in error and error[key] is not None} if isinstance(error, dict) else {}
+    if not (isinstance(status, str) and status) and not fields:
+        return ''
+    lines = ['Turn ' + str(turn.get('id') or 'unreported')]
+    if isinstance(status, str) and status:
+        lines.append('Status: ' + status)
+    if fields:
+        lines.extend(['Native error:', review_json(fields)])
+    return '\n'.join(lines)
+
+
 def build_handoff(thread, max_chars=24000):
     header = ('Continue the project task using this reviewed handoff. Check the current workspace before making further changes.\n\n'
               + 'Source thread: ' + thread['id'] + '\nWorking directory: ' + thread.get('cwd', '')
@@ -35,6 +50,9 @@ def build_handoff(thread, max_chars=24000):
             text = visible_text(item)
             if text:
                 blocks.append(('Item ' + item['id'] + '\n' + text))
+        outcome = turn_text(turn)
+        if outcome:
+            blocks.append(outcome)
     kept, size, omitted = [], len(header), 0
     # Keep recent evidence in its original order, with an explicit cutoff.
     for block in reversed(blocks):
