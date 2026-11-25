@@ -43,9 +43,10 @@ function itemText(i) {
 }
 function renderItem(i) {
   const prior=items.get(i.id);if(prior?.progress && !i.progress)i.progress=prior.progress;
-  items.set(i.id, i); let node=nodes.get(i.id);
+  items.set(i.id, i); let node=nodes.get(i.id);const text=itemText(i);
+  if(!text.trim()){if(node)node.remove();nodes.delete(i.id);return;}
   if(!node) {node=make('div', '', 'item '+i.type);nodes.set(i.id,node);$('activity').append(node);}
-  node.textContent=itemText(i);
+  node.textContent=text;
 }
 let approvalsSignature='';
 function approvals() {
