@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   preparation-and-return:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
       DESK_TEST_TEMP: ${{ github.workspace }}/temp
