@@ -37,10 +37,12 @@ function itemText(i) {
     case 'commandExecution':return `$ ${i.command || ''}\n${i.aggregatedOutput || ''}${i.exitCode == null ? '' : '\nExit '+i.exitCode}`;
     case 'fileChange':return (i.changes || []).map(c=>`${c.kind?.type || 'change'} ${c.path}\n${c.diff || ''}`).join('\n');
     case 'reasoning':return (i.summary || []).join('\n');
+    case 'mcpToolCall':case 'dynamicToolCall':return DeskEvidence.tool(i);
     default:return i.text || JSON.stringify(i, null, 2);
   }
 }
 function renderItem(i) {
+  const prior=items.get(i.id);if(prior?.progress && !i.progress)i.progress=prior.progress;
   items.set(i.id, i); let node=nodes.get(i.id);
   if(!node) {node=make('div', '', 'item '+i.type);nodes.set(i.id,node);$('activity').append(node);}
   node.textContent=itemText(i);
@@ -84,6 +86,10 @@ function consume(m) {
   }
   if(m.method==='item/commandExecution/outputDelta') {
     const i=items.get(p.itemId) || {id:p.itemId,type:'commandExecution',aggregatedOutput:''};i.aggregatedOutput=(i.aggregatedOutput || '')+(p.delta || '');renderItem(i);
+  }
+  if(m.method==='item/mcpToolCall/progress') {
+    const i=items.get(p.itemId) || {id:p.itemId,type:'mcpToolCall',status:'inProgress'};
+    i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i);
   }
   if(m.method==='error') {const n=make('div',p.error?.message || JSON.stringify(p),'item');$('activity').append(n);}
 }

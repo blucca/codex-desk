@@ -173,7 +173,7 @@ class Runtime:
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._stderr, daemon=True).start()
-        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a4"}, "capabilities": {"experimentalApi": True}})
+        self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a5"}, "capabilities": {"experimentalApi": True}})
         self.send({"method": "initialized", "params": {}})
     def send(self, payload):
         with self.write_lock:

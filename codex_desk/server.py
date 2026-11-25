@@ -135,12 +135,12 @@ def handler(desk):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()

@@ -5,3 +5,5 @@
 a{color:#8cddc3}a:hover{color:#bcf5df}
 .session strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#rename{display:block;font-size:11px;margin-top:12px}#rename[hidden]{display:none}
 aside{min-width:0}
+
+.item.mcpToolCall,.item.dynamicToolCall{font-size:12px;color:#acbdd0;font-family:ui-monospace,monospace}

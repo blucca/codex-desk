@@ -9,7 +9,7 @@ Requires Python 3.11+ and an existing complete Codex CLI installation. The curre
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a4
+python3 -m pip install git+https://github.com/blucca/codex-desk.git@v0.1.0a5
 codex-desk
 ```
 
@@ -30,12 +30,23 @@ Existing keys remain in your Codex configuration or inherited process environmen
 
 The workbench saves project/profile/native-thread bindings and activity in a local SQLite file (`~/.local/state/codex-desk/desk.sqlite3` by default). Activity includes your task text and local command output. It is not sent to a hosted Desk service.
 
+## First project loop
+
+1. Open a project you already work on. Keep **Current Codex settings** for the first task.
+2. Ask: “Find this project's verification command, run it, and report the exact pass/failure result. Do not edit files.” Approve the native command if asked.
+3. Close the browser. Reopen Desk and the same named session: the command, output and conversation are still there. Give it your next project task.
+4. For an intentional provider switch, choose **Continue with another provider**. Review the actual tool evidence, write the next goal, and select your other profile. This starts a separate native thread; it leaves the original conversation intact.
+
+Already use MCP tools in Codex? Desk inherits those settings and shows their text/structured results and failures. Tool evidence is included in the reviewed handoff; media and embedded resources are represented without fetching external content.
+
 ## Current vertical slice
 
 - Project-bound provider choice and persistent, named workspace list; importing the same native conversation/profile reopens its existing workspace.
 - First-task titles and editable session names, synced through native `thread/name/set` for saved conversations. Blank-workspace names stay local until the first turn persists.
 - Native `thread/start`, `thread/resume`, `turn/start` and interruption.
 - Live native task, command, answer, failure and usage events.
+- Readable MCP calls, arguments, progress, text/structured results and failures; imported dynamic-tool evidence.
+- Media/resource descriptors instead of expanded binary payloads; application-private MCP metadata is excluded from the handoff.
 - One-time native command/file-change approval decisions.
 - Native questions with selectable answers or private text input.
 - Work/Plan mode choice with the native planning protocol; mode selection survives reload and Work explicitly exits a previous Plan mode.
@@ -57,7 +68,9 @@ If you already switch between enterprise/personal providers or lose the desktop 
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-The first native owned-project check ran the two persistence/profile tests through an actual Codex command (exit 0), stopped/restarted Desk, and resumed the same used native thread with its prior turn. A second browser-driven native check read that existing history, previewed its actual command/output, started a new native thread with the reviewed handoff and an explicit next task, and ran all three current tests successfully. The source rollout remained unchanged. Sidecar model/provider selection was also checked through native CLI overrides against an isolated loopback configuration. Main config/auth remained unchanged. Existing database bindings/events migrate in place; native used-thread rename/restart, blank-workspace rename/reopen and browser rename/refresh were also exercised without model inference. Sixteen focused tests pass. A real native planning turn asked a question through the browser, accepted the selected answer and completed without commands or file edits. The planning fixture used the same experimental opt-in and native mode payload now supplied by Work/Plan selection. Choice/private-input shapes and mode-to-API routing/reload are additionally covered by controlled browser fixtures. Outside-user trial and repeated use are the next acceptance paths.
+**26 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+
+A real MCP acceptance turn called a local read-only fixture twice: success with a structured result, then a deliberate failure. After restarting Desk, the same native thread showed both results in the browser and reviewed handoff without another inference turn. Controlled browser fixtures additionally cover dynamic-tool results, resource/media descriptors, progress preservation and 390px layout. The fixtures use synthetic data; an outside user's completed project task and return are recorded separately from these checks.
 
 ## License
 
