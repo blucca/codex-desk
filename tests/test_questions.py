@@ -1,3 +1,4 @@
+import threading
 import unittest
 from codex_desk.runtime import Runtime
 
@@ -5,6 +6,7 @@ class QuestionsTests(unittest.TestCase):
     def runtime(self):
         runtime = object.__new__(Runtime)
         runtime.id = 'workspace'
+        runtime.lifecycle_lock = threading.Lock()
         runtime.approvals = {'9': {'id': 9, 'method': 'item/tool/requestUserInput', 'params': {
             'questions': [{'id':'mode','header':'Mode','question':'Which mode?', 'options': [
                 {'label':'Safe','description':'Read only'}, {'label':'Edit','description':'Make changes'}]},

@@ -4,6 +4,16 @@ const nodes = new Map();
 let modeSelected=null, generation=0, opening=false, refreshVersion=0;
 const drafts=new Map(), submitting=new Set();
 let projectVersion=0, projectCursor=null, projectQuery=null, projectOpening=false;
+let latestUpdates=0, statePollAt=0;
+function nearLatest(){return window.scrollY+window.innerHeight >= document.documentElement.scrollHeight-140;}
+function latestLabel(){
+  $('latest-output').textContent=latestUpdates?`${latestUpdates} new update${latestUpdates===1?'':'s'} · Latest output ↓`:'Latest output ↓';
+}
+function goLatest(){
+  latestUpdates=0;latestLabel();
+  window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'});
+}
+$('latest-output').onclick=goLatest;
 async function api(path, data) {
   const r = await fetch(path, data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
   const v = await r.json(); if (!r.ok) throw new Error(v.error || 'Request failed'); return v;
@@ -12,6 +22,7 @@ function error(e) { $('error').textContent = e.message; $('error').hidden = fals
 function make(tag, text, cls) { const node = document.createElement(tag); if(text) node.textContent=text; if(cls) node.className=cls; return node; }
 function profileLabel(id){return state.profiles.find(p=>p.id===id || p.legacy_id===id)?.name || id;}
 function draw() {
+  const list=$('sessions'), left=list.scrollLeft, top=list.scrollTop;
   $('sessions').replaceChildren();
   for(const s of state.sessions) {
     const b = make('button', '', 'session' + (s.id===selected?' selected':''));
@@ -19,6 +30,10 @@ function draw() {
     b.append(make('strong', s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1)), make('small', `${s.cwd.split(/[\\/]/).filter(Boolean).at(-1) || s.cwd} · ${profileLabel(s.profile)} · ${s.status}`));
     b.onclick=()=>open(s.id); $('sessions').append(b);
   }
+  list.scrollLeft=left;list.scrollTop=top;
+  const running=state.sessions.filter(s=>['running','approval','starting'].includes(s.status)).length;
+  document.title=(running?`(${running} active) `:'')+'Codex Desk';
+  $('activity-controls').hidden=!selected;
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
   $('title').textContent=s.name || s.cwd.split(/[\\/]/).filter(Boolean).at(-1);$('rename').hidden=false;
   $('binding').textContent=`${s.cwd}\n${profileLabel(s.profile)} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
@@ -49,7 +64,7 @@ function renderItem(i) {
   const prior=items.get(i.id);if(prior?.progress && !i.progress)i.progress=prior.progress;
   items.set(i.id, i); let node=nodes.get(i.id);const text=itemText(i);
   if(!node) {node=make('div', '', 'item '+i.type);nodes.set(i.id,node);$('activity').append(node);}
-  node.hidden=!text.trim();node.textContent=text;
+  DeskActivity.render(node,i,text);
 }
 let approvalsSignature='';
 function approvals() {
@@ -106,6 +121,7 @@ async function refresh() {
 async function open(id) {
   if(selected)drafts.set(selected,$('prompt').value);
   const current=++generation;
+  latestUpdates=0;latestLabel();
   selected=id;$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();requests.clear();
   $('error').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();
@@ -118,6 +134,7 @@ async function open(id) {
     await refresh();
     if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
+    requestAnimationFrame(()=>{if(current===generation)goLatest();});
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
   }
@@ -206,7 +223,31 @@ $('task').onsubmit=async e=>{
 };
 $('stop').onclick=async()=>{if(opening)return;const session=selected,current=generation;try{await api('/api/stop',{session});if(current===generation){requests.clear();approvals();await refresh();}}catch(e){if(current===generation)error(e);}};
 let failures=0;
-async function tick(){try{if(selected && !opening){const current=generation;const rows=await api(`/api/events?session=${selected}&after=${after}`);if(current!==generation)return;for(const r of rows){after=r.seq;consume(r.event);} if(rows.length)await refresh();}failures=0;}catch(e){if(++failures===1)error(new Error('Codex Desk disconnected. Restart it and reopen this session.'));}finally{setTimeout(tick,failures?3000:800)}};
+const connectionError='Connection lost. Retrying… If Desk stopped, relaunch it and reopen this URL.';
+async function pollActivity(){
+  const current=generation;
+  if(selected && !opening){
+    const rows=await api(`/api/events?session=${selected}&after=${after}`);
+    if(current!==generation)return;
+    const follow=nearLatest();let changed=0;
+    for(const r of rows){
+      after=r.seq;consume(r.event);
+      if(['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
+    }
+    if(changed){
+      if(follow)requestAnimationFrame(()=>{if(current===generation)goLatest();});
+      else{latestUpdates+=changed;latestLabel();}
+    }
+    if(rows.length){await refresh();statePollAt=Date.now();}
+  }
+  // Other projects can finish or request approval while this conversation is quiet.
+  if(Date.now()-statePollAt>=4000){await refresh();statePollAt=Date.now();}
+}
+async function tick(){
+  try{await pollActivity();failures=0;if($('error').textContent===connectionError)$('error').hidden=true;}
+  catch(e){if(++failures===1)error(new Error(connectionError));}
+  finally{setTimeout(tick,failures?3000:800);}
+}
 (async()=>{try{await refresh();const last=localStorage.getItem('codex-desk-session');if(state.sessions.some(s=>s.id===last))await open(last);tick();}catch(e){error(e)}})();
 
 let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;

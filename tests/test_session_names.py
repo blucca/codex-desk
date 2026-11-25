@@ -26,6 +26,8 @@ class SessionNamesTests(unittest.TestCase):
         runtime.store, runtime.id, runtime.home = self.store, identifier, self.path
         runtime.persisted = False
         runtime.name_lock = threading.RLock()
+        runtime.lifecycle_lock = threading.Lock()
+        runtime.turn_lock = threading.Lock()
         runtime.request = Mock(side_effect=responder)
         return runtime
 
@@ -83,6 +85,7 @@ class SessionNamesTests(unittest.TestCase):
         runtime._flush_name()
         runtime.request.assert_called_with('thread/name/set', {'threadId':'original', 'name':'Repair the login redirect'})
         self.assertEqual(self.store.get(identifier)['name_pending'], 0)
+        self.store.update(identifier, status='completed')
         runtime.turn('A different follow-up task')
         self.assertEqual(self.store.get(identifier)['name'], 'Repair the login redirect')
 
@@ -166,10 +169,12 @@ class SessionNamesTests(unittest.TestCase):
             'input':[{'type':'text','text':'Make a plan'}], 'collaborationMode':{
                 'mode':'plan','settings':{'model':'fixture-model','developer_instructions':None}}})
         self.assertEqual(self.store.get(identifier)['mode'], 'plan')
+        self.store.update(identifier, status='completed')
         runtime.turn('Execute the selected step', mode='native')
         params=runtime.request.call_args.args[1]
         self.assertEqual(params['collaborationMode']['mode'], 'default')
         self.assertEqual(self.store.get(identifier)['mode'], 'native')
+        self.store.update(identifier, status='completed')
         runtime.turn('Continue in native mode')
         self.assertNotIn('collaborationMode', runtime.request.call_args.args[1])
         with self.assertRaises(ValueError):runtime.turn('bad mode', mode='unknown')

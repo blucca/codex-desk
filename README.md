@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a8/codex_desk-0.1.0a8-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a9/codex_desk-0.1.0a9-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a8/codex_desk-0.1.0a8-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a9/codex_desk-0.1.0a9-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -85,7 +85,10 @@ This is useful when the old provider is unavailable and you want to carry useful
 
 - Named project sessions, saved native history and same-thread reopen.
 - Native tasks, command/file approvals, questions, interruption and Work/Plan modes.
-- Live command output, edits, MCP text/structured results, failures and latest cumulative native thread usage.
+- Readable assistant messages with headings, lists, links and local copyable code blocks.
+- Compact, expandable native command/file/MCP evidence. Live calls open automatically; your deliberate expansion or collapse survives output updates.
+- Background project approval/completion status, active-task browser title and latest cumulative native thread usage.
+- New output follows when you are already at the bottom; reading older results keeps your place. **Latest output ↓** returns to the next-task box.
 - Project-bound unsent drafts while switching sessions in the page.
 - Reviewed provider handoffs with visible tool evidence; media/resource descriptors without external fetching.
 
@@ -103,7 +106,7 @@ If you already switch between enterprise/personal providers or lose the desktop 
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**39 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**48 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 A real MCP acceptance turn called a local read-only fixture twice: success with a structured result, then a deliberate failure. After restarting Desk, the same native thread showed both results in the browser and reviewed handoff without another inference turn. Controlled browser fixtures additionally cover dynamic-tool results, resource/media descriptors, progress preservation and 390px layout. The fixtures use synthetic data; an outside user's completed project task and return are recorded separately from these checks.
 
@@ -115,7 +118,11 @@ python3 -m playwright install chromium
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_navigation.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_onboarding.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_search.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_activity.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_monitor.py
 ```
+
+The activity-reader check replays three synthetic turns through the loopback UI: safe Markdown, exact copyable code, complete collapsible tool evidence, live/manual expansion, final-result replacement and message ordering. The monitor check covers another project requesting approval and finishing while the selected conversation is quiet, reading-position preservation and following fresh output. Backend HTTP fixtures cover approval/completion races and concurrent task submissions from two browser tabs.
 
 The title-search check covers project/global title filters, query-bound pagination, stale search/page/dialog/handoff responses and provider retention. Metadata-only search against actual owned Codex CLI 0.163.0 history included the matching saved thread, excluded an unmatched title and preserved exact cwd filtering, with no thread start/read/resume or model turn.
 

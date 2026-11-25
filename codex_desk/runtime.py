@@ -165,6 +165,7 @@ class Runtime:
         self.lock, self.write_lock = threading.Lock(), threading.Lock()
         self.name_lock = threading.RLock()
         self.lifecycle_lock = threading.Lock()
+        self.turn_lock = threading.Lock()
         self.closing = False
         self.persisted = False
         self.counter = 0
@@ -178,7 +179,7 @@ class Runtime:
         self.reader.start()
         self.stderr_reader.start()
         try:
-            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a6"}, "capabilities": {"experimentalApi": True}})
+            self.request("initialize", {"clientInfo": {"name": "codex_desk", "title": "Codex Desk", "version": "0.1.0a9"}, "capabilities": {"experimentalApi": True}})
             self.send({"method": "initialized", "params": {}})
         except Exception:
             # A rejected handshake never reaches Desk's runtime registry.
@@ -239,8 +240,10 @@ class Runtime:
             self.approvals[str(msg['id'])] = msg
             self.store.update(self.id, status="approval")
         elif method == 'serverRequest/resolved':
-            self.approvals.pop(str(params.get('requestId')), None)
-            if not self.approvals:
+            resolved = self.approvals.pop(str(params.get('requestId')), None)
+            # A response already sent by Desk, or a late notification after
+            # completion/stop, must not turn an idle session back into running.
+            if resolved and not self.approvals and self.store.get(self.id)['status'] == 'approval':
                 self.store.update(self.id, status='running')
         elif method == 'thread/tokenUsage/updated':
             # Native totals are cumulative snapshots, never sum them.
@@ -249,6 +252,9 @@ class Runtime:
             self.store.update(self.id, status="running", error=None)
         elif method == 'turn/completed':
             turn = params.get('turn', {})
+            # Completion retires this turn's interactions even when the native
+            # serverRequest/resolved notifications have not arrived yet.
+            self.approvals.clear()
             self.store.update(self.id, status=turn.get('status', 'completed'),
                               error=json.dumps(turn['error']) if turn.get('error') else None)
             self.persisted = True
@@ -330,56 +336,83 @@ class Runtime:
     def turn(self, text, mode="native"):
         if mode not in ("native", "plan"):
             raise ValueError("Choose Work or Plan mode")
-        row = self.store.get(self.id)
-        if row['status'] in ('running', 'approval'):
+        # One outstanding start per session, including the gap before its
+        # native turn/started notification (or after an unusually fast finish).
+        if not self.turn_lock.acquire(blocking=False):
             raise ValueError("Finish or stop the current turn first")
-        with self.name_lock:
-            row = self.store.get(self.id)
-            if row['name_source'] == 'default':
-                title = task_name(text)
-                if title:
-                    self.store.update(self.id, name=title, name_source='task', name_pending=1)
-                    self._sync_name()
-        params = {'threadId': row['thread_id'], 'input': [{'type': 'text', 'text': text}]}
-        if mode == 'plan' or row.get('mode') == 'plan':
-            if not row.get('model'):
-                raise ValueError('Reopen the session to load its native model before choosing Plan')
-            params['collaborationMode'] = {'mode': 'plan' if mode == 'plan' else 'default',
-                'settings': {'model': row['model'], 'developer_instructions': None}}
-        result = self.request('turn/start', params)
-        self.store.update(self.id, mode=mode)
-        return result
+        try:
+            with self.lifecycle_lock:
+                idle = self.store.get(self.id)
+                if idle['status'] in ('starting', 'running', 'approval'):
+                    raise ValueError("Finish or stop the current turn first")
+                if (mode == 'plan' or idle.get('mode') == 'plan') and not idle.get('model'):
+                    raise ValueError('Reopen the session to load its native model before choosing Plan')
+                self.store.update(self.id, status='starting', error=None)
+            try:
+                with self.name_lock:
+                    row = self.store.get(self.id)
+                    if row['name_source'] == 'default':
+                        title = task_name(text)
+                        if title:
+                            self.store.update(self.id, name=title, name_source='task', name_pending=1)
+                            self._sync_name()
+                params = {'threadId': row['thread_id'], 'input': [{'type': 'text', 'text': text}]}
+                if mode == 'plan' or row.get('mode') == 'plan':
+                    params['collaborationMode'] = {'mode': 'plan' if mode == 'plan' else 'default',
+                        'settings': {'model': row['model'], 'developer_instructions': None}}
+                # The native reader needs lifecycle_lock to deliver this reply.
+                result = self.request('turn/start', params)
+            except Exception:
+                with self.lifecycle_lock:
+                    if self.store.get(self.id)['status'] == 'starting':
+                        self.store.update(self.id, status=idle['status'], error=idle['error'])
+                raise
+            with self.lifecycle_lock:
+                fields = {'mode': mode}
+                if self.store.get(self.id)['status'] == 'starting':
+                    turn = result.get('turn', {})
+                    status = turn.get('status', 'inProgress')
+                    fields['status'] = 'running' if status == 'inProgress' else status
+                    fields['error'] = json.dumps(turn['error']) if turn.get('error') else None
+                self.store.update(self.id, **fields)
+            return result
+        finally:
+            self.turn_lock.release()
     def approve(self, request_id, decision):
-        msg = self.approvals.get(str(request_id))
-        if not msg:
-            raise ValueError("This request is no longer pending")
-        if msg['method'] not in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval'):
-            raise ValueError("This native interaction needs a dedicated UI; stop the turn instead")
-        if decision not in ('accept', 'decline', 'cancel'):
-            raise ValueError("Choose a one-time decision")
-        self.send({'id': msg['id'], 'result': {'decision': decision}})
-        self.approvals.pop(str(request_id))
-        self.store.update(self.id, status="running")
+        # Native resolved/completed events and another HTTP response cannot
+        # interleave between writing a decision and retiring its pending entry.
+        with self.lifecycle_lock:
+            msg = self.approvals.get(str(request_id))
+            if not msg:
+                raise ValueError("This request is no longer pending")
+            if msg['method'] not in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval'):
+                raise ValueError("This native interaction needs a dedicated UI; stop the turn instead")
+            if decision not in ('accept', 'decline', 'cancel'):
+                raise ValueError("Choose a one-time decision")
+            self.send({'id': msg['id'], 'result': {'decision': decision}})
+            self.approvals.pop(str(request_id))
+            self.store.update(self.id, status='running' if not self.approvals else 'approval')
     def answer(self, request_id, answers):
-        msg = self.approvals.get(str(request_id))
-        if not msg or msg['method'] != 'item/tool/requestUserInput':
-            raise ValueError('This question is no longer pending')
-        questions = msg['params']['questions']
-        result = {}
-        for question in questions:
-            values = answers.get(question['id'])
-            if not isinstance(values, list) or not values or any(not isinstance(v, str) or not v.strip() for v in values):
-                raise ValueError('Answer every question before continuing')
-            options = question.get('options') or []
-            if options and not question.get('isOther'):
-                labels = {o['label'] for o in options}
-                if any(v not in labels for v in values):
-                    raise ValueError('Choose one of the offered answers')
-            result[question['id']] = {'answers': values}
-        self.send({'id': msg['id'], 'result': {'answers': result}})
-        self.approvals.pop(str(request_id), None)
-        self.store.update(self.id, status='running' if not self.approvals else 'approval')
-        return {'answered': True}
+        with self.lifecycle_lock:
+            msg = self.approvals.get(str(request_id))
+            if not msg or msg['method'] != 'item/tool/requestUserInput':
+                raise ValueError('This question is no longer pending')
+            questions = msg['params']['questions']
+            result = {}
+            for question in questions:
+                values = answers.get(question['id'])
+                if not isinstance(values, list) or not values or any(not isinstance(v, str) or not v.strip() for v in values):
+                    raise ValueError('Answer every question before continuing')
+                options = question.get('options') or []
+                if options and not question.get('isOther'):
+                    labels = {o['label'] for o in options}
+                    if any(v not in labels for v in values):
+                        raise ValueError('Choose one of the offered answers')
+                result[question['id']] = {'answers': values}
+            self.send({'id': msg['id'], 'result': {'answers': result}})
+            self.approvals.pop(str(request_id))
+            self.store.update(self.id, status='running' if not self.approvals else 'approval')
+            return {'answered': True}
 
     def interrupt(self):
         events = self.store.events(self.id)
