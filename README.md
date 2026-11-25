@@ -151,6 +151,10 @@ Provider choice stays with you. The Add Provider form includes optional, explici
 
 If you already switch between enterprise/personal providers or lose the desktop UI while local tasks continue, [ask for task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) with your CLI version, operating system, the one workflow you want to complete and the step you reached. We can work through one project task or handoff with you.
 
+## Paid native delivery
+
+For a provider or team needing one native Codex integration or recovery path delivered, [Blucca offers a 200 USD fixed-scope pilot](https://blucca.github.io/services/native-codex/): one repository, OS and provider/model, actual task results, restart/continuation acceptance and a runnable check. Five business days start after scope, test access/allowance and funded payment arrangement are confirmed. [中文交付说明](https://blucca.github.io/services/native-codex/zh.html).
+
 ## Check
 
 Startup tests cover a broken npm launcher, a missing interpreter and a bounded version-check timeout before any Desk state or browser opens. Launcher output is suppressed; diagnostics give the exact same-shell command.
