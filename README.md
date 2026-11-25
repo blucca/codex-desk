@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a9/codex_desk-0.1.0a9-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
 codex-desk
 ```
 
@@ -31,7 +31,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a9/codex_desk-0.1.0a9-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -43,7 +43,7 @@ python3 -m codex_desk.server
 
 The server prints `http://127.0.0.1:8787` and opens it in your browser. Choose **Open a project**, enter its folder, and select your current Codex settings or a retained provider profile. **Find existing sessions** lists the saved conversations for that project: resume the one you want, or explicitly **Start new conversation**. You can also browse all native history from the sidebar.
 
-Use **Add API provider** to save a provider profile from your existing API key, base URL and model. Native file profiles have distinct IDs from current settings, including a file named `default`. Restarting Desk resumes saved conversations; native Codex writes a blank thread's rollout after its first turn, so an unused blank workspace may get a fresh thread on reopening.
+Use **Add API provider** to save a provider profile from your existing API key, base URL and model. Native file profiles have distinct IDs from current settings, including a file named `default`. Restarting Desk resumes saved conversations; native Codex writes a blank thread's rollout after its first turn, so a newly created, never-used blank workspace may get a fresh thread on reopening. Saved/imported conversations keep their binding when history is missing; restore the history or relaunch with its original `--codex-home`, or explicitly start new work. Older Desk bindings are kept rather than guessed to be blank.
 
 ```sh
 codex-desk --codex /path/to/codex --no-browser
@@ -106,7 +106,7 @@ If you already switch between enterprise/personal providers or lose the desktop 
 DESK_TEST_TEMP=/your/workspace/temp python3 -m unittest discover -s tests -v
 ```
 
-**48 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
+**51 focused tests pass.** Native CLI 0.171.0 on Linux completed an owned-project command, resumed the same used thread after restart, and ran a reviewed handoff in a distinct thread. Actual native rename/restart, provider selection and a browser-answered planning question were also exercised. Main configuration/auth and the source conversation remained intact.
 
 A real MCP acceptance turn called a local read-only fixture twice: success with a structured result, then a deliberate failure. After restarting Desk, the same native thread showed both results in the browser and reviewed handoff without another inference turn. Controlled browser fixtures additionally cover dynamic-tool results, resource/media descriptors, progress preservation and 390px layout. The fixtures use synthetic data; an outside user's completed project task and return are recorded separately from these checks.
 
@@ -120,7 +120,10 @@ DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_onboarding.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_search.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_activity.py
 DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_monitor.py
+DESK_TEST_TEMP=/your/workspace/temp python3 tests/browser_errors.py
 ```
+
+The dialog-error check exercises real loopback failures for a duplicate provider name, a missing handoff folder and a missing saved project. Errors remain visible in the open dialog, provider retry keeps nonsecret inputs, and cancel clears the key. The missing-history tests preserve an imported thread through failure/restart and resume it after restoration, without creating a replacement.
 
 The activity-reader check replays three synthetic turns through the loopback UI: safe Markdown, exact copyable code, complete collapsible tool evidence, live/manual expansion, final-result replacement and message ordering. The monitor check covers another project requesting approval and finishing while the selected conversation is quiet, reading-position preservation and following fresh output. Backend HTTP fixtures cover approval/completion races and concurrent task submissions from two browser tabs.
 

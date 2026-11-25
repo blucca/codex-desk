@@ -9,7 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
-from .runtime import Runtime, Store, profiles, save_profile, task_name, first_task, session_name
+from .runtime import Runtime, Store, profiles, save_profile, task_name, first_task, session_name, MissingRolloutError
 from .handoff import build_handoff
 
 
@@ -33,11 +33,12 @@ class Desk:
                 runtime = Runtime(self.store, identifier, self.binary, self.home)
                 self.runtimes[identifier] = runtime
                 return runtime.attach()
-            except Exception:
+            except Exception as error:
                 if runtime is not None:
                     runtime.close()
                 self.runtimes.pop(identifier, None)
-                self.store.update(identifier, status="failed", error="Native session could not open")
+                self.store.update(identifier, status="failed", error=(str(error)
+                    if isinstance(error, MissingRolloutError) else "Native session could not open"))
                 raise
     def profile_id(self, value):
         rows = profiles(self.home)
@@ -90,11 +91,12 @@ class Desk:
         existing = next((s for s in self.store.sessions()
             if s['thread_id'] == thread_id and (s['profile'] if s['profile'] == 'default' or s['profile'].startswith('sidecar:') else 'sidecar:' + s['profile']) == profile), None)
         if existing:
+            self.store.update(existing['id'], thread_saved=1)
             return {'id': existing['id'], 'thread': thread}
         # Import is read-only. Native resume happens only when the user opens it.
         identifier = self.store.create(str(cwd), profile)
         self.store.update(identifier, thread_id=thread['id'], model=thread.get('model'),
-                          provider=thread.get('modelProvider'), status='saved')
+                          provider=thread.get('modelProvider'), status='saved', thread_saved=1)
         title = task_name(thread.get('name') or '')
         source = 'native' if title else 'task'
         title = title or first_task(thread.get('turns', [])) or task_name(thread.get('preview') or '')

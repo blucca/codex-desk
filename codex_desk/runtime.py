@@ -15,6 +15,10 @@ from datetime import datetime
 NAME_LIMIT = 120
 
 
+class MissingRolloutError(RuntimeError):
+    """A saved binding must survive missing native history."""
+
+
 def session_name(value):
     if not isinstance(value, str):
         raise ValueError("Enter a session name")
@@ -107,7 +111,8 @@ class Store:
               thread_id TEXT, model TEXT, provider TEXT, status TEXT,
               created REAL, updated REAL, usage TEXT, error TEXT,
               name TEXT, name_source TEXT NOT NULL DEFAULT 'default',
-              name_pending INTEGER NOT NULL DEFAULT 0, mode TEXT NOT NULL DEFAULT 'native');
+              name_pending INTEGER NOT NULL DEFAULT 0, mode TEXT NOT NULL DEFAULT 'native',
+              thread_saved INTEGER NOT NULL DEFAULT 0);
             CREATE TABLE IF NOT EXISTS events(
               seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, payload TEXT NOT NULL);
             ''')
@@ -115,9 +120,14 @@ class Store:
             for column, definition in (
                 ('name', 'TEXT'), ('name_source', "TEXT NOT NULL DEFAULT 'default'"),
                 ('name_pending', 'INTEGER NOT NULL DEFAULT 0'),
-                ('mode', "TEXT NOT NULL DEFAULT 'native'")):
+                ('mode', "TEXT NOT NULL DEFAULT 'native'"),
+                ('thread_saved', 'INTEGER NOT NULL DEFAULT 0')):
                 if column not in columns:
                     self.db.execute(f'ALTER TABLE sessions ADD COLUMN {column} {definition}')
+            if 'thread_saved' not in columns:
+                # Older bindings do not distinguish imported history from a
+                # never-used blank. Preserve them rather than guess and replace.
+                self.db.execute('UPDATE sessions SET thread_saved=1 WHERE thread_id IS NOT NULL')
             # Backfill in place: keep IDs, binding, event sequence, and list order.
             for identifier, cwd, created in self.db.execute(
                     "SELECT id,cwd,created FROM sessions WHERE name IS NULL OR trim(name)='' ").fetchall():
@@ -249,7 +259,7 @@ class Runtime:
             # Native totals are cumulative snapshots, never sum them.
             self.store.update(self.id, usage=json.dumps(params.get('tokenUsage', {})))
         elif method == 'turn/started':
-            self.store.update(self.id, status="running", error=None)
+            self.store.update(self.id, status="running", error=None, thread_saved=1)
         elif method == 'turn/completed':
             turn = params.get('turn', {})
             # Completion retires this turn's interactions even when the native
@@ -288,14 +298,22 @@ class Runtime:
         row = self.store.get(self.id)
         config = profile_config(self.home, row['profile'])
         params = {'config': config} if config else {}
+        thread_saved = 0
         if row['thread_id']:
             try:
                 result = self.request('thread/resume', {'threadId': row['thread_id'], **params})
                 self.persisted = True
+                thread_saved = 1
             except RuntimeError as error:
-                used = any(e['event'].get('method') == 'turn/started' for e in self.store.events(self.id))
-                if 'no rollout found' not in str(error) or used:
+                if 'no rollout found' not in str(error):
                     raise
+                used = row['thread_saved'] or row['status'] == 'saved' or any(
+                    e['event'].get('method') == 'turn/started' for e in self.store.events(self.id))
+                if used:
+                    raise MissingRolloutError(
+                        'Saved Codex conversation unavailable (no rollout found). Restore its history '
+                        'or restart Desk with the original --codex-home. To proceed without it, '
+                        'choose Start new conversation explicitly.') from None
                 # Codex writes its rollout lazily on the first turn. A blank workspace
                 # may be reopened with a fresh native thread, never a used conversation.
                 result = self.request('thread/start', {'cwd': row['cwd'], **params})
@@ -304,7 +322,8 @@ class Runtime:
         self.thread_result = result
         thread = result['thread']
         self.store.update(self.id, thread_id=thread['id'], model=result.get('model'),
-                          provider=result.get('modelProvider'), status="ready", error=None)
+                          provider=result.get('modelProvider'), status="ready", error=None,
+                          thread_saved=thread_saved)
         if row['name_pending']:
             self._flush_name()
         elif thread.get('name'):
@@ -368,7 +387,7 @@ class Runtime:
                         self.store.update(self.id, status=idle['status'], error=idle['error'])
                 raise
             with self.lifecycle_lock:
-                fields = {'mode': mode}
+                fields = {'mode': mode, 'thread_saved': 1}
                 if self.store.get(self.id)['status'] == 'starting':
                     turn = result.get('turn', {})
                     status = turn.get('status', 'inProgress')

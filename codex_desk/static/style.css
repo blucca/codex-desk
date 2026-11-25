@@ -12,7 +12,7 @@ aside{min-width:0}
 
 @media(max-width:760px){header{flex-direction:column}header>div:last-child{display:flex;flex-wrap:wrap;gap:8px;align-items:center}#rename,#handoff{margin-top:0}}
 
-#history{max-height:90vh;overflow:auto}.history-search{padding-bottom:16px;border-bottom:1px solid #344356}#history-summary,#project-summary{overflow-wrap:anywhere}#history-error{border:1px solid #ac6468;background:#3a2529;color:#ffccd0;padding:12px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+#history{max-height:90vh;overflow:auto}.history-search{padding-bottom:16px;border-bottom:1px solid #344356}#history-summary,#project-summary{overflow-wrap:anywhere}#history-error,#provider-error,#handoff-error{border:1px solid #ac6468;background:#3a2529;color:#ffccd0;padding:12px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
 
 #activity-controls{position:fixed;right:18px;bottom:18px;z-index:2}#activity-controls[hidden]{display:none}#latest-output{font-size:12px;padding:8px 12px;background:#203e39;box-shadow:0 3px 18px #0008}main{padding-bottom:76px}
 

@@ -1,3 +1,4 @@
+import http.client
 import json
 import os
 from pathlib import Path
@@ -5,11 +6,12 @@ import queue
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
 
-from codex_desk.server import Desk
+from codex_desk.server import Desk, ThreadingHTTPServer, handler
 
 
 ROOT = Path(os.environ.get('DESK_TEST_TEMP', str(Path.cwd() / 'temp')))
@@ -25,6 +27,7 @@ class RuntimeStartupTests(unittest.TestCase):
         self.home.mkdir()
         self.project = self.path / 'project'
         self.project.mkdir()
+        (self.home / 'saved-project').write_text(str(self.project))
         self.native = self.path / 'native-fixture'
         self.native.write_text(f'#!{sys.executable}\n' + '''
 import json, os, subprocess, sys
@@ -54,8 +57,19 @@ for line in sys.stdin:
         else:
             reply = {'result': {}}
     elif method == 'thread/resume':
-        reply = {'result': {'thread': {'id': message['params']['threadId'], 'turns': []},
-                            'model': 'saved-model', 'modelProvider': 'saved-provider'}}
+        if (home / 'missing-rollout').exists():
+            reply = {'error': {'code': -32000, 'message': 'no rollout found'}}
+        else:
+            reply = {'result': {'thread': {'id': message['params']['threadId'], 'turns': []},
+                                'model': 'saved-model', 'modelProvider': 'saved-provider'}}
+    elif method == 'thread/read':
+        reply = {'result': {'thread': {'id': message['params']['threadId'],
+            'cwd': (home / 'saved-project').read_text(), 'name': 'Existing verification',
+            'model': 'saved-model', 'modelProvider': 'saved-provider', 'turns': [
+                {'items': [{'type': 'userMessage', 'content': [{'type': 'text', 'text': 'Verify this project'}]},
+                           {'type': 'agentMessage', 'text': 'Verification passed'}]}]}}}
+    elif method == 'thread/start':
+        reply = {'result': {'thread': {'id': 'replacement-blank', 'turns': []}}}
     else:
         continue
     print(json.dumps({'id': message['id'], **reply}), flush=True)
@@ -134,6 +148,61 @@ for line in sys.stdin:
         self.assertEqual(self.desk.store.get(identifier)['status'], 'failed')
         self.assertEqual(self.desk.store.get(identifier)['thread_id'], 'native-original')
         self.assertEqual(self.desk.runtimes, {})
+
+    def test_missing_imported_history_keeps_binding_and_actionable_error_until_restored(self):
+        config = self.home / 'config.toml'
+        config.write_text('# Existing configuration must stay intact\nmodel="saved-model"\n')
+        config_before = config.read_bytes()
+        identifier = self.desk.import_thread('native-original', 'default')['id']
+        original = self.desk.store.get(identifier)
+        self.assertEqual(self.desk.store.events(identifier), [])
+        missing = self.home / 'missing-rollout'
+        missing.touch()
+
+        server = ThreadingHTTPServer(('127.0.0.1', 0), handler(self.desk))
+        worker = threading.Thread(target=server.serve_forever,
+                                  kwargs={'poll_interval': 0.01}, daemon=True)
+        worker.start()
+        connection = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=5)
+        try:
+            connection.request('POST', '/api/open', json.dumps({'session': identifier}),
+                               {'Content-Type': 'application/json'})
+            response = connection.getresponse()
+            body = json.loads(response.read())
+            self.assertEqual(response.status, 400, body)
+            self.assertIn('original --codex-home', body['error'])
+            self.assertIn('Start new conversation explicitly', body['error'])
+            failed = self.desk.store.get(identifier)
+            self.assertEqual(failed['status'], 'failed')
+            self.assertEqual(failed['error'], body['error'])
+        finally:
+            connection.close()
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=5)
+
+        self.desk.close()
+        reopened = Desk(str(self.native), self.home, self.path / 'state')
+        self.addCleanup(reopened.store.db.close)
+        self.addCleanup(reopened.close)
+        with self.assertRaisesRegex(RuntimeError, 'original --codex-home'):
+            reopened.open(identifier)
+        failed = reopened.store.get(identifier)
+        for field in ('id', 'thread_id', 'cwd', 'profile', 'name', 'created', 'model', 'provider'):
+            self.assertEqual(failed[field], original[field])
+        self.assertEqual(reopened.runtimes, {})
+        self.assertEqual(reopened.store.events(identifier), [])
+
+        missing.unlink()
+        self.assertEqual(reopened.open(identifier)['thread']['id'], 'native-original')
+        self.assertEqual(reopened.store.get(identifier)['status'], 'ready')
+        self.assertIsNone(reopened.store.get(identifier)['error'])
+        self.assertEqual(config.read_bytes(), config_before)
+        requests = [json.loads(line) for line in (self.home / 'fixture-requests.jsonl').read_text().splitlines()]
+        self.assertEqual(sum(r['method'] == 'thread/read' for r in requests), 1)
+        self.assertEqual(sum(r['method'] == 'thread/resume' for r in requests), 3)
+        self.assertNotIn('thread/start', [r['method'] for r in requests])
+        self.assertNotIn('turn/start', [r['method'] for r in requests])
 
     def test_close_is_bounded_with_inherited_pipes_and_retired_reader_cannot_change_reopened_turn(self):
         identifier = self.desk.store.create(str(self.project), 'default')

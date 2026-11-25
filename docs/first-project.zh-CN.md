@@ -1,6 +1,6 @@
 # Codex Desk：打开第一个项目，继续已有会话
 
-适用于 **v0.1.0a9**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+适用于 **v0.1.0a10**。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
 
@@ -21,7 +21,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a9/codex_desk-0.1.0a9-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
 codex-desk
 ```
 
@@ -33,7 +33,7 @@ codex --version
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a9/codex_desk-0.1.0a9-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a10/codex_desk-0.1.0a10-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -133,3 +133,9 @@ Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQ
 助手结果按标题、列表和代码块显示；代码块的 **Copy** 只复制代码文本。命令、文件改动与 MCP 结果收在可展开的证据卡片里，进行中的工具默认展开。手动收起或展开后，后续输出不会改变你的选择。
 
 阅读旧结果时新输出不会把页面拉到底部。点击 **Latest output ↓** 回到最新结果和任务输入框；本来就在底部时会跟随新输出。切到另一个项目后，侧栏仍更新先前项目的等待批准和完成状态，浏览器标题显示活跃任务数。
+
+## 找不到已有会话的历史时
+
+如果打开已保存会话时提示 `no rollout found`，Desk 保留原会话绑定。恢复该会话的历史文件，或用原来的 `--codex-home` 重新启动 Desk 后再打开；要开始无旧上下文的新工作，请明确选择 **Start new conversation**。新建但从未运行任务的空会话才可能自动重建。
+
+添加同名提供商、打开不存在的交接目录或恢复已删除的项目失败时，错误显示在当前对话框内。修改后重试即可；提供商表单保留名称、地址和模型，API key 需重新输入。

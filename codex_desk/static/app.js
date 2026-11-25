@@ -289,7 +289,7 @@ async function nativeList(cursor=null) {
       $('native-list').append(nativeRow(t,async()=>{
         if(!nativeCurrent(current,query))return;
         try {const r=await api('/api/import',{thread:t.id,profile:'default'});if(!nativeCurrent(current,query))return;$('history').close();await open(r.id);}
-        catch(e){if(nativeCurrent(current,query))error(e);}
+        catch(e){if(nativeCurrent(current,query)){$('history-error').textContent=e.message;$('history-error').hidden=false;}}
       },()=>{if(nativeCurrent(current,query))showHandoff(t.id,t.cwd,()=>nativeCurrent(current,query));}));
     }
     nativeCursor=data.nextCursor;$('more').hidden=!nativeCursor;nativeSummary(query);
@@ -305,7 +305,7 @@ async function nativeList(cursor=null) {
 function fillProfiles(select) {select.replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));}
 async function showHandoff(thread,cwd,valid=()=>true) {
   const current=generation;
-  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
+  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;$('handoff-error').hidden=true;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
 }
 $('browse').onclick=()=>{$('history').showModal();nativeList();};
 $('history-search').oninput=resetNative;
@@ -314,11 +314,12 @@ $('history').addEventListener('close',()=>{if(!$('history').open)resetNative();}
 $('more').onclick=()=>nativeList(nativeCursor);
 $('history-close').onclick=()=>$('history').close();$('preview-close').onclick=()=>$('preview').close();
 $('handoff').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)showHandoff(s.thread_id,s.cwd);};
-$('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal:$('handoff-goal').value});$('preview').close();await open(r.id);}catch(e){error(e);}finally{b.disabled=false;}};
+$('handoff-start').onclick=async()=>{const b=$('handoff-start');b.disabled=true;$('handoff-error').hidden=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal:$('handoff-goal').value});$('preview').close();await open(r.id);}catch(e){$('handoff-error').textContent=e.message;$('handoff-error').hidden=false;}finally{b.disabled=false;}};
 
-$('add-provider').onclick=()=>$('provider').showModal();
-$('provider-close').onclick=()=>{$('provider-key').value='';$('provider').close();};
-$('provider-form').onsubmit=async e=>{e.preventDefault();$('provider-save').disabled=true;try{await api('/api/profiles',{name:$('provider-name').value,endpoint:$('provider-endpoint').value,model:$('provider-model').value,key:$('provider-key').value});$('provider-key').value='';$('provider').close();await refresh();}catch(e){$('provider').close();error(e);}finally{$('provider-key').value='';$('provider-save').disabled=false;}};
+$('add-provider').onclick=()=>{$('provider-error').hidden=true;$('provider').showModal();};
+$('provider-close').onclick=()=>$('provider').close();
+$('provider').addEventListener('close',()=>{$('provider-key').value='';});
+$('provider-form').onsubmit=async e=>{e.preventDefault();$('provider-save').disabled=true;$('provider-error').hidden=true;try{await api('/api/profiles',{name:$('provider-name').value,endpoint:$('provider-endpoint').value,model:$('provider-model').value,key:$('provider-key').value});$('provider-key').value='';$('provider').close();await refresh();}catch(e){$('provider-error').textContent=e.message;$('provider-error').hidden=false;}finally{$('provider-key').value='';$('provider-save').disabled=false;}};
 
 $('rename').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(!s)return;$('rename-name').value=s.name || '';$('rename-error').hidden=true;$('rename-dialog').showModal();$('rename-name').focus();$('rename-name').select();};
 $('rename-cancel').onclick=()=>$('rename-dialog').close();

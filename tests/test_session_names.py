@@ -65,6 +65,11 @@ class SessionNamesTests(unittest.TestCase):
                              ('native-original', '/work/app', 'trial', 2, '{"total":3}'))
             self.assertEqual([s['id'] for s in migrated.sessions()], ['blank', 'used'])
             self.assertEqual(migrated.events('used'), [{'seq':1, 'event':payload}])
+            # Legacy imports cannot be distinguished from local blank bindings.
+            self.assertEqual(migrated.get('used')['thread_saved'], 1)
+            self.assertEqual(migrated.get('blank')['thread_saved'], 1)
+            new_blank = migrated.create('/work/app', 'default')
+            self.assertEqual(migrated.get(new_blank)['thread_saved'], 0)
             migrated.update('used', name='My session', name_source='user')
         finally:
             migrated.db.close()
@@ -80,6 +85,7 @@ class SessionNamesTests(unittest.TestCase):
         runtime = self.runtime(identifier, lambda method, params: {'turn':{'id':'turn'}} if method=='turn/start' else {})
         runtime.turn('  Repair the\n login redirect  ')
         self.assertEqual(self.store.get(identifier)['name'], 'Repair the login redirect')
+        self.assertEqual(self.store.get(identifier)['thread_saved'], 1)
         self.assertEqual([c.args[0] for c in runtime.request.call_args_list], ['turn/start'])
         runtime.persisted = True
         runtime._flush_name()
@@ -133,6 +139,42 @@ class SessionNamesTests(unittest.TestCase):
         self.assertEqual(self.store.get(identifier)['thread_id'], 'used-original')
         self.assertEqual([c.args[0] for c in runtime.request.call_args_list], ['thread/resume'])
 
+    def test_imported_used_thread_missing_rollout_is_never_replaced(self):
+        desk = Desk('unused', self.path, self.path / 'import-state')
+        self.addCleanup(desk.store.db.close)
+        desk.history = Mock(return_value={'id': 'imported-original', 'cwd': str(self.path),
+            'name': 'Saved verification', 'turns': [{'items': [{'type': 'userMessage',
+                'content': [{'type': 'text', 'text': 'Run the verification command'}]}]}]})
+        identifier = desk.import_thread('imported-original', 'default')['id']
+        original = desk.store.get(identifier)
+        self.assertEqual(desk.store.events(identifier), [])
+        runtime = self.runtime(identifier, lambda method, params: (
+            _ for _ in ()).throw(RuntimeError('no rollout found')))
+        runtime.store = desk.store
+        with self.assertRaisesRegex(RuntimeError, 'original --codex-home'):
+            runtime.attach()
+        self.assertEqual(desk.store.get(identifier), original)
+        self.assertEqual(desk.store.events(identifier), [])
+        self.assertEqual([c.args[0] for c in runtime.request.call_args_list], ['thread/resume'])
+
+    def test_successful_resume_without_local_turns_remains_saved_after_restart(self):
+        identifier = self.store.create(str(self.path), 'default')
+        self.store.update(identifier, thread_id='saved-original', status='ready')
+        runtime = self.runtime(identifier, lambda method, params: {
+            'thread': {'id': 'saved-original', 'turns': []}})
+        runtime.attach()
+        self.assertEqual(self.store.events(identifier), [])
+        reopened = Store(self.path / 'desk.sqlite3')
+        self.addCleanup(reopened.db.close)
+        self.assertEqual(reopened.get(identifier)['thread_saved'], 1)
+        failed = self.runtime(identifier, lambda method, params: (
+            _ for _ in ()).throw(RuntimeError('no rollout found')))
+        failed.store = reopened
+        with self.assertRaisesRegex(RuntimeError, 'Start new conversation explicitly'):
+            failed.attach()
+        self.assertEqual(reopened.get(identifier)['thread_id'], 'saved-original')
+        self.assertEqual([c.args[0] for c in failed.request.call_args_list], ['thread/resume'])
+
     def test_native_write_failure_keeps_local_name_pending_for_resume(self):
         identifier = self.store.create(str(self.path), 'default')
         self.store.update(identifier, thread_id='original', status='ready')
@@ -156,6 +198,8 @@ class SessionNamesTests(unittest.TestCase):
         self.assertEqual(desk.store.get(unnamed['id'])['name'], 'First user task')
         self.assertEqual(desk.runtimes, {})
         self.assertEqual(desk.store.get(named['id'])['thread_id'], 'native-a')
+        self.assertEqual(desk.store.get(named['id'])['thread_saved'], 1)
+        self.assertEqual(desk.store.get(unnamed['id'])['thread_saved'], 1)
         again = desk.import_thread('native-b', 'default')
         self.assertEqual(again['id'], unnamed['id'])
         self.assertEqual(len(desk.store.sessions()), 2)
