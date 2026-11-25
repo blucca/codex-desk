@@ -1,0 +1,50 @@
+name: Native launcher and retained profiles
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'codex_desk/**'
+      - 'pyproject.toml'
+      - 'tests/ci_native_smoke.py'
+      - '.github/workflows/native-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  native-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare local scratch
+        shell: bash
+        run: mkdir -p temp
+      - name: Install native Codex and Desk
+        shell: bash
+        env:
+          npm_config_cache: ${{ github.workspace }}/temp/npm-cache
+          PIP_CACHE_DIR: ${{ github.workspace }}/temp/pip-cache
+          TMPDIR: ${{ github.workspace }}/temp
+          TEMP: ${{ github.workspace }}/temp
+          TMP: ${{ github.workspace }}/temp
+        run: |
+          npm install --global @openai/codex@0.171.0
+          codex --version
+          python -m pip install .
+      - name: Run installed metadata-only native smoke
+        working-directory: temp
+        shell: bash
+        env:
+          DESK_TEST_TEMP: ${{ github.workspace }}/temp
+        run: python ../tests/ci_native_smoke.py
