@@ -8,10 +8,17 @@ Blucca exercised its own Codex Desk project through the native app-server with a
 
 The recorded turn completed, with these individual tool outcomes:
 
-| Call | Native status | Original result text |
-|---|---|---|
-| `{"case":"success"}` | `completed` | `Synthetic local acceptance: three checks passed` |
-| `{"case":"error"}` | `failed` | `Deliberate acceptance error: fixture unavailable` |
+**Success call:** `{"case":"success"}` → native `completed`.
+
+Original result text:
+
+> Synthetic local acceptance: three checks passed
+
+**Deliberate-error call:** `{"case":"error"}` → native `failed`.
+
+Original result text:
+
+> Deliberate acceptance error: fixture unavailable
 
 The success result also retained this original `structuredContent`:
 
