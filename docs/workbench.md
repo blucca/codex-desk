@@ -14,11 +14,15 @@ Editing the query clears old results and pagination; submit it again to search. 
 
 Choose **Find a decision in past work** on the first screen or **Search saved content** in the sidebar. For unopened native work, choose **Index existing Codex history**: an explicit local read of up to 200 recently updated conversations. Enter a phrase from an earlier task, reply or tool result, then **Search**. Select an available project for an exact folder scope, or keep **All indexed projects**. **Include archived sessions** makes locally archived Desk work available too.
 
-Results show the project, conversation and a matching snippet. **Open matching native activity** opens the original saved thread using **Current Codex settings**; **Open matching activity** returns to its saved Desk binding and profile. Both reveal the matched evidence, including collapsed command/MCP or sub-agent activity. For a saved draft or prepared follow-up, the result reveals the existing instruction; it does not send it. Opening an archived result restores its Desk entry.
+Results show the project, conversation and a matching snippet. On a native result, **Read original conversation** reads the exact original turn/item in a separate read-only viewer, including when its working folder has been removed. It does not import or resume the thread, and preserves the selected task and draft. **Back to search** retains the query and results. **Continue this conversation** separately resumes the original thread with **Current Codex settings**, requiring the saved project folder to exist.
 
-Content recall reads your private local Desk database: explicitly indexed native history, readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. Indexing uses native list/read requests without opening conversations or starting tasks. Native title browsing remains separate; opening an older conversation caches its readable evidence too. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
+For Desk-cached work, **Open matching activity** returns to its saved binding and profile and reveals the matched evidence. A saved draft or prepared follow-up result reveals the existing instruction; it does not send it. Opening an archived Desk result restores its entry.
+
+Content recall reads your private local Desk database: explicitly indexed native history, readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. Indexing and the original-conversation reader use native list/read requests without starting tasks. Native title browsing remains separate; opening an older conversation caches its readable evidence too. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
 
 Queries are literal, Unicode-normalized and case-insensitive. The dialog shows up to 30 matching items. **Index coverage and text limits** reports cached native coverage; each conversation retains the newest readable items first, bounded at 5,000 items, 2,000,000 characters total and 200,000 characters per item. Reindexing refreshes the recent 200-conversation window and skips unchanged snapshots. [Short answer-finding guide](find-past-answer.md).
+
+The reader uses 40-item pages and 20,000-character text windows, with **Previous items**／**Next items** and **Earlier text**／**Later text** controls. Missing native IDs or changed phrases are reported while the original conversation remains readable; **Retry read** retries a failed read.
 
 ## Prepare a task and come back later
 
@@ -65,7 +69,7 @@ This is useful when the old provider is unavailable and you want to carry useful
 ## Daily workbench
 
 - Project-grouped active/recent sessions, local title/folder filtering and reversible archives.
-- Explicit recent-native-history indexing and literal recall across readable cached activity, drafts and prepared follow-ups, with exact evidence navigation and cold SQLite return.
+- Explicit recent-native-history indexing and literal recall across readable cached activity, drafts and prepared follow-ups; read original native evidence before choosing same-thread continuation.
 - Named project sessions, saved native history and same-thread reopen.
 - Retained API profile editing and key rotation without changing profile or session identity.
 - Native tasks, command/file approvals, questions, interruption and Work/Plan modes.

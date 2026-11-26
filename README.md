@@ -1,10 +1,10 @@
 # Codex Desk
 
-**Continue your Codex work in the browser.** Open a recent CLI conversation—or find an earlier answer—read its results, and prepare the next task in the same thread.
+**Find a past Codex answer, then pick up the task.** Search your recent local history, read the original conversation, and continue in the same native thread when ready.
 
-![Codex Desk: a reopened checkout conversation with test results and a saved next-task draft](docs/resumed-work.png)
+![Codex Desk: index local history, find a retry decision, and read the original conversation](docs/find-answer.gif)
 
-*Example project: review a completed checkout check and save the next task for later.*
+*Synthetic checkout example: index local history, search “retry budget”, and read the original answer.*
 
 <a name="development-preview"></a>
 
@@ -15,7 +15,7 @@ Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installat
 With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one command** installs and opens the free local workbench on Linux, macOS, Windows or WSL:
 
 ```sh
-uvx --from https://github.com/blucca/codex-desk/releases/download/v0.1.0a23/codex_desk-0.1.0a23-py3-none-any.whl codex-desk
+uvx --from https://github.com/blucca/codex-desk/releases/download/v0.1.0a24/codex_desk-0.1.0a24-py3-none-any.whl codex-desk
 ```
 
 Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
@@ -32,7 +32,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a23/codex_desk-0.1.0a23-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a24/codex_desk-0.1.0a24-py3-none-any.whl
 codex-desk
 ```
 
@@ -42,7 +42,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a23/codex_desk-0.1.0a23-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a24/codex_desk-0.1.0a24-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
@@ -68,7 +68,8 @@ Know the title? **Browse all conversations** searches native conversation titles
 
 1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
 2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
-3. Enter a word or phrase from the answer, command output or tool result, then **Search**. Open a matching result to resume its **original native thread** and reveal the matching evidence. Native-history matches use **Current Codex settings**.
+3. Enter a word or phrase from the answer, command output or tool result, then **Search**. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Your selected task and draft stay unchanged; **Back to search** keeps the query and results.
+4. Ready to work on it? Choose **Continue this conversation** to resume the **original native thread** using **Current Codex settings**. Continuing requires the saved project folder to exist. Prepare the next instruction, then send it when ready.
 
 Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-cached activity, drafts and prepared follow-ups. **Index coverage and text limits** shows cached coverage and shortened or omitted text; this is a bounded recent-history cache. Reindexing refreshes the recent window and skips unchanged snapshots. For older conversations beyond that window, browse titles and open the conversation first.
 
@@ -80,7 +81,7 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
 - **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. Choose when to send them.
 - **Review before changing provider.** Carry editable visible task evidence into a distinct target-provider conversation, preserving the original.
-- **Find a saved decision.** Explicitly index recent native history, search readable evidence and jump to the matching message, tool result or preparation.
+- **Find a saved decision.** Search readable history and inspect the original answer before deciding whether to continue the task.
 
 [Workflow reference: search, profiles, follow-ups, handoffs and usage](docs/workbench.md)
 
@@ -88,7 +89,7 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 Desk runs on loopback and uses your installed Codex app-server. Existing sign-in, model/provider, MCP, trust and sandbox settings come from your Codex configuration. A new Desk account or API key is unnecessary.
 
-Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing uses native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
+Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing and the original-conversation reader use native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
 
 Closing the browser leaves Desk running; **Ctrl+C** stops Desk and its owned native tasks. It runs its own app-server rather than attaching to an already-running Desktop backend.
 

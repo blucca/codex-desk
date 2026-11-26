@@ -184,7 +184,12 @@ class NativeHistoryApiTests(unittest.TestCase):
         self.assertEqual({hit['kind'] for hit in result['results']}, {'activity', 'native-activity', 'draft', 'followup'})
         for hit in result['results']:
             if hit['kind'] != 'native-activity':
-                self.assertIn(hit, local['results'])
+                original = {key: value for key, value in hit.items() if key != 'thread_id'}
+                self.assertIn(original, local['results'])
+                if hit['kind'] == 'activity':
+                    self.assertEqual(hit['thread_id'], 'opened')
+                else:
+                    self.assertNotIn('thread_id', hit)
         for key, value in local['coverage'].items():
             self.assertEqual(result['coverage'][key], value)
         self.assertEqual(result['coverage']['native']['indexed_threads'], 40)
@@ -216,6 +221,47 @@ class NativeHistoryApiTests(unittest.TestCase):
         self.assertEqual(self.recall(q='scope phrase', archived='true')[1]['total'], 3)
         self.assertEqual(self.recall(q='scope phrase', cwd=str(other))[1]['total'], 0)
         self.assertEqual(len(self.desk.store.sessions()), 2)
+
+    def test_bound_activity_keeps_original_thread_for_deleted_project_read_without_archive_leak(self):
+        project = self.root / 'deleted-imported-project'
+        project.mkdir()
+        metadata = self.native('bound-original', 'Bound retained answer', project=project)
+        original = {**self.histories['bound-original'], 'cwd': str(project), 'name': metadata['name']}
+        self.histories['bound-original'] = original
+        identifier = self.desk.store.create(str(project), 'default', name='Previously imported work')
+        self.desk.store.update(identifier, thread_id='bound-original', status='saved', thread_saved=1)
+        self.desk.store.recall_snapshot(identifier, original)
+        save_draft(self.desk.store, identifier, 'Bound preparation phrase', 'plan', 0)
+        add_followup(self.desk.store, identifier, 'Bound preparation phrase', 'native')
+        project.rmdir()
+        self.index([metadata])
+        self.calls.clear()
+        before = list(self.desk.store.db.iterdump())
+        local = self.desk.store.recall('Bound retained answer')['results'][0]
+        with patch.object(self.desk, 'open') as opened, patch.object(self.desk, 'import_thread') as imported:
+            status, result, _ = self.recall(q='Bound retained answer', cwd=str(project))
+            self.assertEqual((status, result['total']), (200, 1))
+            self.assertEqual(result['results'], [{**local, 'thread_id': 'bound-original'}])
+            hit = result['results'][0]
+            self.assertEqual((hit['kind'], hit['session_id'], hit['thread_id'], hit['turn_id'], hit['item_id']),
+                             ('activity', identifier, 'bound-original', 'turn-bound-original', 'item-0'))
+            preparation = self.recall(q='Bound preparation phrase')[1]['results']
+            self.assertEqual({hit['kind'] for hit in preparation}, {'draft', 'followup'})
+            self.assertTrue(all('thread_id' not in hit for hit in preparation))
+            status, read, cache = self.request('GET', '/api/native/thread?id=' + hit['thread_id'])
+            self.assertEqual((status, cache, read), (200, 'no-store', original))
+            opened.assert_not_called()
+            imported.assert_not_called()
+        self.assertFalse(project.exists())
+        self.assertEqual(self.calls, [('thread/read', {'threadId': 'bound-original', 'includeTurns': True})])
+        self.assertEqual(list(self.desk.store.db.iterdump()), before)
+        self.runtime.assert_not_called()
+        self.desk.store.archive(identifier, True)
+        self.assertEqual(self.recall(q='Bound retained answer')[1]['total'], 0)
+        archived = self.recall(q='Bound retained answer', archived='true')[1]
+        self.assertEqual(archived['total'], 1)
+        self.assertEqual((archived['results'][0]['kind'], archived['results'][0]['thread_id'],
+                          archived['results'][0]['archived']), ('activity', 'bound-original', True))
 
     def test_repeated_index_skips_fresh_reads_replaces_same_ids_and_cold_reopen_keeps_cache(self):
         meta = self.native('stable-id', 'Old saved decision')

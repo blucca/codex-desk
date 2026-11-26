@@ -126,9 +126,15 @@ const DeskRecall=(()=>{
       const date=new Date(result.updated*1000);
       if(!Number.isNaN(date.getTime())){const time=make('time',date.toLocaleString(),'recall-updated');time.dateTime=date.toISOString();row.append(time);}
     }
-    const action=make('button',{activity:'Open matching activity','native-activity':'Open matching native activity',draft:'Go to saved draft',followup:'Go to prepared follow-up'}[result.kind] || 'Open saved content','recall-open');action.type='button';
+    const action=make('button',{activity:'Open matching activity','native-activity':'Continue this conversation',draft:'Go to saved draft',followup:'Go to prepared follow-up'}[result.kind] || 'Open saved content','recall-open');action.type='button';
     action.setAttribute('aria-label',action.textContent+' in '+name);
     const notice=make('p','','recall-result-status');notice.setAttribute('role','status');notice.hidden=true;
+    if(['native-activity','activity'].includes(result.kind) && result.thread_id){
+      const read=make('button','Read original conversation','recall-read');read.type='button';
+      read.setAttribute('aria-label','Read original conversation in '+name);
+      read.onclick=()=>DeskHistoryReader.show(result,{valid:()=>current(version,scope) && row.isConnected});
+      row.append(read);
+    }
     action.onclick=()=>reveal(result,row,notice,version,scope);row.append(action,notice);return row;
   }
   async function search(){
@@ -251,7 +257,11 @@ const DeskRecall=(()=>{
     ++navigationVersion;pendingNavigation=null;projects();
     const version=searchVersion,scope=query();
     for(const row of el('recall-results').children){const result=rowData.get(row);
-      if(result)row.querySelector('.recall-open').onclick=()=>reveal(result,row,row.querySelector('.recall-result-status'),version,scope);
+      if(result){
+        row.querySelector('.recall-open').onclick=()=>reveal(result,row,row.querySelector('.recall-result-status'),version,scope);
+        const read=row.querySelector('.recall-read');
+        if(read)read.onclick=()=>DeskHistoryReader.show(result,{valid:()=>current(version,scope) && row.isConnected});
+      }
     }
     el('recall').showModal();el('recall-query').focus();
     scanReady=false;scanIssue=false;el('recall-index-error').hidden=true;scanButtons();readScan();

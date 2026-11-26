@@ -372,6 +372,7 @@ $('project-new').onclick=()=>{if($('create').reportValidity())return openProject
 $('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 $('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 DeskFollowups.configure({api,make,selected:()=>selected,refresh});
+DeskHistoryReader.configure({api});
 DeskRecall.configure({api,make,state:()=>state,selected:()=>selected,generation:()=>generation,
   loaded:()=>!opening && !!nativeThreadId && !$('task').hidden,open,refresh,profileLabel,
   itemNode:id=>nodes.get(id),itemTurn:id=>itemTurns.get(id),refreshFollowups:id=>DeskFollowups.refresh(id)});

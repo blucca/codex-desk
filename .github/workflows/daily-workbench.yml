@@ -39,7 +39,7 @@ jobs:
       - name: Check installed daily workflows
         working-directory: temp
         run: |
-          cp ../tests/browser_home.py ../tests/browser_startup.py ../tests/browser_drafts.py ../tests/browser_followups.py ../tests/browser_organization.py ../tests/browser_collaboration.py ../tests/browser_recall.py ../tests/browser_native_recall.py ../tests/browser_handoff.py installed-fixtures/tests/
+          cp ../tests/browser_home.py ../tests/browser_startup.py ../tests/browser_drafts.py ../tests/browser_followups.py ../tests/browser_organization.py ../tests/browser_collaboration.py ../tests/browser_recall.py ../tests/browser_native_recall.py ../tests/browser_history_reader.py ../tests/browser_handoff.py installed-fixtures/tests/
           python - <<'PY'
           from pathlib import Path
           import codex_desk
@@ -48,7 +48,7 @@ jobs:
           assert not installed.is_relative_to(source), installed
           print('Installed package:', installed)
           PY
-          for fixture in home startup drafts followups organization collaboration recall native_recall handoff; do
+          for fixture in home startup drafts followups organization collaboration recall native_recall history_reader handoff; do
             DESK_USE_INSTALLED=1 DESK_TEST_EVIDENCE="$PWD/evidence/$fixture" DESK_COLLABORATION_RECEIPT="$PWD/evidence/$fixture" python "installed-fixtures/tests/browser_$fixture.py"
           done
       - name: Retain daily-workflow receipts

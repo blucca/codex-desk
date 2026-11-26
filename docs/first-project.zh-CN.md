@@ -2,7 +2,7 @@
 
 [五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
 
-用已有的 Codex CLI 和登录，在本机浏览器中打开旧会话、阅读结果、保存下一步任务；也可以按答案中的文字查找尚未在 Desk 中打开过的近期历史。界面目前使用英文，下面保留实际按钮名称。
+用已有的 Codex CLI 和登录，在本机浏览器中打开旧会话、阅读结果、保存下一步任务；也可以按答案中的文字查找近期历史，先只读原会话，再决定是否继续任务。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk：打开已有会话、查看结果并保存下一任务](resumed-work.png)
 
@@ -51,10 +51,15 @@ Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打�
 
 ## 4. 记得答案，但忘了会话标题
 
+[20 秒本地示例：索引 → 查找答案 → 只读原会话](find-answer.gif)（使用合成的结账项目历史）
+
 1. 首页点击 **Find a decision in past work**；已打开会话时，使用侧栏的 **Search saved content**。
 2. 点击 **Index existing Codex history**，明确读取所选 Codex home 中最近更新的最多 **200 个原生会话**，把可读文本存入本地缓存。包括尚未在 Desk 打开过的会话；索引过程不创建这些会话的 Desk 绑定，也不发送任务。
 3. 等待索引完成，先保持 **All indexed projects**，在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 2–200 个字符，再点 **Search** 或按 Enter。搜索为字面文字匹配，忽略大小写并规范化 Unicode；索引完成后需要再次点击 **Search** 更新结果。可选择已有的 **Project folder (optional)**，按精确项目目录缩小范围。
-4. 核对结果中的会话、目录和匹配片段。点击 **Open matching native activity**，用 **Current Codex settings** 打开原来的原生 thread，并定位、展开匹配的消息或工具结果；这不会发送任务。**Open matching activity** 则打开已缓存的 Desk 会话，保留它的 profile。草稿和已准备的后续任务也能搜索并打开。
+4. 核对结果中的会话、目录和匹配片段，点击原生结果的 **Read original conversation**。只读查看器按原来的 turn／item 定位并高亮匹配文字；即使项目目录已被删除，也可阅读原会话，不导入、不续接 thread。当前选中的任务和草稿保持不变，**Back to search** 或 **Close** 返回原查询和结果。
+5. 想继续这个任务时，再点 **Continue this conversation**，用 **Current Codex settings** 续接原来的原生 thread；这一步需要原项目目录仍然存在。准备下一步后再发送。**Open matching activity** 打开已缓存的 Desk 会话，保留它的 profile。草稿和已准备的后续任务也能搜索并打开。
+
+查看器每页显示 **40 个原始条目**，用 **Previous items**／**Next items** 换页。每条正文按最多 **20,000 个字符**的窗口显示，长输出使用 **Earlier text**／**Later text** 阅读其他窗口，字符范围和总量可见。原 turn／item 或匹配文字已变化时，查看器明确说明，仍可阅读其余历史；读取失败用 **Retry read** 重试。
 
 **Index coverage and text limits** 显示实际缓存范围，以及缩短、省略、不支持或不可读的条目。每个原生会话优先保留最新可读条目，最多 **5,000 个条目、共 2,000,000 个字符**，每条最多 **200,000 个字符**。结果最多显示 **30 条匹配项**；结果更多时缩小文字或项目范围。**Include archived sessions** 包含本地已归档的 Desk 条目，打开结果会恢复该条目。
 
@@ -102,7 +107,7 @@ Set-Location "$HOME\codex-desk-install"
 
 ## 7. 本地记录与任务求助
 
-Desk 的项目／profile／原生 thread 绑定、活动记录、索引后的原生历史文本和草稿保存在本机 SQLite，默认路径为 `~/.local/state/codex-desk/desk.sqlite3`。索引使用原生会话列表／读取请求，文字搜索读取本地缓存；沿用相同 state directory 重启后仍可搜索。实际运行任务时，模型请求由原生 Codex 发往所选提供商。
+Desk 的项目／profile／原生 thread 绑定、活动记录、索引后的原生历史文本和草稿保存在本机 SQLite，默认路径为 `~/.local/state/codex-desk/desk.sqlite3`。索引和原会话查看器使用原生会话列表／读取请求，文字搜索读取本地缓存；沿用相同 state directory 重启后仍可搜索。实际运行任务时，模型请求由原生 Codex 发往所选提供商。
 
 已有密钥沿用 Codex 配置或启动进程的环境。新 profile 的密钥保存在本地 sidecar 文件（Linux 权限 0600），配置通过 app-server 的私有 stdin 协议传入。Desk 保留主配置、auth 和原生 rollout，继承主配置中的 MCP、项目 trust 和 sandbox 设置。
 

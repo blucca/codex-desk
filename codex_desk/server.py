@@ -275,9 +275,12 @@ class Desk:
         # their native cache must never become an alternate visibility path.
         with self.store.lock:
             result = self.store.recall(q, cwd, include_archived, limit)
-            bound = [row[0] for row in self.store.db.execute(
-                'SELECT DISTINCT thread_id FROM sessions WHERE thread_id IS NOT NULL')]
-            native = self.native_index.search(q, cwd, limit, exclude_thread_ids=bound)
+            bindings = dict(self.store.db.execute(
+                'SELECT id,thread_id FROM sessions WHERE thread_id IS NOT NULL'))
+            for hit in result['results']:
+                if hit['kind'] == 'activity' and hit['session_id'] in bindings:
+                    hit['thread_id'] = bindings[hit['session_id']]
+            native = self.native_index.search(q, cwd, limit, exclude_thread_ids=bindings.values())
             native_hits = [dict(hit, name=hit['title'], profile='default', archived=False)
                            for hit in native['results']]
             result['results'] = sorted(result['results'] + native_hits,
@@ -370,12 +373,12 @@ def handler(desk):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/followups.js', '/native-state.js', '/recall.js', '/home.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/history_reader.js', '/followups.js', '/native-state.js', '/recall.js', '/home.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
