@@ -68,6 +68,7 @@ class NativeHistoryScanner:
                         continue
                     try:
                         if not self.index.needs_snapshot(meta):
+                            self.index.catch_up_bindings(meta['id'])
                             self._add('skipped')
                             continue
                         thread = self.desk.history(meta['id'])
@@ -84,6 +85,7 @@ class NativeHistoryScanner:
                             if key != 'turns' and snapshot.get(key) in (None, ''):
                                 snapshot[key] = value
                         self.index.replace_snapshot(snapshot)
+                        self.index.catch_up_bindings(meta['id'])
                         self._add('indexed')
                     except Exception:
                         if self.cancelled.is_set():

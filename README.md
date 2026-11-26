@@ -21,7 +21,7 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one comman
 uvx --prerelease allow codex-desk
 ```
 
-The current version is an alpha, so `--prerelease allow` selects the preview from [PyPI](https://pypi.org/project/codex-desk/). [The accepted GitHub wheel](https://github.com/blucca/codex-desk/releases/tag/v0.1.0a30) is also available.
+The current version is an alpha, so `--prerelease allow` selects the preview from [PyPI](https://pypi.org/project/codex-desk/). [The accepted GitHub wheel](https://github.com/blucca/codex-desk/releases) is also available.
 
 Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
 

@@ -18,7 +18,8 @@ class HistoryScanTests(unittest.TestCase):
                 raise ValueError('Read unavailable')
             return {'id': identifier, 'turns': []}
         index = SimpleNamespace(needs_snapshot=lambda m: m['id'] not in fresh,
-                                replace_snapshot=lambda t: saved.append(t))
+                                replace_snapshot=lambda t: saved.append(t),
+                                catch_up_bindings=lambda identifier: None)
         desk = SimpleNamespace(catalog=lambda: SimpleNamespace(request=request), history=history)
         scan = NativeHistoryScanner(desk, index)
         self.addCleanup(scan.close)
@@ -44,6 +45,21 @@ class HistoryScanTests(unittest.TestCase):
         self.assertEqual((result['skipped'],result['failed'],result['indexed']), (1,1,1))
         self.assertEqual([t['id'] for t in saved], ['good'])
         self.assertNotIn(('thread/read','old'), calls)
+
+    def test_fresh_and_skipped_scans_catch_up_bindings_but_failed_reads_do_not(self):
+        scan, calls, saved = self.scanner(
+            {None: {'data': [{'id': v} for v in ('old', 'missing', 'good')], 'nextCursor': None}},
+            failed=['missing'], fresh=['old'])
+        copied = []
+        def catch_up(identifier):
+            if identifier == 'good':
+                self.assertEqual([thread['id'] for thread in saved], ['good'])
+            copied.append(identifier)
+        scan.index.catch_up_bindings = catch_up
+        result = self.finish(scan)
+        self.assertEqual((result['skipped'], result['failed'], result['indexed']), (1, 1, 1))
+        self.assertEqual(copied, ['old', 'good'])
+        self.assertNotIn(('thread/read', 'old'), calls)
 
     def test_default_pass_pages_exactly_200_and_repeated_pass_only_lists_unchanged(self):
         fresh = set()

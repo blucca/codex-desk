@@ -74,6 +74,12 @@ class NativeRecallTests(unittest.TestCase):
         self.index.needs_snapshot(source)
         self.assertEqual(list(self.store.db.iterdump()), dump)
 
+    def test_standalone_index_catch_up_has_no_desk_tables_or_mutation(self):
+        self.index.replace_snapshot(snapshot([agent('Standalone decision')]))
+        before = list(self.store.db.iterdump())
+        self.assertEqual(self.index.catch_up_bindings('native-thread'), 0)
+        self.assertEqual(list(self.store.db.iterdump()), before)
+
     def test_full_replacement_removes_obsolete_items_and_preserves_other_threads(self):
         self.index.replace_snapshot(snapshot([agent('Old accepted evidence', 'old'),
                                               agent('Retired proof', 'retired')]))

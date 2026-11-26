@@ -202,23 +202,24 @@ class NativeHistoryApiTests(unittest.TestCase):
         for folder, profile in ((project, 'default'), (other, 'sidecar:work')):
             identifier = self.desk.store.create(str(folder), profile)
             self.desk.store.update(identifier, thread_id='bound', status='saved')
-            self.desk.store.recall_snapshot(identifier, snapshot('bound', 'scope phrase'))
+            self.desk.store.recall_snapshot(identifier, snapshot('bound', 'scope phrase', count=60))
             local_ids.append(identifier)
+        # Exact identities, not just a shared thread, duplicate the saved rows.
         # More duplicates than the recall limit must be excluded before LIMIT/count.
         self.index([self.native('bound', 'scope phrase cached duplicate', count=60),
                     self.native('unbound', 'scope phrase unopened', updated=100, project=project)])
-        self.assertEqual(self.recall(q='scope phrase')[1]['total'], 3)
-        self.assertEqual(self.recall(q='scope phrase', cwd=str(project), limit=1)[1]['total'], 2)
+        self.assertEqual(self.recall(q='scope phrase')[1]['total'], 121)
+        self.assertEqual(self.recall(q='scope phrase', cwd=str(project), limit=1)[1]['total'], 61)
         self.desk.store.archive(local_ids[0], True)
         scoped = self.recall(q='scope phrase', cwd=str(project))[1]
         self.assertEqual(scoped['total'], 1)
         self.assertEqual(scoped['results'][0]['thread_id'], 'unbound')
         archived = self.recall(q='scope phrase', cwd=str(project), archived='true')[1]
-        self.assertEqual(archived['total'], 2)
+        self.assertEqual(archived['total'], 61)
         self.assertTrue(next(hit for hit in archived['results'] if hit['kind'] == 'activity')['archived'])
         self.desk.store.archive(local_ids[1], True)
         self.assertEqual(self.recall(q='scope phrase')[1]['total'], 1)
-        self.assertEqual(self.recall(q='scope phrase', archived='true')[1]['total'], 3)
+        self.assertEqual(self.recall(q='scope phrase', archived='true')[1]['total'], 121)
         self.assertEqual(self.recall(q='scope phrase', cwd=str(other))[1]['total'], 0)
         self.assertEqual(len(self.desk.store.sessions()), 2)
 

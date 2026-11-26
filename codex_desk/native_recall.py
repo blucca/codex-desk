@@ -189,6 +189,29 @@ class NativeRecallIndex:
         counts['indexed_items'] = len(rows)
         return rows, counts
 
+    def catch_up_bindings(self, thread_id):
+        """Copy missing cached identities to saved Desk bindings during a scan.
+
+        Existing local evidence wins, including complete or longer streaming
+        rows. The native cache has no turn-completion marker, so copied rows
+        remain incomplete until an ordinary bound snapshot/event supplies it.
+        Standalone native indexes have no Desk tables and need no catch-up.
+        """
+        if not _identifier(thread_id):
+            raise ValueError('Choose a native thread')
+        with self.store.lock, self.store.db:
+            tables = {row[0] for row in self.store.db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('sessions','recall_items')")}
+            if tables != {'sessions', 'recall_items'}:
+                return 0
+            cursor = self.store.db.execute('''INSERT INTO recall_items
+                (session_id,turn_id,item_id,item_type,visible_text,normalized_text,updated,complete)
+                SELECT s.id,i.turn_id,i.item_id,i.item_type,i.visible_text,i.normalized_text,i.updated,0
+                FROM native_recall_items i JOIN sessions s ON s.thread_id=i.thread_id
+                WHERE i.thread_id=? AND s.id<>'native-catalog'
+                ON CONFLICT(session_id,turn_id,item_id) DO NOTHING''', (thread_id,))
+            return cursor.rowcount
+
     def _thread_stats(self, thread_id):
         row = self.store.db.execute('SELECT indexed_at,char_limit,item_limit,' + ','.join(_COUNT_FIELDS)
                                    + ' FROM native_recall_threads WHERE thread_id=?', (thread_id,)).fetchone()
