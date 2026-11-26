@@ -171,6 +171,86 @@ class BoundRecallTests(unittest.TestCase):
         for project in (self.root, self.project / 'child', self.root / 'other'):
             self.assertEqual(self.recall(cwd=str(project), archived='true')['total'], 0)
 
+    def test_two_scans_search_incomplete_reply_growth_without_rewriting_live_evidence(self):
+        store = self.desk.store
+        partial = 'The retry review is complete. '
+        final = partial + self.phrase
+        local = [turn('complete-turn', 'Completed local choice'),
+                 turn('conflict-turn', 'Different local choice', status='inProgress'),
+                 turn('longer-turn', 'Longer local choice stays available', status='inProgress')]
+        store.recall_snapshot(self.session, {**self.meta, 'turns': local})
+        native = [turn('complete-turn', 'Completed local choice with native completion tail'),
+                  turn('conflict-turn', 'Different native choice with native conflict tail'),
+                  turn('longer-turn', 'Longer local choice')]
+        self.meta['updatedAt'] += 10
+        self.new = turn('outside-desk-turn', partial, 'outside-desk-answer', 'inProgress')
+        self.new.pop('completedAt')
+        self.new['startedAt'] = self.meta['updatedAt']
+        self.fresh = {**self.meta, 'turns': [self.old, *native, self.new]}
+        self.assertEqual(self.scan()['indexed'], 1)
+        self.assertEqual(self.recall()['total'], 0)
+        rows = store.db.execute('SELECT * FROM recall_items ORDER BY turn_id,item_id').fetchall()
+        before = self.retained_state()
+        self.meta['updatedAt'] += 10
+        self.new['status'] = 'completed'
+        self.new['completedAt'] = self.meta['updatedAt']
+        self.new['items'][0]['text'] = final
+        self.fresh = {**self.meta, 'turns': [self.old, *native, self.new]}
+        self.assertEqual(self.scan()['indexed'], 1)
+        result = self.recall()
+        self.assertEqual(result['total'], 1)
+        hit = result['results'][0]
+        self.assertEqual((hit['kind'], hit['session_id'], hit['thread_id'], hit['turn_id'], hit['item_id']),
+                         ('activity', self.session, self.meta['id'], self.new['id'], 'outside-desk-answer'))
+        self.assertEqual((hit['match_text'], hit['updated']), (self.phrase, self.meta['updatedAt']))
+        self.assertEqual(result['coverage']['activity_items'], len(rows))
+        self.assertEqual(self.retained_state(), before)
+        self.assertEqual(store.db.execute('SELECT * FROM recall_items ORDER BY turn_id,item_id').fetchall(), rows)
+        dump = list(store.db.iterdump())
+        for query, count in [('native completion tail', 0), ('native conflict tail', 0),
+                             ('Completed local choice', 1), ('Different local choice', 1),
+                             ('stays available', 1)]:
+            self.assertEqual(self.recall(q=query)['total'], count, query)
+        self.assertEqual(list(store.db.iterdump()), dump)
+        self.calls.clear()
+        self.assertEqual(self.scan()['skipped'], 1)
+        self.assertEqual(self.recall()['results'], result['results'])
+        self.assertEqual([method for method, _ in self.calls], ['thread/list'])
+        self.assertEqual(list(store.db.iterdump()), dump)
+        cold = Desk('never-executed', self.root / 'home', self.root / 'state')
+        try:
+            cold_dump = list(cold.store.db.iterdump())
+            with patch.object(cold, 'catalog') as catalog, patch.object(cold, 'open') as opened:
+                self.assertEqual(self.recall(desk=cold)['results'], result['results'])
+                catalog.assert_not_called()
+                opened.assert_not_called()
+            self.assertEqual(list(cold.store.db.iterdump()), cold_dump)
+        finally:
+            cold.close()
+            cold.store.db.close()
+        self.assertEqual(self.recall(cwd=str(self.root))['total'], 0)
+        store.archive(self.session, True)
+        self.assertEqual(self.recall()['total'], 0)
+        self.assertEqual(self.recall(archived='true')['total'], 1)
+        store.archive(self.session, False)
+        # Live deltas still append to the original partial row, not the search overlay.
+        live_stamp = self.meta['updatedAt'] + 10
+        delta = {'method': 'item/agentMessage/delta', 'emittedAtMs': live_stamp * 1000, 'params': {
+            'threadId': self.meta['id'], 'turnId': self.new['id'],
+            'itemId': 'outside-desk-answer', 'delta': self.phrase[:5]}}
+        store.event(self.session, delta)
+        self.assertEqual(self.recall()['results'][0]['updated'], live_stamp)
+        delta['params']['delta'] = self.phrase[5:]
+        store.event(self.session, delta)
+        row = store.db.execute('''SELECT visible_text,complete FROM recall_items
+            WHERE session_id=? AND turn_id=? AND item_id=?''',
+            (self.session, self.new['id'], 'outside-desk-answer')).fetchone()
+        self.assertEqual(row, ('Codex\n' + final, 0))
+        result = self.recall()
+        self.assertEqual(result['total'], 1)
+        self.assertEqual(result['results'][0]['snippet'].count(self.phrase), 1)
+        self.runtime.assert_not_called()
+
     def test_helper_preserves_existing_complete_streaming_longer_omitted_and_local_only_rows(self):
         store = self.desk.store
         local = [turn('stream-turn', 'Longer streaming evidence remains local', status='inProgress'),

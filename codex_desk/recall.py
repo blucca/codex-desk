@@ -237,8 +237,22 @@ def search(store, q, cwd=None, include_archived=False, limit=30):
     needle = normalize(q)
     with store.lock:
         tables = {row[0] for row in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        parts = ["""SELECT session_id,'activity' kind,turn_id,item_id,NULL followup_id,
-            visible_text text,normalized_text folded,updated FROM recall_items"""]
+        activity = """SELECT session_id,'activity' kind,turn_id,item_id,NULL followup_id,
+            visible_text text,normalized_text folded,updated FROM recall_items"""
+        if 'native_recall_items' in tables:
+            # A scan can finish a reply previously copied while it was streaming.
+            # Overlay only strict growth of an incomplete bound reply. Keep its
+            # stored prefix intact so subsequent live deltas cannot duplicate it.
+            activity = """SELECT i.session_id,'activity' kind,i.turn_id,i.item_id,NULL followup_id,
+                coalesce(n.visible_text,i.visible_text) text,
+                coalesce(n.normalized_text,i.normalized_text) folded,
+                coalesce(max(n.updated,i.updated),i.updated) updated
+                FROM recall_items i JOIN sessions b ON b.id=i.session_id
+                LEFT JOIN native_recall_items n ON n.thread_id=b.thread_id
+                AND n.turn_id=i.turn_id AND n.item_id=i.item_id AND n.item_type=i.item_type
+                AND i.item_type='agentMessage' AND i.complete=0
+                AND n.visible_text<>i.visible_text AND instr(n.visible_text,i.visible_text)=1"""
+        parts = [activity]
         if 'drafts' in tables:
             parts.append("""SELECT session_id,'draft',NULL,NULL,NULL,text,recall_normalize(text),NULL
                 FROM drafts WHERE revision>0 AND trim(text)<>''""")

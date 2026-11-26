@@ -21,7 +21,7 @@ from codex_desk.followups import add_followup, followup_snapshot
 from playwright.async_api import async_playwright
 
 
-async def check(width, cached, playwright, evidence):
+async def check(width, cached, playwright, evidence, partial=False):
     root = Path(os.environ['DESK_TEST_TEMP']); root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=root, prefix='desk-bound-recall-') as temporary:
         folder = Path(temporary)
@@ -51,6 +51,18 @@ async def check(width, cached, playwright, evidence):
         # Model a pre-fix scan: native cache is current, but the bound Desk
         # activity still contains only the old snapshot and hides native hits.
         if cached: desk.native_index.replace_snapshot(fresh)
+        if partial:
+            # An earlier explicit scan copied this still-growing native reply.
+            # The next full scan must make its final suffix findable without
+            # replacing the local row ahead of live native delta delivery.
+            pending = copy.deepcopy(fresh)
+            pending['updatedAt'] = 1005
+            pending['turns'][-1]['status'] = 'inProgress'
+            pending['turns'][-1]['items'][0]['text'] = 'Fresh outside decision: '
+            desk.native_index.replace_snapshot(pending)
+            desk.native_index.catch_up_bindings(old['id'])
+        activity_before = desk.store.db.execute('SELECT * FROM recall_items ORDER BY item_id').fetchall()
+        query = 'retry budget remains three attempts' if partial else 'fresh outside decision'
 
         class Catalog:
             def request(self, method, params):
@@ -81,7 +93,7 @@ async def check(width, cached, playwright, evidence):
             await page.wait_for_function("$('home-list').getAttribute('aria-busy')==='false'")
             selected_state = await page.evaluate("({selected,nativeThreadId,generation,prompt:$('prompt').value,mode:$('turn-mode').value})")
             await page.locator('#home-content').click()
-            await page.locator('#recall-query').fill('fresh outside decision')
+            await page.locator('#recall-query').fill(query)
             await page.locator('#recall-query').press('Enter')
             await page.wait_for_function("!$('recall-search').disabled")
             assert await page.locator('.recall-result').count() == 0
@@ -99,7 +111,7 @@ async def check(width, cached, playwright, evidence):
             assert (job['seen'], job['indexed'], job['skipped'], job['failed']) == (1, 0 if cached else 1, 1 if cached else 0, 0), job
             reads_before_original = sum(c['method'] == 'thread/read' for c in calls)
             assert reads_before_original == (0 if cached else 1), calls
-            hit = desk.recall('fresh outside decision')['results'][0]
+            hit = desk.recall(query)['results'][0]
             assert (hit['session_id'], hit['thread_id'], hit['turn_id'], hit['item_id']) == (saved, old['id'], 'outside-turn', 'outside-item'), hit
             row = page.locator('.recall-result')
             assert await row.get_attribute('data-session') == saved
@@ -126,23 +138,25 @@ async def check(width, cached, playwright, evidence):
             assert 'Old preserved evidence' in await page.locator('#history-reader-body').inner_text()
             assert await page.locator('#recall').evaluate('(node)=>node.open')
             assert await page.evaluate("document.documentElement.scrollWidth<=innerWidth && $('history-reader').scrollWidth<=$('history-reader').clientWidth && $('history-reader-body').scrollWidth<=$('history-reader-body').clientWidth")
-            screenshot = evidence / f'original-{width}-{int(cached)}.png'
+            screenshot = evidence / f'original-{width}-{int(cached)}-{int(partial)}.png'
             await page.screenshot(path=str(screenshot)); screenshot.chmod(0o600)
             await page.locator('#history-reader-back').click()
             await page.wait_for_function("!$('history-reader').open && $('recall').open")
             assert await page.locator('.recall-read').evaluate('(n)=>n===document.activeElement')
-            assert await page.locator('#recall-query').input_value() == 'fresh outside decision'
+            assert await page.locator('#recall-query').input_value() == query
             assert await page.locator('#recall-results').inner_text() == results_before
             assert len(paths('/api/recall')) == after
             assert await page.evaluate("({selected,nativeThreadId,generation,prompt:$('prompt').value,mode:$('turn-mode').value})") == selected_state
             assert (desk.store.sessions(), load_draft(desk.store, saved), followup_snapshot(desk.store, saved)) == prep
             assert desk.store.events(saved) == events
+            if partial:
+                assert desk.store.db.execute('SELECT * FROM recall_items ORDER BY item_id').fetchall() == activity_before
             assert {p.name: p.read_bytes() for p in home.iterdir()} == settings and fresh == original
             assert not errors and all(urlsplit(r['url']).hostname == '127.0.0.1' for r in requests)
             assert [urlsplit(r['url']).path for r in requests if r['method'] == 'POST'] == ['/api/history/index']
             assert not paths('/api/open') and not paths('/api/import')
             assert desk.runtimes == {}
-            return {'width': width, 'already_indexed': cached, 'job': job,
+            return {'width': width, 'already_indexed': cached, 'scan_copied_partial': partial, 'job': job,
                     'automatic_query_refreshes': after - before, 'reads_before_original': reads_before_original,
                     'exact_original': {'thread_id': old['id'], 'turn_id': 'outside-turn', 'item_id': 'outside-item'},
                     'back_retains_search_and_focus': True, 'preparation_and_settings_preserved': True,
@@ -159,6 +173,7 @@ async def main():
     async with async_playwright() as playwright:
         checks = [await check(width, cached, playwright, evidence)
                   for width in (1250, 390) for cached in (False, True)]
+        checks.extend([await check(width, False, playwright, evidence, partial=True) for width in (1250, 390)])
     summary = evidence / 'summary.json'
     summary.write_text(json.dumps({'result': 'PASS', 'checks': checks}, indent=2) + '\n'); summary.chmod(0o600)
     print(json.dumps({'result': 'PASS', 'bound_recall_cases': len(checks)}), flush=True)
