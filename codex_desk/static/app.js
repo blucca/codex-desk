@@ -472,7 +472,7 @@ async function tick(){
     if(starting){if(!await startup()){++failures;return;}failures=0;}
     await pollActivity();failures=0;if($('error').textContent===connectionError)$('error').hidden=true;
   }
-  catch(e){if(++failures===1){const message=e.status===403?e.message:connectionError;error(new Error(message));if(starting)startupError=message;}}
+  catch(e){if(++failures===1 || e.status===403){const message=e.status===403?e.message:connectionError;error(new Error(message));if(starting)startupError=message;}}
   finally{setTimeout(tick,failures?3000:800);}
 }
 DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>generation,open,

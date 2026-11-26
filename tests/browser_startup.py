@@ -226,6 +226,20 @@ async def check():
                             await page.reload()
                             await page.locator('#error:not([hidden])').wait_for()
                             assert await page.locator('#error').inner_text() == expected
+                            transient = True
+                            async def restart_pending(route):
+                                nonlocal transient
+                                if transient:
+                                    transient = False
+                                    await route.fulfill(status=503, content_type='application/json',
+                                                        body='{"error":"Fixture restart pending"}')
+                                else:
+                                    await route.continue_()
+                            await page.route('**/api/state', restart_pending)
+                            await page.reload()
+                            await page.wait_for_function('failures>=2')
+                            assert await page.locator('#error').inner_text() == expected
+                            await page.unroute('**/api/state', restart_pending)
                             assert await page.evaluate('state.sessions.length') == 0 and len(open_calls) == before
                             await page.goto(protected_url + '#access=' + token)
                             await restored(page, 'a')
@@ -252,7 +266,8 @@ async def check():
                             assert flushed['path'] == '/api/draft'
                             assert flushed['headers']['X-Codex-Desk-Access'] == token
                             assert flushed['headers']['Content-Type'] == 'application/json'
-                            receipt = {'bareAndStale403Guidance': True, 'currentFragmentRestored': True,
+                            receipt = {'bareAndStale403Guidance': True, 'transientTo403Guidance': True,
+                                'currentFragmentRestored': True,
                                 'pagehideAuthorized': True, 'reloadText': candidate, 'reloadMode': 'native',
                                 'nativeModelTurns': 0}
                             if os.environ.get('DESK_TEST_EVIDENCE'):
