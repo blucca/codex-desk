@@ -69,9 +69,11 @@ uvx --prerelease allow codex-desk@latest
 
 本地记录默认位于 `~/.local/state/codex-desk/desk.sqlite3`。同一 state directory 保留会话绑定、索引缓存和准备内容；浏览器记住上次选中的会话。换浏览器时，在侧栏重新选择它。
 
-## 6. 卡在哪一步？
+## 6. 分享结果或求助
 
-[填写任务求助表单](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)，说明 **Operating system**、**Codex CLI version**、**The task you want to complete**、**Step reached**、**Expected result** 和 **Actual result**。CLI 版本使用启动 Desk 的同一终端中的 `codex --version` 输出；命令不可用时填写实际错误。
+[分享真实任务结果或求助](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)，填写三项必填信息：**The task you want to complete**、**Step reached** 和 **Result or first blocked step**。说明有用的原始证据、它改变或避免的检查，或第一个卡住的控件及状态。读到有用的原始证据就可以完成任务，无需继续会话；如果后来因真实任务主动返回，也可说明复用了什么。
+
+**Operating system (optional)**、**Native Codex version (optional)** 和 **Expected result (optional)** 都是可选项。版本使用启动 Desk 的同一终端中的原生可执行文件版本输出或实际错误：独立 CLI 使用 `codex --version`；使用 `--codex` 时，按 [macOS](find-desktop-answer.macos.md) 或 [Windows](find-desktop-answer.windows.md) 指南对所选可执行文件运行版本检查。只试样例或尚未安装时，可选择 **Browser sample only** 或 **Before installing**，版本和系统可留空。[浏览器样例反馈表单](https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml) 用于记录样例结果。
 
 **Steps and controls used**、**Context for this step**、**Codex Desk version** 和 **Short error text** 是可选项。复现可以用中性示例或搜索词长度，附简短的状态／错误文字即可。
 

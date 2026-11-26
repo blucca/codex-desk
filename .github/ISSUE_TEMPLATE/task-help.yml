@@ -1,14 +1,14 @@
 name: Help with one project task
-description: Get help finding a past answer, reading original history, or returning to a Codex task.
+description: Share a useful Codex result, get help with a blocked step, or tell us what you need before installing.
 title: "[Task help]: "
 body:
   - type: markdown
     attributes:
-      value: Tell us the result you wanted, the control you used, and what happened. A short neutral example is enough.
+      value: Tell us one goal, the step you reached, and the useful result or first blocker. Reading original evidence can finish the task; continuing is optional. A short neutral example is enough.
   - type: dropdown
     id: operating-system
     attributes:
-      label: Operating system
+      label: Operating system (optional)
       options:
         - Linux
         - macOS
@@ -16,21 +16,21 @@ body:
         - WSL
         - Other
     validations:
-      required: true
+      required: false
   - type: input
     id: codex-version
     attributes:
-      label: Codex CLI version
-      description: Output of codex --version in the shell used to launch Desk, or the error if it is unavailable.
+      label: Native Codex version (optional)
+      description: If available, give the selected executable's version output or error in the shell used to launch Desk. Use codex --version for a standalone CLI, or the --version probe for the executable passed with --codex (see the README's Mac/Windows guides). Leave blank for the browser sample or before setup.
       placeholder: codex-cli 0.171.0
     validations:
-      required: true
+      required: false
   - type: textarea
     id: desired-task
     attributes:
       label: The task you want to complete
-      description: Describe one answer or project/session outcome you want to reach.
-      placeholder: Find a saved retry decision, read its original command output, then prepare the next task in the same conversation.
+      description: Describe one pending question or useful result from your own Codex work; for the sample or before installing, say what you hoped to do.
+      placeholder: Find last week's retry decision so I can skip repeating the failed investigation.
     validations:
       required: true
   - type: dropdown
@@ -50,21 +50,24 @@ body:
         - New-provider handoff
         - Return after closing/stopping
         - Other
+        - Before installing
+        - Browser sample only
     validations:
       required: true
   - type: textarea
     id: expected-result
     attributes:
-      label: Expected result
+      label: Expected result (optional)
+      description: For a blocked step, add the expected result if it helps explain the difference.
       placeholder: Read the matching command output without changing the conversation or draft I already have open.
     validations:
-      required: true
+      required: false
   - type: textarea
     id: actual-result
     attributes:
-      label: Actual result
-      description: Include the visible status or the point where the result differed.
-      placeholder: The search returns a match, but Read original conversation stays on Reading original native conversation…
+      label: Result or first blocked step
+      description: For success, describe the original evidence and which investigation or check it changed or avoided. For a return, say what you reused for the next real task. For a blocker, give the first control and visible status. A useful original read can be the finished result.
+      placeholder: I read the original command result and skipped rerunning the failed checkout investigation.
     validations:
       required: true
   - type: textarea
@@ -80,7 +83,7 @@ body:
     id: step-context
     attributes:
       label: Context for this step (optional)
-      description: For search, give a neutral phrase or its length, project filter and index counts. For reading/continuing, say whether the saved folder exists. For return, note whether the browser and launch options stayed the same.
+      description: For sample/preinstall feedback, say which client/history you intend to use. For search, give a neutral phrase or its length, project filter and index counts. For reading/continuing, say whether the saved folder exists. For return, note whether the browser and launch options stayed the same.
       placeholder: |
         Index: 12 seen / 12 indexed / 0 unchanged / 0 failed.
         Search: 11-character phrase, All indexed projects, 1 match.

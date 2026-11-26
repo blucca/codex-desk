@@ -124,7 +124,7 @@ The native launcher/profile smoke has passed on Ubuntu, Windows and macOS with C
 
 ## Feedback and development
 
-[Report a bug or ask for workflow help](https://github.com/blucca/codex-desk/issues/new/choose). Tell us the one task you were trying to finish, your OS/CLI version, and where you got stuck. Suggestions and contributions are welcome.
+[Share a result or get task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml). Tell us one task, the step reached, and what helped or blocked you. Include the original evidence and any investigation it saved. If you return for another task, tell us what you reused. OS/native version are optional; for `--codex` setups, use the selected executable's version probe in the Mac/Windows guide above. [Browser sample feedback](https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml). Suggestions and contributions are welcome.
 
 From a source checkout:
 
