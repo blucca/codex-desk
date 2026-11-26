@@ -25,7 +25,7 @@ def sample_threads():
     return result
 
 
-def build(output):
+def build(output, embedded=False):
     output.mkdir(parents=True, exist_ok=True)
     assets = ROOT / 'codex_desk/static'
     for source in assets.iterdir():
@@ -36,6 +36,9 @@ def build(output):
     html = html.replace('<title>Codex Desk</title>', '<title>Try Codex Desk — interactive browser sample</title><meta name="description" content="Find a sample Codex answer, read its original context, prepare the next task and reload to return. Try the real interface without installing."><link rel="canonical" href="'+PUBLIC+'">')
     banner = '''<section id="preview-banner" aria-label="Browser sample preview"><div><strong>Codex Desk · interactive sample preview</strong><p>Try: Find a decision → search <b>retry budget</b> → Index history → Read original → Continue → save a Plan draft → reload.</p><p>Sample conversations and preparation stay in this browser. The installed workbench uses your own Codex history and local database.</p></div><nav aria-label="Preview actions"><button id="preview-start" type="button">Find the sample answer</button><a href="https://github.com/blucca/codex-desk#install-the-preview">Install for your own work</a><a href="https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml">Share sample feedback</a><button id="preview-reset" type="button">Reset sample</button></nav><p id="preview-notice" role="status"></p></section>'''
     html = html.replace('<body>', '<body>'+banner)
+    if embedded:
+        html = html.replace('<html lang="en">', '<html lang="en" data-preview-embedded="true">')
+        html = html.replace('<a href="https://github.com/', '<a target="_blank" rel="noopener noreferrer" href="https://github.com/')
     html = html.replace('</head>', '<link rel="stylesheet" href="./preview.css"><script src="./sample-data.js"></script><script src="./preview-api.js"></script></head>')
     html = html.replace('◈ Codex Desk <span>LOCAL</span>', '◈ Codex Desk <span>SAMPLE</span>')
     html = html.replace('Your projects. Your providers.<br>Your actual Codex sessions.', 'Sample projects.<br>Try finding and preparing work.')
@@ -57,5 +60,6 @@ def build(output):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT.parents[1] / 'temp/round122-preview/site/demo')
+    parser.add_argument('--embedded', action='store_true', help='Open installer links separately when hosted in an iframe')
     args = parser.parse_args()
-    print(build(args.out.resolve()))
+    print(build(args.out.resolve(), embedded=args.embedded))

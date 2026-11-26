@@ -54,7 +54,7 @@ async def check(width, case, playwright, evidence):
                           thread_saved=1, name_pending=0)
         save_draft(desk.store, saved, 'Preserved unsent preparation.', 'plan', 0)
         saved_sessions, saved_draft = desk.store.sessions(), load_draft(desk.store, saved)
-        desk.native_index.replace_snapshot(threads[0])
+        if case != 'empty-first-use': desk.native_index.replace_snapshot(threads[0])
 
         class Catalog:
             def request(self, method, params):
@@ -120,6 +120,20 @@ async def check(width, case, playwright, evidence):
                 assert await asyncio.to_thread(event.wait, 10), 'Controlled operation was not reached'
             def recall_count(): return sum(row['path'] == '/api/recall' for row in http)
             if case in ('reader', 'result-focus', 'changed-scope'): await submit('ready evidence')
+            index_action = None
+            if case == 'empty-first-use':
+                await submit('alpha decision')
+                assert await page.locator('.recall-result').count() == 0
+                assert 'not indexed yet' in await page.locator('#recall-summary').inner_text()
+                assert not any(row['method'] == 'POST' for row in http), 'First use indexed history automatically'
+                index_action = await page.locator('#recall-index').evaluate("""n => {
+                    const b=n.getBoundingClientRect(),m=$('recall').getBoundingClientRect();
+                    return {parent:n.parentElement.id,top:b.top,bottom:b.bottom,modalTop:m.top,modalBottom:m.bottom,
+                        visible:b.top>=m.top && b.bottom<=Math.min(m.bottom,innerHeight) && b.left>=m.left && b.right<=m.right};
+                }""")
+                assert index_action['parent'] == 'recall-actions' and index_action['visible'], index_action
+                assert await page.locator('#recall-index').count() == 1
+                await page.screenshot(path=str(evidence / f'empty-before-index-{width}.png'))
             if case == 'immediate-completion':
                 await submit('alpha decision')
                 assert await page.locator('.recall-result').count() == 0
@@ -139,7 +153,7 @@ async def check(width, case, playwright, evidence):
             elif case == 'result-focus':
                 await page.locator('.recall-read').focus()
                 await page.locator('.recall-result').evaluate('(n)=>globalThis.keptRecallRow=n')
-            elif case != 'immediate-completion':
+            elif case not in ('immediate-completion', 'empty-first-use'):
                 await submit('alpha decision', wait=case != 'pending-search')
                 if case == 'pending-search': await wait_event(query_entered)
                 else: assert await page.locator('.recall-result').count() == 0
@@ -245,7 +259,7 @@ async def check(width, case, playwright, evidence):
                 await page.keyboard.press('Escape')
                 assert await page.locator('.recall-read').evaluate('(n)=>n===document.activeElement')
             await page.wait_for_timeout(800)
-            expected = before + (1 if case in ('first-use', 'pending-search', 'new-submission', 'immediate-completion', 'cancel-retry') else 2 if case == 'newer-query' else 0)
+            expected = before + (1 if case in ('first-use', 'empty-first-use', 'pending-search', 'new-submission', 'immediate-completion', 'cancel-retry') else 2 if case == 'newer-query' else 0)
             assert recall_count() == expected, 'Completion refresh repeated'
             assert desk.store.sessions() == saved_sessions and load_draft(desk.store, saved) == saved_draft
             assert await page.evaluate('selected===null && generation===0')
@@ -257,11 +271,12 @@ async def check(width, case, playwright, evidence):
             result = {'viewport': width, 'case': case, 'passed': True, 'native_cache_total': cache['total'],
                       'queries': queries, 'http_calls': http, 'native_calls': calls,
                       'javascript_errors': errors, 'external_requests': external,
+                      'first_use_index_action': index_action,
                       'immediate_completion_jobs': immediate_jobs,
                       'native_model_turns': 0, 'imports': 0, 'saved_preparation': saved_draft}
             (evidence / f'{case}-{width}.json').write_text(json.dumps(result, indent=2) + '\n')
             (evidence / f'{case}-{width}.json').chmod(0o600)
-            if case in ('first-use', 'cancel-retry', 'immediate-completion'):
+            if case in ('first-use', 'empty-first-use', 'cancel-retry', 'immediate-completion'):
                 await page.screenshot(path=str(evidence / f'{case}-{width}.png'))
                 (evidence / f'{case}-{width}.png').chmod(0o600)
             print(json.dumps({'viewport': width, 'case': case, 'passed': True, 'search_requests': recall_count()}), flush=True)
@@ -285,7 +300,7 @@ async def check(width, case, playwright, evidence):
 async def main():
     evidence = Path(os.environ.get('DESK_TEST_EVIDENCE', str(Path(os.environ['DESK_TEST_TEMP']) / 'index-return-evidence')))
     evidence.mkdir(parents=True, exist_ok=True, mode=0o700)
-    cases = ('first-use', 'edited-query', 'edit-undo', 'changed-scope', 'changed-archived',
+    cases = ('first-use', 'empty-first-use', 'edited-query', 'edit-undo', 'changed-scope', 'changed-archived',
              'pending-search', 'new-submission', 'newer-query', 'closed', 'navigation',
              'reader', 'result-focus', 'immediate-completion', 'cancel-retry')
     if os.environ.get('DESK_RECALL_INDEX_CASES'):

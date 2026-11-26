@@ -40,6 +40,8 @@ jobs:
         run: |
           python examples/build_browser_preview.py --out temp/static-preview/demo
           python examples/check_browser_preview.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview
+          python examples/build_browser_preview.py --embedded --out temp/static-preview/embedded
+          python examples/check_browser_preview_links.py --site temp/static-preview/demo --embedded-site temp/static-preview/embedded --evidence temp/evidence/browser-preview-links
       - name: Check installed daily workflows
         working-directory: temp
         run: |

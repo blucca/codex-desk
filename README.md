@@ -2,11 +2,12 @@
 
 **Find a past Codex answer, then pick up the task.** Search your recent local history, read the original conversation, and continue in the same native thread when ready.
 
+
+**[Try the browser sample — no install](https://blucca.github.io/codex-desk/demo/)**: find the sample retry decision, read its original context, save a next-task draft, then reload to return. Sample preparation stays in this browser. Use the installer below for your own Codex history.
+
 ![Codex Desk: index local history, find a retry decision, and read the original conversation](docs/find-answer.gif)
 
 *Synthetic checkout example: index local history, search “retry budget”, and read the original answer.*
-
-**[Try the browser sample — no install](https://blucca.github.io/codex-desk/demo/)**: find the sample retry decision, read its original context, save a next-task draft, then reload to return. Sample preparation stays in this browser. Use the installer below for your own Codex history.
 
 <a name="development-preview"></a>
 
@@ -20,7 +21,7 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one comman
 uvx --prerelease allow codex-desk
 ```
 
-The current version is an alpha, so `--prerelease allow` selects the preview from [PyPI](https://pypi.org/project/codex-desk/). [The accepted GitHub wheel](https://github.com/blucca/codex-desk/releases/tag/v0.1.0a29) is also available.
+The current version is an alpha, so `--prerelease allow` selects the preview from [PyPI](https://pypi.org/project/codex-desk/). [The accepted GitHub wheel](https://github.com/blucca/codex-desk/releases/tag/v0.1.0a30) is also available.
 
 Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
 

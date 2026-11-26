@@ -23,3 +23,10 @@ python3 examples/check_browser_preview.py --site temp/browser-preview/demo --evi
 Use `--chromium /path/to/chromium` to reuse an installed browser. The checker exercises explicit indexing, exact original IDs, continuation, saved Plan/ordered follow-ups, reload and scoped reset; it rejects application requests that escape to the static HTTP server.
 
 `browser-preview/preview-api.js` contains only sample behavior. `build_browser_preview.py` copies maintained assets and applies the preview label, route-relative assets, install actions and a preview-specific selection key. Production runtime files are unchanged.
+
+For iframe hosting, add `--embedded` when building. Installer links then open separately while the sample preparation stays in the original frame. Check both hosting modes with:
+
+```sh
+python3 examples/build_browser_preview.py --embedded --out temp/browser-preview/embedded
+python3 examples/check_browser_preview_links.py --site temp/browser-preview/demo --embedded-site temp/browser-preview/embedded --evidence temp/browser-preview/link-checks
+```

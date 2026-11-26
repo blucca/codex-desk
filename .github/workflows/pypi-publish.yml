@@ -5,7 +5,7 @@ on:
       tag:
         description: Existing accepted GitHub release tag
         required: true
-        default: v0.1.0a29
+        default: v0.1.0a30
 permissions:
   contents: read
 jobs:

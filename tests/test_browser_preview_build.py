@@ -29,6 +29,18 @@ class BrowserPreviewBuildTests(unittest.TestCase):
             self.assertTrue(source['sample'])
             self.assertEqual(source['source'],'blucca/codex-desk')
 
+    def test_embedded_installer_keeps_native_popup_function(self):
+        base=Path(os.environ.get('DESK_TEST_TEMP',ROOT/'temp'));base.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base,prefix='preview-embedded-') as tmp:
+            output=preview.build(Path(tmp)/'demo',embedded=True)
+            html=(output/'index.html').read_text()
+            self.assertIn('data-preview-embedded="true"',html)
+            self.assertIn('target="_blank" rel="noopener noreferrer"',html)
+            api=(output/'preview-api.js').read_text()
+            self.assertIn('const openExternal=window.open.bind(window)',api)
+            self.assertIn("openExternal(url,'_blank','noopener')",api)
+            self.assertNotIn("window.open('https://github.com/",api)
+
     def test_sample_original_id_contract(self):
         threads=preview.sample_threads()
         self.assertEqual(len(threads),3)

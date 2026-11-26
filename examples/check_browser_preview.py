@@ -144,6 +144,14 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await page.wait_for_function("!document.querySelector('#recall-search').disabled")
             assert await page.locator(".recall-result").count() == 0, "History was indexed without explicit action"
             assert (await snapshot())["sessions"] == []
+            assert "not indexed yet" in await page.locator("#recall-summary").inner_text()
+            assert await page.locator("#recall-index").count() == 1
+            assert await page.locator("#recall-index").evaluate("n => n.parentElement.id === 'recall-actions'")
+            assert await page.locator("#recall-index").evaluate("""n => {
+                const button=n.getBoundingClientRect(),modal=document.querySelector('#recall').getBoundingClientRect();
+                return button.top >= modal.top && button.bottom <= Math.min(modal.bottom,innerHeight) &&
+                    button.left >= modal.left && button.right <= modal.right;
+            }"""), "Explicit first-use index action is clipped outside the visible search dialog"
             await checkpoint("literal-search")
 
             before = sum(row["path"] == "/api/recall" for row in await log())
@@ -153,6 +161,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await page.wait_for_function("!document.querySelector('#recall-search').disabled")
             assert await page.locator("#recall-query").input_value() == QUERY
             assert "scan completed" in await page.locator("#recall-index-status").inner_text()
+            assert await page.locator("#recall-index").evaluate("n => n.parentElement.id === 'recall-index-actions'")
             requests = await log()
             assert sum(r["path"] == "/api/recall" for r in requests) == before + 1, "Explicit index did not refresh unchanged query exactly once"
             assert sum(r["path"] == "/api/history/index" and r["method"] == "POST" for r in requests) == 1
