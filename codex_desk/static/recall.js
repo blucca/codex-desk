@@ -4,13 +4,14 @@ const DeskRecall=(()=>{
   let options, searchVersion=0, openVersion=0, navigationVersion=0;
   let searching=false, resultOpening=false, projectSignature='', target=null, pendingNavigation=null;
   let scanVersion=0, scanTimer=null, scanBusy=false, scanReading=false, scanReady=false, scanIssue=false, scanJob=null;
+  let scanRefresh=null, lastSearch=null;
   const nativeProjects=new Set();
   const query=()=>({q:el('recall-query').value.trim(),cwd:el('recall-project').value,archived:el('recall-archived').checked});
   const sameQuery=(a,b)=>a.q===b.q && a.cwd===b.cwd && a.archived===b.archived;
   const current=(version,scope)=>version===searchVersion && el('recall').open && sameQuery(scope,query());
   const make=(tag,text,cls)=>options.make(tag,text,cls);
   function clearTarget(){if(target){target.node.classList.remove('recall-target');if(target.addedTabindex)target.node.removeAttribute('tabindex');target=null;}}
-  function selectionChanged(){clearTarget();++navigationVersion;pendingNavigation=null;}
+  function selectionChanged(){clearTarget();++navigationVersion;pendingNavigation=null;scanRefresh=null;}
   function projects(){
     if(!options)return;
     const values=[...new Set([...options.state().sessions.map(s=>s.cwd),...nativeProjects].filter(Boolean))].sort();
@@ -31,6 +32,7 @@ const DeskRecall=(()=>{
   }
   function invalidate(){
     ++searchVersion;++openVersion;++navigationVersion;searching=false;resultOpening=false;pendingNavigation=null;
+    lastSearch=null;if(scanRefresh)scanRefresh.search=null;
     el('recall-error').hidden=true;el('recall-results').replaceChildren();
     el('recall-summary').textContent='Query changed. Choose Search to update saved content.';buttons();
   }
@@ -52,7 +54,7 @@ const DeskRecall=(()=>{
     if(Number.isFinite(value.max_thread_chars))limits.push(value.max_thread_chars.toLocaleString()+' characters per conversation');
     if(Number.isFinite(value.max_item_chars))limits.push(value.max_item_chars.toLocaleString()+' characters per item');
     el('recall-native-coverage').textContent=['Local native cache: '+counts.join(' · '),limits.length?'Text limits: '+limits.join(' · ')+'. Newest readable items are retained first.':'',
-      'Coverage describes supplied reads from the current native history. Choose Search after indexing to update matches.'].filter(Boolean).join('\n');
+      'Coverage describes supplied native reads. An unchanged active search refreshes once after an explicit scan; choose Search after editing the query or reading existing results.'].filter(Boolean).join('\n');
   }
   function scanButtons(){
     const active=scanJob?.status==='running';
@@ -66,6 +68,7 @@ const DeskRecall=(()=>{
   function scanStatus(job){
     if(!job || typeof job.status!=='string')return;
     scanJob=job;
+    if(scanRefresh){if(job.status==='completed')scanRefresh.completed=true;else if(['cancelled','failed'].includes(job.status))scanRefresh=null;}
     const label={idle:'History has not been indexed.',running:'Indexing existing Codex history…',completed:'Recent history scan completed.',cancelled:'Indexing cancelled. Already cached items are kept.',failed:'History indexing failed. Choose Retry.'}[job.status] || 'History indexing status unavailable.';
     const counts=[['seen','seen'],['indexed','indexed'],['skipped','unchanged'],['failed','failed']]
       .filter(([key])=>Number.isFinite(job[key])).map(([key,text])=>job[key]+' '+text).join(' · ');
@@ -75,6 +78,17 @@ const DeskRecall=(()=>{
     if(job.error){el('recall-index-error').textContent=job.error;el('recall-index-error').hidden=false;}
     scanButtons();
   }
+  function refreshAfterScan(){
+    if(!scanRefresh?.completed)return;
+    const ticket=scanRefresh.search;
+    if(!ticket || !current(ticket.version,ticket.scope) || ticket.navigation!==navigationVersion ||
+       ticket.selected!==options.selected() || ticket.generation!==options.generation() ||
+       resultOpening || el('history-reader').open || el('recall-results').contains(document.activeElement)){
+      scanRefresh=null;return;
+    }
+    if(searching)return; // Its own current request must settle before one fresh lookup.
+    scanRefresh=null;search();
+  }
   function stopScanPolling(){if(scanTimer!==null)clearTimeout(scanTimer);scanTimer=null;}
   async function readScan(){
     if(!el('recall').open || scanBusy)return;
@@ -82,7 +96,7 @@ const DeskRecall=(()=>{
     try{
       const data=await options.api('/api/history/index');
       if(version!==scanVersion || !el('recall').open)return;
-      scanReady=true;scanIssue=false;el('recall-index-error').hidden=true;scanStatus(data.job);nativeCoverage(data.coverage);
+      scanReady=true;scanIssue=false;el('recall-index-error').hidden=true;scanStatus(data.job);nativeCoverage(data.coverage);refreshAfterScan();
       if(scanJob?.status==='running')scanTimer=setTimeout(readScan,750);
     }catch(error){if(version===scanVersion && el('recall').open){
       scanIssue=true;scanReady=false;el('recall-index-error').textContent=error.message;el('recall-index-error').hidden=false;
@@ -92,12 +106,13 @@ const DeskRecall=(()=>{
   async function controlScan(cancel=false){
     if(scanBusy || !el('recall').open || (!cancel && (!scanReady || scanJob?.status==='running')))return;
     stopScanPolling();const version=++scanVersion;scanBusy=true;scanReading=false;scanIssue=false;
+    scanRefresh=cancel?null:{search:lastSearch,completed:false};
     el('recall-index-error').hidden=true;scanButtons();
     el('recall-index-status').textContent=cancel?'Cancelling after the current native read…':'Starting a local history scan…';
     try{
       const data=await options.api('/api/history/index'+(cancel?'/cancel':''),cancel?{}:{limit:200});
       if(version!==scanVersion || !el('recall').open)return;
-      scanStatus(data.job || data);
+      scanStatus(data.job || data);refreshAfterScan();
     }catch(error){if(version===scanVersion && el('recall').open){
       scanIssue=true;scanReady=false;el('recall-index-error').textContent=error.message;el('recall-index-error').hidden=false;
     }}finally{
@@ -145,6 +160,8 @@ const DeskRecall=(()=>{
       el('recall-error').hidden=false;el('recall-query').focus();return;
     }
     const version=++searchVersion;++openVersion;++navigationVersion;pendingNavigation=null;resultOpening=false;searching=true;
+    lastSearch={version,scope,navigation:navigationVersion,selected:options.selected(),generation:options.generation()};
+    if(scanRefresh)scanRefresh.search=lastSearch;
     el('recall-error').hidden=true;el('recall-results').replaceChildren();
     el('recall-summary').textContent='Searching saved content…';buttons();
     const params=new URLSearchParams({q:scope.q,archived:String(scope.archived),limit:'30'});
@@ -163,7 +180,7 @@ const DeskRecall=(()=>{
     }catch(error){if(current(version,scope)){
       el('recall-summary').textContent='Saved content could not be searched. Choose Search to retry.';
       el('recall-error').textContent=error.message;el('recall-error').hidden=false;
-    }}finally{if(current(version,scope)){searching=false;buttons();}}
+    }}finally{if(current(version,scope)){searching=false;buttons();refreshAfterScan();}}
   }
   function targetFor(result){
     const matches=node=>node && typeof result.match_text==='string' && result.match_text &&
@@ -275,7 +292,7 @@ const DeskRecall=(()=>{
     el('recall-query').oninput=invalidate;el('recall-project').onchange=invalidate;el('recall-archived').onchange=invalidate;
     el('recall-close').onclick=()=>el('recall').close();
     el('recall').addEventListener('close',()=>{
-      stopScanPolling();++scanVersion;scanReading=false;scanReady=false;
+      stopScanPolling();++scanVersion;scanReading=false;scanReady=false;scanRefresh=null;
       const nav=pendingNavigation;pendingNavigation=null;++searchVersion;++openVersion;
       if(searching)el('recall-summary').textContent='Search canceled. Choose Search to try again.';
       searching=false;resultOpening=false;buttons();

@@ -5,7 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codex-desk"
 dynamic = ["version"]
-description = "A local, project-bound daily workbench for native Codex sessions"
+description = "Find saved Codex answers and continue native conversations in a local workbench"
+readme = "README.md"
+keywords = ["codex", "codex-cli", "conversation-search", "local-workbench"]
 requires-python = ">=3.11"
 license = "MIT"
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import shlex
 import shutil
 import signal
+from socketserver import TCPServer
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +28,15 @@ class FollowupDispatchError(RuntimeError):
     def __init__(self, message, snapshot):
         self.snapshot = snapshot
         super().__init__(message)
+
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    """Bind the numeric local listener without a reverse-DNS lookup."""
+    def server_bind(self):
+        # HTTPServer.server_bind calls getfqdn after reserving the socket.
+        # The UI uses its numeric loopback URL, so keep that address directly.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 class Desk:
@@ -529,7 +539,7 @@ def main():
     # Reserve the listener before creating or migrating any Desk state. No
     # requests are handled until the initialized Desk handler is installed.
     try:
-        server = ThreadingHTTPServer(('127.0.0.1', args.port), BaseHTTPRequestHandler)
+        server = LoopbackHTTPServer(('127.0.0.1', args.port), BaseHTTPRequestHandler)
     except OSError as error:
         url = f'http://127.0.0.1:{args.port}'
         alternate = 8788 if args.port != 8788 else 8787

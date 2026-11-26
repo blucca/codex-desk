@@ -58,5 +58,4 @@ jobs:
         env:
           DESK_TEST_TEMP: ${{ github.workspace }}/temp
           DESK_USE_INSTALLED: '1'
-          DESK_LAUNCH_DIAGNOSTICS: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
         run: python ../tests/test_launch_http.py

@@ -32,33 +32,13 @@ from codex_desk import server as desk_server
 STARTUP_TIMEOUT = 20
 
 
-DRIVER = '''import json, os, runpy, subprocess, sys, webbrowser
+DRIVER = '''import json, os, runpy, socket, subprocess, sys, webbrowser
 from pathlib import Path
 
-if os.environ.get('DESK_LAUNCH_DIAGNOSTICS') == '1':
-    import faulthandler
-    faulthandler.enable()
-    faulthandler.dump_traceback_later(15, repeat=False)
-    watched = {
-        ('server.py', '<module>'), ('server.py', 'main'),
-        ('server.py', 'resolve_codex'), ('server.py', '__init__'),
-        ('runtime.py', '__init__'), ('native_recall.py', '__init__'),
-        ('history_scan.py', '__init__'), ('server.py', 'server_bind'),
-        ('socketserver.py', 'server_bind'), ('socketserver.py', 'server_activate'),
-        ('socket.py', 'getfqdn'),
-    }
-    def checkpoint(frame, event, arg):
-        filename = Path(frame.f_code.co_filename).name
-        name = frame.f_code.co_name
-        if event in ('call', 'return') and (filename, name) in watched:
-            owner = type(frame.f_locals['self']).__name__ if 'self' in frame.f_locals else ''
-            print(f'LAUNCH {event} {filename}:{owner + "." if owner else ""}{name}',
-                  file=sys.stderr, flush=True)
-        elif event in ('c_call', 'c_return', 'c_exception') and name == 'getfqdn':
-            print(f'LAUNCH {event} socket.{getattr(arg, "__name__", "unknown")}',
-                  file=sys.stderr, flush=True)
-    sys.setprofile(checkpoint)
-    print('LAUNCH driver ready; importing server', file=sys.stderr, flush=True)
+def reverse_dns(*args, **kwargs):
+    raise AssertionError('Unexpected reverse DNS in numeric loopback launch')
+
+socket.getfqdn = socket.gethostbyaddr = reverse_dns
 
 def audit(event, details):
     if event != 'subprocess.Popen':

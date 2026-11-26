@@ -14,10 +14,12 @@
 
 1. 首页点击 **Find a decision in past work**；已有会话打开时，点击侧栏 **Search saved content**。
 2. 点击 **Index existing Codex history**，明确读取最近更新的最多 **200 个原生会话**，包括尚未在 Desk 打开过的历史。等状态显示完成，核对 seen／indexed／unchanged／failed 数量。索引只读取历史并保存本地缓存，不创建会话绑定或发送任务。
-3. 先保持 **All indexed projects**。在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 **2–200 个字符**，再点击 **Search** 或按 Enter。搜索按字面文字匹配，忽略大小写并规范化 Unicode。索引完成后，再点一次 **Search** 更新结果。
+3. 先保持 **All indexed projects**。在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 **2–200 个字符**，再点击 **Search** 或按 Enter。索引进行中也可以提交查询；明确启动的索引完成后，仍在当前搜索对话框中、未修改的已提交查询会自动刷新一次。搜索按字面文字匹配，忽略大小写并规范化 Unicode。修改文字或范围后，点击 **Search** 提交修改。
 4. 核对结果中的会话、项目目录和匹配片段。需要缩小范围时，选择 **Project folder (optional)**，再点 **Search**。
 
 **Index coverage and text limits** 显示实际缓存范围和缩短／省略的条目。**Index existing history again** 刷新最近 200 个会话并跳过未变化的快照，不会自动进入更旧历史。**Cancel indexing** 保留已缓存的内容；关闭搜索对话框后，正在进行的索引仍会继续。失败或取消后用 **Retry** 重试。
+
+索引完成时会保留未提交的修改、正在阅读的原会话、结果焦点和导航选择。关闭搜索对话框或正在查看已有结果时，返回后用 **Search** 更新匹配。仍在等待响应的已提交查询会先完成，再执行一次新查询；新提交的查询优先于旧响应。
 
 ## 3. 只读原会话
 

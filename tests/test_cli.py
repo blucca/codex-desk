@@ -25,13 +25,24 @@ ROOT.mkdir(parents=True, exist_ok=True)
 
 
 class CliTests(unittest.TestCase):
+    def test_loopback_listener_keeps_numeric_address_without_reverse_dns(self):
+        with patch('socket.getfqdn', side_effect=AssertionError('reverse DNS called')) as fqdn, \
+                patch('socket.gethostbyaddr', side_effect=AssertionError('reverse DNS called')) as reverse, \
+                desk_server.LoopbackHTTPServer(('127.0.0.1', 0),
+                    desk_server.BaseHTTPRequestHandler) as server:
+            self.assertEqual(server.server_name, '127.0.0.1')
+            self.assertGreater(server.server_port, 0)
+            self.assertEqual(server.server_address, ('127.0.0.1', server.server_port))
+            fqdn.assert_not_called()
+            reverse.assert_not_called()
+
     def test_invalid_ports_stop_before_preflight_state_server_or_browser(self):
         for port in ('-1', '65536', 'not-a-port'):
             with self.subTest(port=port), \
                     patch.object(sys, 'argv', ['codex-desk', '--port', port]), \
                     patch.object(desk_server, 'resolve_codex') as preflight, \
                     patch.object(desk_server, 'Desk') as desk, \
-                    patch.object(desk_server, 'ThreadingHTTPServer') as server, \
+                    patch.object(desk_server, 'LoopbackHTTPServer') as server, \
                     patch.object(desk_server.webbrowser, 'open') as browser, \
                     contextlib.redirect_stdout(io.StringIO()) as output, \
                     contextlib.redirect_stderr(io.StringIO()) as errors:
@@ -48,7 +59,7 @@ class CliTests(unittest.TestCase):
 
     def test_occupied_loopback_port_has_guidance_without_creating_state(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder, \
-                desk_server.ThreadingHTTPServer(('127.0.0.1', 0),
+                desk_server.LoopbackHTTPServer(('127.0.0.1', 0),
                     desk_server.BaseHTTPRequestHandler) as occupied:
             state = Path(folder) / 'state'
             port = occupied.server_port
@@ -74,7 +85,7 @@ class CliTests(unittest.TestCase):
     def test_other_listener_failure_is_actionable_without_creating_state(self):
         with patch.object(sys, 'argv', ['codex-desk', '--port', '8787']), \
                 patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
-                patch.object(desk_server, 'ThreadingHTTPServer',
+                patch.object(desk_server, 'LoopbackHTTPServer',
                     side_effect=OSError(errno.EACCES, 'Permission denied')), \
                 patch.object(desk_server, 'Desk') as desk, \
                 patch.object(desk_server.webbrowser, 'open') as browser, \
@@ -92,7 +103,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             state = Path(folder) / 'state'
             servers, desks = [], []
-            server_type, desk_type = desk_server.ThreadingHTTPServer, desk_server.Desk
+            server_type, desk_type = desk_server.LoopbackHTTPServer, desk_server.Desk
             def bind(*args):
                 self.assertFalse(state.exists())
                 server = server_type(*args)
@@ -108,7 +119,7 @@ class CliTests(unittest.TestCase):
             with patch.object(sys, 'argv', ['codex-desk', '--port', '0', '--no-browser',
                     '--state-dir', str(state)]), \
                     patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
-                    patch.object(desk_server, 'ThreadingHTTPServer', side_effect=bind), \
+                    patch.object(desk_server, 'LoopbackHTTPServer', side_effect=bind), \
                     patch.object(desk_server, 'Desk', side_effect=initialize), \
                     patch.object(desk_server.webbrowser, 'open') as browser, \
                     contextlib.redirect_stdout(io.StringIO()) as output:
@@ -123,7 +134,7 @@ class CliTests(unittest.TestCase):
     def test_state_initialization_failure_closes_partial_store_and_listener(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             servers, stores = [], []
-            server_type, store_type = desk_server.ThreadingHTTPServer, desk_server.Store
+            server_type, store_type = desk_server.LoopbackHTTPServer, desk_server.Store
             def bind(*args):
                 server = server_type(*args)
                 servers.append(server)
@@ -135,7 +146,7 @@ class CliTests(unittest.TestCase):
             with patch.object(sys, 'argv', ['codex-desk', '--port', '0',
                     '--state-dir', str(Path(folder) / 'state')]), \
                     patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
-                    patch.object(desk_server, 'ThreadingHTTPServer', side_effect=bind), \
+                    patch.object(desk_server, 'LoopbackHTTPServer', side_effect=bind), \
                     patch.object(desk_server, 'Store', side_effect=store), \
                     patch.object(desk_server, 'NativeRecallIndex', side_effect=ValueError('index unavailable')), \
                     patch.object(desk_server.webbrowser, 'open') as browser, \
@@ -151,7 +162,7 @@ class CliTests(unittest.TestCase):
     def test_browser_startup_failure_closes_desk_store_and_listener(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             servers, desks = [], []
-            server_type, desk_type = desk_server.ThreadingHTTPServer, desk_server.Desk
+            server_type, desk_type = desk_server.LoopbackHTTPServer, desk_server.Desk
             def bind(*args):
                 server = server_type(*args)
                 servers.append(server)
@@ -163,7 +174,7 @@ class CliTests(unittest.TestCase):
             with patch.object(sys, 'argv', ['codex-desk', '--port', '0',
                     '--state-dir', str(Path(folder) / 'state')]), \
                     patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
-                    patch.object(desk_server, 'ThreadingHTTPServer', side_effect=bind), \
+                    patch.object(desk_server, 'LoopbackHTTPServer', side_effect=bind), \
                     patch.object(desk_server, 'Desk', side_effect=initialize), \
                     patch.object(desk_server.webbrowser, 'open', side_effect=RuntimeError('browser unavailable')), \
                     contextlib.redirect_stdout(io.StringIO()):
@@ -180,7 +191,7 @@ class CliTests(unittest.TestCase):
         with patch.object(sys, 'argv', ['codex-desk', '--version']), \
                 patch.object(desk_server, 'resolve_codex') as preflight, \
                 patch.object(desk_server, 'Desk') as desk, \
-                patch.object(desk_server, 'ThreadingHTTPServer') as server, \
+                patch.object(desk_server, 'LoopbackHTTPServer') as server, \
                 patch.object(desk_server.webbrowser, 'open') as browser, \
                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             with self.assertRaises(SystemExit) as exit:
