@@ -8,7 +8,7 @@ Remember a phrase from a decision or test result, but not the conversation title
 
 ## Install once, then find the answer
 
-Use the [one-command installer](../README.md#install-the-preview) with your existing Codex CLI and sign-in. Desk opens the printed local browser URL. For another history location, append `--codex-home /your/codex-home` to the launch command.
+Use the [one-command installer](../README.md#install-the-preview) with your existing Codex CLI and sign-in. A working Desktop bundled reader is another option: follow the [macOS](find-desktop-answer.macos.md) or [Windows](find-desktop-answer.windows.md) guide and pass it with `--codex`, without installing a separate CLI. Desk opens the printed local browser URL. For another history location, append `--codex-home /your/codex-home` to the launch command.
 
 1. **Open content search.** On the first screen choose **Find a decision in past work**. In an open workbench, use **Search saved content** in the sidebar.
 2. **Index unopened history.** Choose **Index existing Codex history**. This explicitly reads up to 200 recently updated native conversations into Desk's local cache. Watch the seen/indexed/unchanged/failed counts, then open **Index coverage and text limits** to see the retained coverage. Indexing does not create Desk conversation bindings or send a task.
