@@ -126,6 +126,8 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             assert "Sample" in await page.locator("#home-list").inner_text()
             banner = page.locator("#preview-banner")
             assert await banner.is_visible()
+            starter = await page.locator("#preview-start").bounding_box()
+            assert starter and starter["y"] + starter["height"] < await page.evaluate("innerHeight"), "Sample action is below the first viewport"
             provenance = (await banner.inner_text()).lower()
             assert "preview" in provenance and "sample" in provenance
             install_links = await banner.locator("a").evaluate_all("nodes => nodes.map(n => ({text:n.textContent,href:n.href}))")
@@ -134,7 +136,8 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             assert not any(row["path"] == "/api/history/index" and row["method"] == "POST" for row in await log())
             await checkpoint("home")
 
-            await page.locator("#home-content").click()
+            await page.locator("#preview-start").click()
+            assert await page.locator("#recall-query").input_value() == QUERY
             await page.wait_for_function("!document.querySelector('#recall-index').disabled")
             await page.locator("#recall-query").fill(QUERY)
             await page.locator("#recall-search").click()
@@ -216,7 +219,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await page.evaluate("window.localStorage.setItem('preview-check-unrelated', 'keep')")
             await page.locator("#prompt").fill("Discard this pending sample draft on reset.")
             await page.locator("#preview-reset").click()
-            await page.wait_for_function("!document.querySelector('#welcome').hidden && document.querySelector('#home-list').getAttribute('aria-busy') === 'false'")
+            await page.wait_for_function("document.querySelector('#welcome')?.hidden === false && document.querySelector('#home-list')?.getAttribute('aria-busy') === 'false'")
             cleared = await snapshot()
             assert cleared["sessions"] == [] and cleared["drafts"] == {} and cleared["followups"] == {}, cleared
             assert not cleared["indexed"]

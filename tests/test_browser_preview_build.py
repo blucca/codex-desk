@@ -19,6 +19,7 @@ class BrowserPreviewBuildTests(unittest.TestCase):
             output=preview.build(Path(tmp)/'demo')
             html=(output/'index.html').read_text()
             self.assertIn('id="preview-banner"',html)
+            self.assertIn('id="preview-start"',html)
             self.assertIn(preview.PUBLIC,html)
             self.assertNotIn('src="/',html)
             for name in ('evidence.js','activity.js','history_reader.js','native-state.js','followups.js','recall.js','home.js','style.css'):
