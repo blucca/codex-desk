@@ -1,8 +1,10 @@
-/* Literal recall of retained Desk evidence and preparation; navigation never sends. */
+/* Literal recall of retained Desk/native evidence and preparation; navigation never sends. */
 const DeskRecall=(()=>{
   const el=id=>document.getElementById(id), rowData=new WeakMap();
   let options, searchVersion=0, openVersion=0, navigationVersion=0;
   let searching=false, resultOpening=false, projectSignature='', target=null, pendingNavigation=null;
+  let scanVersion=0, scanTimer=null, scanBusy=false, scanReading=false, scanReady=false, scanIssue=false, scanJob=null;
+  const nativeProjects=new Set();
   const query=()=>({q:el('recall-query').value.trim(),cwd:el('recall-project').value,archived:el('recall-archived').checked});
   const sameQuery=(a,b)=>a.q===b.q && a.cwd===b.cwd && a.archived===b.archived;
   const current=(version,scope)=>version===searchVersion && el('recall').open && sameQuery(scope,query());
@@ -11,10 +13,10 @@ const DeskRecall=(()=>{
   function selectionChanged(){clearTarget();++navigationVersion;pendingNavigation=null;}
   function projects(){
     if(!options)return;
-    const values=[...new Set(options.state().sessions.map(s=>s.cwd).filter(Boolean))].sort();
+    const values=[...new Set([...options.state().sessions.map(s=>s.cwd),...nativeProjects].filter(Boolean))].sort();
     const selected=el('recall-project').value, signature=JSON.stringify(values);
     if(signature===projectSignature)return;projectSignature=signature;
-    const all=make('option','All saved Desk projects');all.value='';
+    const all=make('option','All indexed projects');all.value='';
     const rows=values.map(cwd=>{const folder=cwd.split(/[\\/]/).filter(Boolean).at(-1) || cwd;
       const row=make('option',folder+' — '+cwd);row.value=cwd;return row;});
     // A background state change must not silently broaden an exact saved scope.
@@ -39,25 +41,92 @@ const DeskRecall=(()=>{
     node.append(document.createTextNode(value.slice(0,at)),make('mark',value.slice(at,at+needle.length)),document.createTextNode(value.slice(at+needle.length)));
     return node;
   }
+  function nativeCoverage(value){
+    if(!value)return;
+    const counts=[];
+    for(const [key,label] of [['indexed_threads','indexed native conversations'],['indexed_items','cached native items'],['truncated_threads','conversations with shortened or omitted text'],['omitted_items','omitted items'],['unsupported_items','unsupported items'],['invalid_items','unreadable items']]){
+      if(Number.isFinite(value[key]))counts.push(value[key]+' '+label);
+    }
+    const limits=[];
+    if(Number.isFinite(value.max_thread_items))limits.push(value.max_thread_items.toLocaleString()+' items per conversation');
+    if(Number.isFinite(value.max_thread_chars))limits.push(value.max_thread_chars.toLocaleString()+' characters per conversation');
+    if(Number.isFinite(value.max_item_chars))limits.push(value.max_item_chars.toLocaleString()+' characters per item');
+    el('recall-native-coverage').textContent=['Local native cache: '+counts.join(' · '),limits.length?'Text limits: '+limits.join(' · ')+'. Newest readable items are retained first.':'',
+      'Coverage describes supplied reads from the current native history. Choose Search after indexing to update matches.'].filter(Boolean).join('\n');
+  }
+  function scanButtons(){
+    const active=scanJob?.status==='running';
+    el('recall-index').disabled=scanBusy || scanReading || !scanReady || active;
+    el('recall-index').textContent=scanJob?.status==='completed'?'Index existing history again':'Index existing Codex history';
+    el('recall-index-cancel').hidden=!active;el('recall-index-cancel').disabled=scanBusy;
+    el('recall-index-retry').hidden=!(scanIssue || ['cancelled','failed'].includes(scanJob?.status) || scanJob?.failed>0);
+    el('recall-index-retry').disabled=scanBusy || scanReading || (active && !scanIssue);
+    el('recall-indexing').setAttribute('aria-busy',String(scanBusy || scanReading || active));
+  }
+  function scanStatus(job){
+    if(!job || typeof job.status!=='string')return;
+    scanJob=job;
+    const label={idle:'History has not been indexed.',running:'Indexing existing Codex history…',completed:'Recent history scan completed.',cancelled:'Indexing cancelled. Already cached items are kept.',failed:'History indexing failed. Choose Retry.'}[job.status] || 'History indexing status unavailable.';
+    const counts=[['seen','seen'],['indexed','indexed'],['skipped','unchanged'],['failed','failed']]
+      .filter(([key])=>Number.isFinite(job[key])).map(([key,text])=>job[key]+' '+text).join(' · ');
+    el('recall-index-status').textContent=[label,job.status==='idle'?'':counts,
+      job.status!=='idle' && Number.isFinite(job.limit)?'This pass reads at most '+job.limit+' native conversations.':'',
+      job.has_more?'More native history exists beyond this pass. This is a bounded recent-history cache.':''].filter(Boolean).join('\n');
+    if(job.error){el('recall-index-error').textContent=job.error;el('recall-index-error').hidden=false;}
+    scanButtons();
+  }
+  function stopScanPolling(){if(scanTimer!==null)clearTimeout(scanTimer);scanTimer=null;}
+  async function readScan(){
+    if(!el('recall').open || scanBusy)return;
+    stopScanPolling();const version=++scanVersion;scanReading=true;scanButtons();
+    try{
+      const data=await options.api('/api/history/index');
+      if(version!==scanVersion || !el('recall').open)return;
+      scanReady=true;scanIssue=false;el('recall-index-error').hidden=true;scanStatus(data.job);nativeCoverage(data.coverage);
+      if(scanJob?.status==='running')scanTimer=setTimeout(readScan,750);
+    }catch(error){if(version===scanVersion && el('recall').open){
+      scanIssue=true;scanReady=false;el('recall-index-error').textContent=error.message;el('recall-index-error').hidden=false;
+      el('recall-index-status').textContent='History status could not be read. Choose Retry to check it again.';
+    }}finally{if(version===scanVersion){scanReading=false;scanButtons();}}
+  }
+  async function controlScan(cancel=false){
+    if(scanBusy || !el('recall').open || (!cancel && (!scanReady || scanJob?.status==='running')))return;
+    stopScanPolling();const version=++scanVersion;scanBusy=true;scanReading=false;scanIssue=false;
+    el('recall-index-error').hidden=true;scanButtons();
+    el('recall-index-status').textContent=cancel?'Cancelling after the current native read…':'Starting a local history scan…';
+    try{
+      const data=await options.api('/api/history/index'+(cancel?'/cancel':''),cancel?{}:{limit:200});
+      if(version!==scanVersion || !el('recall').open)return;
+      scanStatus(data.job || data);
+    }catch(error){if(version===scanVersion && el('recall').open){
+      scanIssue=true;scanReady=false;el('recall-index-error').textContent=error.message;el('recall-index-error').hidden=false;
+    }}finally{
+      scanBusy=false;scanButtons();
+      // Recheck after a control response, including when its dialog was closed and reopened.
+      // A lost start response must be reconciled before another explicit start is enabled.
+      if(el('recall').open && !scanIssue)readScan();
+    }
+  }
   function coverage(value){
     const counts=[];
     for(const [key,label] of [['sessions','Desk sessions'],['activity_items','cached activity items'],['drafts','saved drafts'],['followups','prepared follow-ups']]){
       if(Number.isFinite(value?.[key]))counts.push(value[key]+' '+label);
     }
+    nativeCoverage(value?.native);
     el('recall-coverage').textContent=[typeof value==='string'?value:value?.text,counts.join(' · ')].filter(Boolean).join('\n');
   }
   function resultRow(result,version,scope){
-    const row=make('article','','recall-result');rowData.set(row,result);row.dataset.session=result.session_id;row.dataset.kind=result.kind;
+    const row=make('article','','recall-result');rowData.set(row,result);if(result.session_id)row.dataset.session=result.session_id;if(result.thread_id)row.dataset.thread=result.thread_id;row.dataset.kind=result.kind;
     if(result.item_id)row.dataset.item=result.item_id;if(result.followup_id)row.dataset.followup=result.followup_id;
-    const name=result.session_name || result.cwd || 'Saved conversation';
-    const kind={activity:'Cached activity',draft:'Saved draft',followup:'Prepared follow-up'}[result.kind] || 'Saved content';
+    const name=result.session_name || result.title || result.name || result.cwd || 'Saved conversation';
+    const kind={activity:'Cached activity','native-activity':'Indexed native activity',draft:'Saved draft',followup:'Prepared follow-up'}[result.kind] || 'Saved content';
     row.append(make('h3',name),make('p',kind+(result.archived?' · Archived locally':''),'recall-kind'),
-      make('p',`${result.cwd || ''}\n${options.profileLabel(result.profile)}`,'recall-binding'),snippet(result.snippet,result.match_text));
+      make('p',`${result.cwd || ''}\n${options.profileLabel(result.profile)}${result.kind==='native-activity' && result.provider?' · '+result.provider:''}`,'recall-binding'),snippet(result.snippet,result.match_text));
     if(Number.isFinite(result.updated) && result.updated>0){
       const date=new Date(result.updated*1000);
       if(!Number.isNaN(date.getTime())){const time=make('time',date.toLocaleString(),'recall-updated');time.dateTime=date.toISOString();row.append(time);}
     }
-    const action=make('button',{activity:'Open matching activity',draft:'Go to saved draft',followup:'Go to prepared follow-up'}[result.kind] || 'Open saved content','recall-open');action.type='button';
+    const action=make('button',{activity:'Open matching activity','native-activity':'Open matching native activity',draft:'Go to saved draft',followup:'Go to prepared follow-up'}[result.kind] || 'Open saved content','recall-open');action.type='button';
     action.setAttribute('aria-label',action.textContent+' in '+name);
     const notice=make('p','','recall-result-status');notice.setAttribute('role','status');notice.hidden=true;
     action.onclick=()=>reveal(result,row,notice,version,scope);row.append(action,notice);return row;
@@ -78,6 +147,7 @@ const DeskRecall=(()=>{
       const data=await options.api('/api/recall?'+params);
       if(!current(version,scope))return;
       const rows=Array.isArray(data.results)?data.results:[];
+      for(const result of rows)if(result.kind==='native-activity' && result.cwd)nativeProjects.add(result.cwd);projects();
       el('recall-results').replaceChildren(...rows.map(result=>resultRow(result,version,scope)));
       const total=Number.isFinite(data.total)?data.total:rows.length;
       el('recall-summary').textContent=rows.length
@@ -92,9 +162,9 @@ const DeskRecall=(()=>{
   function targetFor(result){
     const matches=node=>node && typeof result.match_text==='string' && result.match_text &&
       (['INPUT','TEXTAREA'].includes(node.tagName)?node.value:node.textContent).includes(result.match_text);
-    if(result.kind==='activity'){
+    if(['activity','native-activity'].includes(result.kind)){
       const node=options.itemNode(result.item_id), turn=options.itemTurn(result.item_id);
-      if(!node?.isConnected || node.hidden || !matches(node) || (result.turn_id && turn && turn!==result.turn_id))return null;
+      if(!node?.isConnected || node.hidden || !matches(node) || (result.kind==='native-activity'?turn!==result.turn_id:(result.turn_id && turn && turn!==result.turn_id)))return null;
       return node;
     }
     if(result.kind==='draft')return el('task').hidden || !matches(el('prompt'))?null:el('prompt');
@@ -117,7 +187,7 @@ const DeskRecall=(()=>{
     node.classList.add('recall-target');target={...nav,addedTabindex};node.focus({preventScroll:true});node.scrollIntoView({block:'center',behavior:'instant'});
     // Long command/MCP evidence can itself scroll. Reveal the matching line
     // without rewriting Markdown, changing selection or inserting source HTML.
-    if(nav.result.kind==='activity' && nav.result.match_text){
+    if(['activity','native-activity'].includes(nav.result.kind) && nav.result.match_text){
       const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
       let textNode;while((textNode=walker.nextNode())){
         const at=textNode.data.indexOf(nav.result.match_text);if(at<0)continue;
@@ -134,7 +204,21 @@ const DeskRecall=(()=>{
     const valid=()=>ticket===openVersion && current(version,scope) && row.isConnected;
     let expectedGeneration=options.generation();
     try{
-      const saved=options.state().sessions.find(s=>s.id===result.session_id);
+      if(result.kind==='native-activity'){
+        notice.textContent='Reading and opening the matching native conversation…';
+        const imported=await options.api('/api/import',{thread:result.thread_id,profile:'default'});
+        if(!valid())return;
+        if(expectedGeneration!==options.generation())throw new Error('The selected conversation changed. Choose this result again to open it.');
+        await options.refresh();if(!valid())return;
+        if(expectedGeneration!==options.generation())throw new Error('The selected conversation changed. Choose this result again to open it.');
+        const binding=options.state().sessions.find(s=>s.id===imported.id);
+        if(!binding || binding.thread_id!==result.thread_id || binding.profile!=='default')throw new Error('The matching native conversation could not be bound in Desk. Choose this result again.');
+        result={...result,session_id:imported.id};
+      }
+      let saved=options.state().sessions.find(s=>s.id===result.session_id);
+      // An earlier explicit import can finish after its query was replaced. Its
+      // binding is real, but the visible state must be reconciled on this click.
+      if(!saved){await options.refresh();if(!valid())return;saved=options.state().sessions.find(s=>s.id===result.session_id);}
       if(!saved)throw new Error('This session is no longer in Desk. Its search result is kept here.');
       if(saved.archived){
         await options.api('/api/archive',{session:result.session_id,archived:false});
@@ -152,7 +236,7 @@ const DeskRecall=(()=>{
       if(expectedGeneration!==options.generation() || options.selected()!==result.session_id || !options.loaded())throw new Error('The selected conversation changed before the matching preparation could be shown. Choose this result again.');
       const node=targetFor(result);
       if(!node){
-        notice.textContent=result.kind==='activity'
+        notice.textContent=['activity','native-activity'].includes(result.kind)
           ? 'The saved match is not in the freshly loaded native activity. This cached result is kept here; no task or handoff was started.'
           : 'The saved phrase is no longer in the current preparation. Your current text and this search result are kept; search again to refresh the match.';
         return;
@@ -170,14 +254,18 @@ const DeskRecall=(()=>{
       if(result)row.querySelector('.recall-open').onclick=()=>reveal(result,row,row.querySelector('.recall-result-status'),version,scope);
     }
     el('recall').showModal();el('recall-query').focus();
+    scanReady=false;scanIssue=false;el('recall-index-error').hidden=true;scanButtons();readScan();
   }
   function configure(value){
     options=value;projects();
-    el('search-saved-content').onclick=show;
+    el('search-saved-content').onclick=show;el('home-content').onclick=show;
+    el('recall-index').onclick=()=>controlScan();el('recall-index-cancel').onclick=()=>controlScan(true);
+    el('recall-index-retry').onclick=()=>scanIssue?readScan():controlScan();
     el('recall-form').onsubmit=event=>{event.preventDefault();search();};
     el('recall-query').oninput=invalidate;el('recall-project').onchange=invalidate;el('recall-archived').onchange=invalidate;
     el('recall-close').onclick=()=>el('recall').close();
     el('recall').addEventListener('close',()=>{
+      stopScanPolling();++scanVersion;scanReading=false;scanReady=false;
       const nav=pendingNavigation;pendingNavigation=null;++searchVersion;++openVersion;
       if(searching)el('recall-summary').textContent='Search canceled. Choose Search to try again.';
       searching=false;resultOpening=false;buttons();

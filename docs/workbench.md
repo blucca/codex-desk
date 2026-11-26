@@ -12,13 +12,13 @@ Editing the query clears old results and pagination; submit it again to search. 
 
 ## Find a decision or test result in saved work
 
-Choose **Search saved content**, enter a phrase from an earlier task, reply or tool result, then **Search**. Select one saved project for an exact folder scope, or search across your Desk projects. **Include archived** makes locally archived work available too.
+Choose **Find a decision in past work** on the first screen or **Search saved content** in the sidebar. For unopened native work, choose **Index existing Codex history**: an explicit local read of up to 200 recently updated conversations. Enter a phrase from an earlier task, reply or tool result, then **Search**. Select an available project for an exact folder scope, or keep **All indexed projects**. **Include archived sessions** makes locally archived Desk work available too.
 
-Results show the project, conversation and a matching snippet. **Open** returns to that existing native conversation and reveals the matched evidence, including collapsed command/MCP or sub-agent activity. For a saved draft or prepared follow-up, it reveals the existing instruction; it does not send it. Opening an archived result restores its Desk entry.
+Results show the project, conversation and a matching snippet. **Open matching native activity** opens the original saved thread using **Current Codex settings**; **Open matching activity** returns to its saved Desk binding and profile. Both reveal the matched evidence, including collapsed command/MCP or sub-agent activity. For a saved draft or prepared follow-up, the result reveals the existing instruction; it does not send it. Opening an archived result restores its Desk entry.
 
-Content recall reads your private local Desk database: readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. Native title browsing remains separate; conversations listed there become content-searchable after you open them. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
+Content recall reads your private local Desk database: explicitly indexed native history, readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. Indexing uses native list/read requests without opening conversations or starting tasks. Native title browsing remains separate; opening an older conversation caches its readable evidence too. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
 
-Queries are literal, Unicode-normalized and case-insensitive. The dialog reports content coverage and a bounded set of recent matches.
+Queries are literal, Unicode-normalized and case-insensitive. The dialog shows up to 30 matching items. **Index coverage and text limits** reports cached native coverage; each conversation retains the newest readable items first, bounded at 5,000 items, 2,000,000 characters total and 200,000 characters per item. Reindexing refreshes the recent 200-conversation window and skips unchanged snapshots. [Short answer-finding guide](find-past-answer.md).
 
 ## Prepare a task and come back later
 
@@ -28,7 +28,7 @@ If another tab changes the same draft, choose **Keep this tab draft** or **Load 
 
 ## Organize active and recent work
 
-The sidebar groups saved Desk sessions by project. **Active** keeps running tasks and approval requests visible; **Recent** holds idle conversations. **Find saved work** filters local titles or project folders without changing your current conversation.
+The sidebar groups saved Desk sessions by project. **Active** keeps running tasks and approval requests visible; **Recent** holds idle conversations. **Find saved titles or folders** filters local titles or project folders without changing your current conversation.
 
 **Archive session** hides an idle Desk entry from Recent, preserving its native history, provider binding, drafts and prepared follow-ups. **Show archived** → **Restore** returns it to the project list. An archived task that is still running stays in Active so you can approve or stop it. Returning through native history reuses and restores the original binding.
 
@@ -65,7 +65,7 @@ This is useful when the old provider is unavailable and you want to carry useful
 ## Daily workbench
 
 - Project-grouped active/recent sessions, local title/folder filtering and reversible archives.
-- Literal saved-content recall across readable cached activity, drafts and prepared follow-ups, with exact evidence navigation and cold SQLite return.
+- Explicit recent-native-history indexing and literal recall across readable cached activity, drafts and prepared follow-ups, with exact evidence navigation and cold SQLite return.
 - Named project sessions, saved native history and same-thread reopen.
 - Retained API profile editing and key rotation without changing profile or session identity.
 - Native tasks, command/file approvals, questions, interruption and Work/Plan modes.

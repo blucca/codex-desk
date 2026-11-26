@@ -66,10 +66,13 @@ class RecallTests(unittest.TestCase):
         self.assertIn('7 tests passed', hit['snippet'])
         self.assertEqual(desk.store.events(imported['id']), [])
         self.assertEqual(desk.runtimes, {})
+        desk.close()
         desk.store.db.close()
-        desk.store = Store(self.root / 'import-state' / 'desk.sqlite3')
-        self.assertEqual(desk.recall('sparse index')['results'], result['results'])
-        self.assertEqual(desk.store.get(imported['id'])['thread_id'], 'native-original')
+        reopened = Desk('never-executed', self.root / 'native-home', self.root / 'import-state')
+        self.addCleanup(reopened.close)
+        self.addCleanup(reopened.store.db.close)
+        self.assertEqual(reopened.recall('sparse index')['results'], result['results'])
+        self.assertEqual(reopened.store.get(imported['id'])['thread_id'], 'native-original')
 
     def test_native_resume_snapshot_is_cached_without_extra_request(self):
         self.store.update(self.session, name_pending=0)

@@ -1,8 +1,8 @@
-# Codex Desk：打开第一个项目，继续已有会话
+# Codex Desk：找回已有会话，准备下一步
 
 [五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
 
-适用于当前预览版。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
+用已有的 Codex CLI 和登录，在本机浏览器中打开旧会话、阅读结果、保存下一步任务；也可以按答案中的文字查找尚未在 Desk 中打开过的近期历史。界面目前使用英文，下面保留实际按钮名称。
 
 ![Codex Desk：打开已有会话、查看结果并保存下一任务](resumed-work.png)
 
@@ -10,9 +10,7 @@
 
 ## 1. 安装并启动
 
-准备完整的 **Codex CLI**。使用 uv 可通过 README 中的一条命令启动；手动虚拟环境安装需要 **Python 3.11+**。先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。当前原生集成已在 **Linux / Codex CLI 0.171.0** 上运行验证。
-
-先在同一终端确认 `python3 --version`（Windows 用 `py -3 --version`）为 3.11 或更高，且 `codex --version` 可用。
+先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。使用 uv 可通过 README 中的一条命令启动；手动虚拟环境安装需要 **Python 3.11+**，可用 `python3 --version`（Windows 用 `py -3 --version`）确认。
 
 按[维护中的安装步骤](../README.md#install-the-preview)使用单条 uvx 命令，或展开 Python 安装方式选择系统对应的虚拟环境命令。发布包安装不需要 Git；网页中再选择实际项目目录。安装包地址以该页面为准。
 
@@ -35,21 +33,36 @@ Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打�
 
 全局列表中的 **Resume with current settings** 使用当前 Codex 配置。新建但还未发送过任务的空会话，原生 Codex 尚未写入会话记录（rollout），重启后可能获得新的原生线程（thread）；已使用过的会话按保存的 thread 续接。
 
-## 3. 先看证据，再发一个只读任务
+## 3. 阅读结果，保存下一步
 
 打开已有会话后，先确认页眉的项目路径、提供商和模型，再阅读历史消息、实际命令输出与退出状态、文件变化，以及已有的 MCP 文本／结构化结果和失败。
 
-在 **Task mode** 选择 **Work — native tools and edits**，输入下面这个只读检查任务，然后点击 **Run task**：
+先把下一步写入任务框，选择 **Work — native tools and edits** 或 **Plan — clarify before execution**。看到 **Draft saved locally** 后，文字和模式已保存在这个 Desk 会话的本地数据库。也可以点击 **Save as follow-up**，将它存入当前会话的准备列表；这些准备都不会自动发送。
+
+例如，可以先保存下面这个只读检查任务：
 
 ```text
 只读检查这个项目：列出项目根目录的一层文件，读取 README（若存在），找出其中说明的验证命令。报告实际执行的命令、输出和退出状态；若未记载验证命令，直接说明未找到。只说明验证命令，不运行它，不安装依赖，不修改文件。
 ```
 
-出现原生命令审批时，查看实际命令后点击 **Allow once**；拒绝该命令用 **Decline**。需要中断当前任务用 **Stop turn**。任务结束后核对命令结果；**Thread usage** 显示原生 Codex 最近报告的当前 thread 累计用量。
+准备好执行时再点击 **Run task**，或在 **Prepared follow-ups** 中点击 **Send next**。出现原生命令审批时，查看实际命令后点击 **Allow once**；拒绝该命令用 **Decline**。需要中断当前任务用 **Stop turn**。任务结束后核对命令结果；**Thread usage** 显示原生 Codex 最近报告的当前 thread 累计用量。
 
 可用 **Rename session** → **Save name** 为会话取一个容易再次找到的名字。
 
-## 4. 关闭页面后怎样回来
+## 4. 记得答案，但忘了会话标题
+
+1. 首页点击 **Find a decision in past work**；已打开会话时，使用侧栏的 **Search saved content**。
+2. 点击 **Index existing Codex history**，明确读取所选 Codex home 中最近更新的最多 **200 个原生会话**，把可读文本存入本地缓存。包括尚未在 Desk 打开过的会话；索引过程不创建这些会话的 Desk 绑定，也不发送任务。
+3. 等待索引完成，先保持 **All indexed projects**，在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 2–200 个字符，再点 **Search** 或按 Enter。搜索为字面文字匹配，忽略大小写并规范化 Unicode；索引完成后需要再次点击 **Search** 更新结果。可选择已有的 **Project folder (optional)**，按精确项目目录缩小范围。
+4. 核对结果中的会话、目录和匹配片段。点击 **Open matching native activity**，用 **Current Codex settings** 打开原来的原生 thread，并定位、展开匹配的消息或工具结果；这不会发送任务。**Open matching activity** 则打开已缓存的 Desk 会话，保留它的 profile。草稿和已准备的后续任务也能搜索并打开。
+
+**Index coverage and text limits** 显示实际缓存范围，以及缩短、省略、不支持或不可读的条目。每个原生会话优先保留最新可读条目，最多 **5,000 个条目、共 2,000,000 个字符**，每条最多 **200,000 个字符**。结果最多显示 **30 条匹配项**；结果更多时缩小文字或项目范围。**Include archived sessions** 包含本地已归档的 Desk 条目，打开结果会恢复该条目。
+
+**Index existing history again** 重新检查最近 200 个会话的窗口，跳过未变化的快照，不会自动向更旧历史翻页。窗口之外的旧会话可先用 **Browse all conversations**／**Browse existing Codex sessions** 按标题查找，使用 **Load more**，打开后再搜索正文。**Cancel indexing** 保留已缓存的文本；关闭搜索对话框时，正在进行的索引仍会继续。失败或取消后用 **Retry** 重试。
+
+[简短英文指南：找回过去的 Codex 答案并打开原任务](find-past-answer.md)
+
+## 5. 关闭页面后怎样回来
 
 - **只关闭浏览器：** Desk 终端和后台任务继续运行。重新打开终端打印的 URL，在侧栏选择同一个命名会话，核对刚才的消息和命令结果后继续。
 - **停止 Desk：** 在启动它的终端按 **Ctrl+C**，Desk 会停止自己管理的 app-server 和正在运行的原生任务。下次从同一个虚拟环境启动，并沿用相同的 Codex home 和 Desk state directory，再选择该会话。
@@ -71,7 +84,7 @@ Set-Location "$HOME\codex-desk-install"
 
 若之前使用 `--codex-home`、`--state-dir` 或 `--codex`，再次启动时保留这些参数；依赖环境变量提供密钥的配置，也从设置了该变量的终端启动。
 
-## 5. 当前配置、提供商 profile 与交接
+## 6. 当前配置、提供商 profile 与交接
 
 [提供商切换任务指南（英文）](https://blucca.github.io/guides/switch-codex-api-provider/)：核对本地 API profile，审阅旧会话证据，运行一个验证任务，再次打开新会话。
 
@@ -87,9 +100,9 @@ Set-Location "$HOME\codex-desk-install"
 
 只读取或审阅交接文本不运行模型回合，也不向旧提供商请求压缩。交接使用可见任务证据，加密推理内容（reasoning）不重放到新 thread。
 
-## 6. 本地记录与任务求助
+## 7. 本地记录与任务求助
 
-Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQLite，默认路径为 `~/.local/state/codex-desk/desk.sqlite3`；活动包括任务文本和命令输出。Desk 没有托管的活动存储服务，模型请求由原生 Codex 发往所选提供商。
+Desk 的项目／profile／原生 thread 绑定、活动记录、索引后的原生历史文本和草稿保存在本机 SQLite，默认路径为 `~/.local/state/codex-desk/desk.sqlite3`。索引使用原生会话列表／读取请求，文字搜索读取本地缓存；沿用相同 state directory 重启后仍可搜索。实际运行任务时，模型请求由原生 Codex 发往所选提供商。
 
 已有密钥沿用 Codex 配置或启动进程的环境。新 profile 的密钥保存在本地 sidecar 文件（Linux 权限 0600），配置通过 app-server 的私有 stdin 协议传入。Desk 保留主配置、auth 和原生 rollout，继承主配置中的 MCP、项目 trust 和 sandbox 设置。
 
@@ -133,7 +146,7 @@ Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQ
 
 ## 按项目整理活跃／最近会话
 
-侧栏按项目分组。**Active** 显示正在运行和等待批准的任务，**Recent** 显示空闲会话。**Find saved work** 按本地标题或项目目录筛选，不切换当前会话。
+侧栏按项目分组。**Active** 显示正在运行和等待批准的任务，**Recent** 显示空闲会话。**Find saved titles or folders** 按本地标题或项目目录筛选，不切换当前会话。
 
 **Archive session** 只把空闲的 Desk 条目从最近列表隐藏，原生历史、供应商绑定、草稿和已准备的后续任务都保留。勾选 **Show archived** 后点击 **Restore** 可恢复；仍在运行的归档会话继续显示在 Active，便于批准或停止。从原生历史再次打开时，也会复用并恢复原绑定。
 

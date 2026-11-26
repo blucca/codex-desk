@@ -15,6 +15,8 @@ from . import __version__
 from .runtime import (Runtime, Store, profiles, save_profile, update_profile, task_name,
                       first_task, session_name, MissingRolloutError, NativeRequestRejected, NativeRequestUnknown)
 from .handoff import build_handoff
+from .native_recall import NativeRecallIndex
+from .history_scan import NativeHistoryScanner
 from .drafts import load_draft, save_draft, DraftConflict
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
@@ -30,6 +32,8 @@ class Desk:
     def __init__(self, binary, home, state):
         self.binary, self.home = binary, Path(home).expanduser().resolve()
         self.store = Store(Path(state) / "desk.sqlite3")
+        self.native_index = NativeRecallIndex(self.store)
+        self.history_scanner = NativeHistoryScanner(self, self.native_index)
         self.runtimes = {}
         self.lock = threading.RLock()
         self.admissions = {}
@@ -267,8 +271,23 @@ class Desk:
             self.store.recall_snapshot(identifier, thread)
             return {'id': identifier, 'thread': thread}
     def recall(self, q, cwd=None, include_archived=False, limit=30):
-        return self.store.recall(q, cwd, include_archived, limit)
+        # Search only saved SQLite evidence. Bindings include archived sessions:
+        # their native cache must never become an alternate visibility path.
+        with self.store.lock:
+            result = self.store.recall(q, cwd, include_archived, limit)
+            bound = [row[0] for row in self.store.db.execute(
+                'SELECT DISTINCT thread_id FROM sessions WHERE thread_id IS NOT NULL')]
+            native = self.native_index.search(q, cwd, limit, exclude_thread_ids=bound)
+            native_hits = [dict(hit, name=hit['title'], profile='default', archived=False)
+                           for hit in native['results']]
+            result['results'] = sorted(result['results'] + native_hits,
+                                       key=lambda hit: hit['updated'], reverse=True)[:limit]
+            result['total'] += native['total']
+            result['truncated'] = result['total'] > len(result['results'])
+            result['coverage']['native'] = native['coverage']
+            return result
     def close(self):
+        self.history_scanner.close()
         for runtime in list(self.runtimes.values()):
             runtime.close()
 
@@ -297,6 +316,9 @@ def handler(desk):
             try:
                 self.local()
                 url = urlsplit(self.path)
+                if url.path == '/api/history/index':
+                    return self.reply({'job': desk.history_scanner.status(),
+                                       'coverage': desk.native_index.stats()})
                 if url.path == '/api/recall':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=10)
                     if any(key not in ('q', 'cwd', 'archived', 'limit') or len(values) != 1
@@ -370,7 +392,14 @@ def handler(desk):
                     raise ValueError("Request size outside supported range")
                 data = json.loads(self.rfile.read(size))
                 path = urlsplit(self.path).path
-                if path == '/api/followups':
+                if path in ('/api/history/index', '/api/history/index/cancel'):
+                    if not isinstance(data, dict):
+                        raise ValueError('Expected a history indexing object')
+                    if path == '/api/history/index':
+                        result = desk.history_scanner.start(data.get('limit', 200))
+                    else:
+                        result = desk.history_scanner.cancel()
+                elif path == '/api/followups':
                     result = desk.mutate_followups('add', data)
                 elif path in ('/api/followups/edit', '/api/followups/remove', '/api/followups/reorder', '/api/followups/clear'):
                     result = desk.mutate_followups(path.rsplit('/', 1)[-1], data)
