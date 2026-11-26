@@ -63,3 +63,7 @@ cd codex-desk
 git checkout c685ef47e96c9499841d8f6df513b33c965b17fe
 DESK_TEST_TEMP="$PWD/temp/native-proof" PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
+
+## Native MCP integration sample
+
+[Read the MCP result/reopen recording](native-mcp-example.md): one native turn calls a read-only synthetic tool twice, preserves its success and deliberate error, and reopens the same used conversation. A runnable stdio fixture reproduces both response cases offline.

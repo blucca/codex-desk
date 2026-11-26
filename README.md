@@ -157,6 +157,8 @@ If you already switch between enterprise/personal providers or lose the desktop 
 
 [Inspect a Blucca native task/restart sample](docs/native-delivery-example.md): one actual test command, reported usage and the same used conversation reopened after native runtime restart.
 
+[Inspect the native MCP sample](docs/native-mcp-example.md): success and deliberate-error tool results, the same used conversation reopened, and a runnable offline stdio fixture.
+
 For a provider or team needing one native Codex integration or recovery path delivered, [Blucca offers a 200 USD fixed-scope pilot](https://blucca.github.io/services/native-codex/): one repository, OS and provider/model, actual task results, restart/continuation acceptance and a runnable check. Five business days start after scope, test access/allowance and funded payment arrangement are confirmed. [中文交付说明](https://blucca.github.io/services/native-codex/zh.html).
 
 ## Check
