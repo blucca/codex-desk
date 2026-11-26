@@ -139,6 +139,21 @@ class NativeRecallTests(unittest.TestCase):
         for query in ('a%bZc', '.*missing', '%_', '1=2'):
             self.assertEqual(self.index.search(query)['total'], 0, query)
 
+    def test_long_ascii_command_boundary_matches_preserve_original_case_and_snippet_limit(self):
+        self.index.replace_snapshot(snapshot([{'id': 'long-ascii-command', 'type': 'commandExecution',
+            'command': 'fixture inspect', 'status': 'completed', 'exitCode': 0, 'aggregatedOutput':
+                'Start ASCII DECISION\n' + 'x' * 199_700 + '\nEND ascii decision'}]))
+        for query, match in [('start ascii decision', 'Start ASCII DECISION'),
+                             ('END ASCII DECISION', 'END ascii decision')]:
+            with self.subTest(query=query):
+                result = self.index.search(query)
+                self.assertEqual(result['total'], 1)
+                hit = result['results'][0]
+                self.assertEqual(hit['item_id'], 'long-ascii-command')
+                self.assertEqual(hit['match_text'], match)
+                self.assertIn(match, hit['snippet'])
+                self.assertLessEqual(len(hit['snippet']), 422)
+
     def test_exact_canonical_cwd_and_missing_folder_metadata_are_retained(self):
         project = self.root / 'missing-project'
         source = snapshot([agent('Scoped native decision')], cwd=str(project))

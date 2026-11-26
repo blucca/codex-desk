@@ -110,6 +110,21 @@ class RecallTests(unittest.TestCase):
                 self.assertEqual(result['results'][0]['match_text'], match)
                 self.assertIn(match, result['results'][0]['snippet'])
 
+    def test_long_ascii_command_boundary_matches_preserve_original_case_and_snippet_limit(self):
+        self.snapshot([{'id': 'long-ascii-command', 'type': 'commandExecution', 'command': 'fixture inspect',
+            'status': 'completed', 'exitCode': 0, 'aggregatedOutput':
+                'Start ASCII DECISION\n' + 'x' * 199_700 + '\nEND ascii decision'}])
+        for query, match in [('start ascii decision', 'Start ASCII DECISION'),
+                             ('END ASCII DECISION', 'END ascii decision')]:
+            with self.subTest(query=query):
+                result = self.store.recall(query)
+                self.assertEqual(result['total'], 1)
+                hit = result['results'][0]
+                self.assertEqual(hit['item_id'], 'long-ascii-command')
+                self.assertEqual(hit['match_text'], match)
+                self.assertIn(match, hit['snippet'])
+                self.assertLessEqual(len(hit['snippet']), 422)
+
     def test_literal_sql_and_regex_characters_do_not_expand_matches(self):
         self.snapshot([agent("Use a%b_c[0].* literally, not regex; ' OR 1=1 -- stays text.")])
         for query in ('a%b_c[0].*', "' OR 1=1 --"):

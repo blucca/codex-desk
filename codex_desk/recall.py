@@ -161,6 +161,11 @@ def save_snapshot(store, session, thread):
 
 
 def _snippet(text, needle):
+    # ASCII normalization only changes case, so folded offsets stay exact.
+    if text.isascii():
+        position = text.casefold().find(needle)
+        left = min(max(position, 0), max(len(text) - 1, 0))
+        return _snippet_range(text, left, min(len(text), left + len(needle)))
     # Keep offsets in original visible text across accents, casefold expansions
     # and compatibility characters, rather than slicing at normalized offsets.
     clusters, starts, ends = [], [], []
@@ -183,6 +188,10 @@ def _snippet(text, needle):
         right = min(len(text), left + len(needle))
     else:
         left, right = starts[position], ends[position + len(needle) - 1]
+    return _snippet_range(text, left, right)
+
+
+def _snippet_range(text, left, right):
     begin = max(0, left - 80)
     end = min(len(text), max(right, begin + SNIPPET_CHARS))
     if end - begin > SNIPPET_CHARS:

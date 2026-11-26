@@ -15,7 +15,7 @@ Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installat
 With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one command** installs and opens the free local workbench on Linux, macOS, Windows or WSL:
 
 ```sh
-uvx --from https://github.com/blucca/codex-desk/releases/download/v0.1.0a25/codex_desk-0.1.0a25-py3-none-any.whl codex-desk
+uvx --from https://github.com/blucca/codex-desk/releases/download/v0.1.0a26/codex_desk-0.1.0a26-py3-none-any.whl codex-desk
 ```
 
 Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
@@ -32,7 +32,7 @@ mkdir -p "$HOME/codex-desk-install"
 cd "$HOME/codex-desk-install"
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a25/codex_desk-0.1.0a25-py3-none-any.whl
+python3 -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a26/codex_desk-0.1.0a26-py3-none-any.whl
 codex-desk
 ```
 
@@ -42,7 +42,7 @@ codex-desk
 New-Item -ItemType Directory -Force "$HOME\codex-desk-install" | Out-Null
 Set-Location "$HOME\codex-desk-install"
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a25/codex_desk-0.1.0a25-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install https://github.com/blucca/codex-desk/releases/download/v0.1.0a26/codex_desk-0.1.0a26-py3-none-any.whl
 .\.venv\Scripts\codex-desk.exe
 ```
 
