@@ -35,6 +35,31 @@ STARTUP_TIMEOUT = 20
 DRIVER = '''import json, os, runpy, subprocess, sys, webbrowser
 from pathlib import Path
 
+if os.environ.get('DESK_LAUNCH_DIAGNOSTICS') == '1':
+    import faulthandler
+    faulthandler.enable()
+    faulthandler.dump_traceback_later(15, repeat=False)
+    watched = {
+        ('server.py', '<module>'), ('server.py', 'main'),
+        ('server.py', 'resolve_codex'), ('server.py', '__init__'),
+        ('runtime.py', '__init__'), ('native_recall.py', '__init__'),
+        ('history_scan.py', '__init__'), ('server.py', 'server_bind'),
+        ('socketserver.py', 'server_bind'), ('socketserver.py', 'server_activate'),
+        ('socket.py', 'getfqdn'),
+    }
+    def checkpoint(frame, event, arg):
+        filename = Path(frame.f_code.co_filename).name
+        name = frame.f_code.co_name
+        if event in ('call', 'return') and (filename, name) in watched:
+            owner = type(frame.f_locals['self']).__name__ if 'self' in frame.f_locals else ''
+            print(f'LAUNCH {event} {filename}:{owner + "." if owner else ""}{name}',
+                  file=sys.stderr, flush=True)
+        elif event in ('c_call', 'c_return', 'c_exception') and name == 'getfqdn':
+            print(f'LAUNCH {event} socket.{getattr(arg, "__name__", "unknown")}',
+                  file=sys.stderr, flush=True)
+    sys.setprofile(checkpoint)
+    print('LAUNCH driver ready; importing server', file=sys.stderr, flush=True)
+
 def audit(event, details):
     if event != 'subprocess.Popen':
         return
@@ -147,8 +172,11 @@ class LaunchHTTPTests(unittest.TestCase):
         remaining, errors = process.communicate(timeout=4)
         reason = (f'no startup URL within {timeout}s' if line is None
                   else 'exited or printed unexpected startup output')
+        calls = self.calls.read_text(encoding='utf-8') if self.calls.exists() else ''
         self.fail(f'Launcher {reason}; exit={process.returncode}; '
-                  f'stdout={(line or "") + remaining!r}; stderr={errors!r}')
+                  f'stdout={(line or "") + remaining!r}; stderr={errors!r}; '
+                  f'child_calls={calls!r}; state_exists={self.state.exists()}; '
+                  f'native_home_exists={self.home.exists()}; browser_called={self.browser.exists()}')
 
     @staticmethod
     def get(address, path):
