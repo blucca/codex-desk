@@ -90,8 +90,8 @@ body:
     id: desk-version
     attributes:
       label: Codex Desk version (optional)
-      description: Output of codex-desk --version, or the version in your launch command.
-      placeholder: 0.1.0a28
+      description: Output of uvx --prerelease allow codex-desk --version (or codex-desk --version for a Python installation).
+      placeholder: 0.1.0a30
   - type: textarea
     id: error-text
     attributes:

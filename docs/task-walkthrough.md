@@ -8,7 +8,7 @@
 
 ## Install and open
 
-Requires **Python 3.11+** and a complete, configured [Codex CLI](https://developers.openai.com/codex/cli). Check `codex --version` in the shell you will use for Desk.
+Requires **Python 3.11+** and a complete, configured [Codex CLI](https://developers.openai.com/codex/cli). Check `codex --version` in the shell you will use for Desk; this is the native CLI version.
 
 Follow the [maintained installer](../README.md#install-the-preview), choosing **Linux/macOS/WSL** or **Windows PowerShell** commands. It creates an isolated installation and installs the current published preview without Git. Launch Desk, then open its printed loopback URL, normally **http://127.0.0.1:8787**. [中文 first-project guide](first-project.zh-CN.md).
 
@@ -32,7 +32,7 @@ Click **Run task** in your project. Review any native command approval, then che
 
 ## Next launch — no reinstall
 
-With uv, repeat the launch command in the [README](../README.md#install-the-preview). With the Python virtual-environment installation:
+With uv, repeat the launch command in the [README](../README.md#install-the-preview). To update an older cached preview, stop the old Desk terminal with **Ctrl+C** first, then use the [one-time uvx update command](../README.md#update-an-existing-uvx-installation). Reopening an occupied URL still uses the server already running there. With the Python virtual-environment installation:
 
 ```sh
 cd "$HOME/codex-desk-install"
@@ -40,7 +40,7 @@ cd "$HOME/codex-desk-install"
 codex-desk
 ```
 
-Reuse any original `--codex`, `--codex-home` and `--state-dir` arguments. Stopping Desk also stops its owned native tasks; closing just the browser leaves the backend running.
+Reuse any original `--codex`, `--codex-home`, `--state-dir` and `--port` arguments for updates and later launches. The same state directory retains the saved conversation, indexed history and preparation. Stopping Desk also stops its owned native tasks; closing just the browser leaves the backend running.
 
 ## Full-size panels
 

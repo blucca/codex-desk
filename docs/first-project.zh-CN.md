@@ -8,7 +8,7 @@
 
 ## 1. 安装并启动
 
-在准备启动 Desk 的终端确认 `codex --version` 可用。按 [README 维护中的安装步骤](../README.md#install-the-preview)运行单条 uvx 命令；使用 Python 安装时，展开对应系统的虚拟环境步骤，需要 Python 3.11+。
+在准备启动 Desk 的终端确认 `codex --version` 可用；它显示的是原生 Codex CLI 版本。按 [README 维护中的安装步骤](../README.md#install-the-preview)运行单条 uvx 命令；使用 Python 安装时，展开对应系统的虚拟环境步骤，需要 Python 3.11+。
 
 使用 uv 时运行：
 
@@ -16,7 +16,17 @@
 uvx --prerelease allow codex-desk
 ```
 
-保持终端运行，打开它打印的地址，默认是 **`http://127.0.0.1:8787`**。 如果提示地址已占用，原 Desk 终端仍运行时直接重新打开该地址；需要换端口时，在启动命令后加 `--port 8788`。端口占用不会创建或修改 Desk 记录。如果 Codex 历史位于其他目录，在启动命令后加 `--codex-home /你的目录`。Windows 与 WSL 使用各自启动环境中可访问的 Codex home 和项目路径。
+保持终端运行，打开它打印的地址，默认是 **`http://127.0.0.1:8787`**。如果地址已占用，重新打开它会回到仍在运行的 Desk；要换成更新后的版本，先在旧终端按 **Ctrl+C** 再启动。需要换端口时，在启动命令后加 `--port 8788`。端口占用不会创建或修改 Desk 记录。如果 Codex 历史位于其他目录，在启动命令后加 `--codex-home /你的目录`。Windows 与 WSL 使用各自启动环境中可访问的 Codex home 和项目路径。
+
+### 更新已缓存的 uvx 预览
+
+uvx 可能复用缓存中的旧版 Desk。需要更新时，先在旧 Desk 启动终端按 **Ctrl+C**，再运行一次：
+
+```sh
+uvx --prerelease allow codex-desk@latest
+```
+
+以后仍用普通的 `uvx --prerelease allow codex-desk` 启动。更新和以后启动时，都附上原有的 `--codex`、`--codex-home`、`--state-dir` 和 `--port` 参数；保持同一 state directory，会话、索引、草稿和准备列表留在原数据库。uvx 选中的 Desk 软件包版本用 `uvx --prerelease allow codex-desk --version` 查看；原生 Codex CLI 的版本另用 `codex --version` 检查。
 
 ## 2. 按答案中的文字查找
 
@@ -54,7 +64,7 @@ uvx --prerelease allow codex-desk
 ## 5. 关闭后回来
 
 - **只关闭页面：** 终端和后台任务继续运行。在同一浏览器重新打开终端打印的 URL，会恢复上次打开的会话及草稿；也可在侧栏选择已保存的会话。
-- **停止 Desk：** 在启动终端按 **Ctrl+C**，停止 Desk 管理的 app-server 和原生任务。再次运行 README 中同一条 uvx 命令，或从原虚拟环境启动 `codex-desk`。保持原来的 `--codex-home`、`--state-dir` 和 `--codex` 参数。
+- **停止 Desk：** 在启动终端按 **Ctrl+C**，停止 Desk 管理的 app-server 和原生任务。再次运行 README 中同一条 uvx 命令，或从原虚拟环境启动 `codex-desk`。保持原来的 `--codex-home`、`--state-dir`、`--codex` 和 `--port` 参数。需要更新 uvx 缓存时，使用第 1 节的一次性更新命令。
 - **检查准备是否恢复：** 选中同一会话，核对任务文字、Work／Plan 模式和 **Prepared follow-ups**。草稿和后续任务保存在本地，不会因重启自动发送。
 
 本地记录默认位于 `~/.local/state/codex-desk/desk.sqlite3`。同一 state directory 保留会话绑定、索引缓存和准备内容；浏览器记住上次选中的会话。换浏览器时，在侧栏重新选择它。

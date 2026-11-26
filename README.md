@@ -13,7 +13,7 @@
 
 ## Install the preview
 
-Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installation and sign-in. Check `codex --version` in the terminal where you will launch Desk.
+Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installation and sign-in. Check `codex --version` in the terminal where you will launch Desk; this reports the native Codex CLI version.
 
 With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one command** installs and opens the free local workbench on Linux, macOS, Windows or WSL:
 
@@ -25,7 +25,17 @@ The current version is an alpha, so `--prerelease allow` selects the preview fro
 
 Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
 
-If that address is already in use, reopen it when your existing Desk terminal is still running. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
+If that address is already in use, reopening it uses the Desk server already running there. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
+
+### Update an existing uvx installation
+
+uvx can reuse an older cached preview. First stop the running Desk terminal with **Ctrl+C**, then run this command once:
+
+```sh
+uvx --prerelease allow codex-desk@latest
+```
+
+Afterwards use the usual `uvx --prerelease allow codex-desk` launch command. Append any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to the update and later launches. Reusing the same state directory retains your saved conversations, indexed history, drafts and prepared follow-ups. Check the selected Desk package version with `uvx --prerelease allow codex-desk --version`; `codex --version` checks your separate native Codex CLI installation.
 
 <details>
 <summary>Install with Python instead of uv</summary>
@@ -61,7 +71,7 @@ For later launches, use `codex-desk` in the activated environment, or `.\.venv\S
 
 1. **Your recent Codex work** appears on the first screen, including the project folder. Click **Resume conversation** to open the one you want.
 2. Read the saved messages, command results and tool evidence. Write your next task and wait for **Draft saved locally**, or choose **Save as follow-up**. Send it when ready; Work and Plan modes use native Codex.
-3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft. After stopping Desk with **Ctrl+C**, relaunch with the same command to return.
+3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft. After stopping Desk with **Ctrl+C**, relaunch with the same command and any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to return.
 
 ![Recent CLI conversations ready to resume in Codex Desk](docs/recent-work.png)
 
