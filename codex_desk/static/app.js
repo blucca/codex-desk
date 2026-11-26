@@ -1,4 +1,18 @@
 const $ = id => document.getElementById(id);
+function consumeDeskAccessFragment(){
+  const accessFragment = new URLSearchParams(window.location.hash.slice(1));
+  if(!accessFragment.has('access'))return false;
+  sessionStorage.setItem('codex-desk-access',accessFragment.get('access'));
+  window.history.replaceState(null,'',window.location.pathname+window.location.search);
+  return true;
+}
+consumeDeskAccessFragment();
+window.addEventListener('hashchange',()=>{if(consumeDeskAccessFragment())window.location.reload();});
+function deskAccessHeaders(headers={}){
+  const token=sessionStorage.getItem('codex-desk-access');
+  if(token)headers['X-Codex-Desk-Access']=token;
+  return headers;
+}
 let state = {profiles: [], sessions: []}, selected = null, after = 0, items = new Map(), requests = new Map();
 const nodes = new Map(), itemTurns = new Map(), collaborationGroups = new Map();
 const collaborationTypes = new Set(['collabAgentToolCall', 'subAgentActivity']);
@@ -61,7 +75,7 @@ $('draft-load').onclick=()=>{const id=selected,current=draftConflicts.get(id);if
 window.addEventListener('pagehide',()=>{
   if(selected)rememberDraft(selected);
   // A debounced save can already be waiting behind an in-flight response.
-  for(const id of new Set([...draftTimers.keys(),...draftSaves.keys()])){clearTimeout(draftTimers.get(id));if(draftRevisions.has(id) && !draftConflicts.has(id))fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:id,text:drafts.get(id) || '',mode:draftModes.get(id) || 'native',revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0}),keepalive:true}).catch(()=>{});}
+  for(const id of new Set([...draftTimers.keys(),...draftSaves.keys()])){clearTimeout(draftTimers.get(id));if(draftRevisions.has(id) && !draftConflicts.has(id))fetch('/api/draft',{method:'POST',headers:deskAccessHeaders({'Content-Type':'application/json'}),body:JSON.stringify({session:id,text:drafts.get(id) || '',mode:draftModes.get(id) || 'native',revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0}),keepalive:true}).catch(()=>{});}
 });
 function nearLatest(){return window.scrollY+window.innerHeight >= document.documentElement.scrollHeight-140;}
 function latestLabel(){
@@ -73,7 +87,8 @@ function goLatest(){
 }
 $('latest-output').onclick=goLatest;
 async function api(path, data) {
-  const r = await fetch(path, data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {});
+  const headers=deskAccessHeaders(data ? {'Content-Type':'application/json'} : {});
+  const r = await fetch(path, data ? {method:'POST', headers, body:JSON.stringify(data)} : {headers});
   const v = await r.json(); if (!r.ok) {const e=new Error(v.error || 'Request failed');e.status=r.status;e.current=v.current;throw e;} return v;
 }
 function error(e) { $('error').textContent = e.message; $('error').hidden = false; }
@@ -457,7 +472,7 @@ async function tick(){
     if(starting){if(!await startup()){++failures;return;}failures=0;}
     await pollActivity();failures=0;if($('error').textContent===connectionError)$('error').hidden=true;
   }
-  catch(e){if(++failures===1){error(new Error(connectionError));if(starting)startupError=connectionError;}}
+  catch(e){if(++failures===1){const message=e.status===403?e.message:connectionError;error(new Error(message));if(starting)startupError=message;}}
   finally{setTimeout(tick,failures?3000:800);}
 }
 DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>generation,open,
@@ -523,11 +538,12 @@ async function nativeList(cursor=null) {
 function fillProfiles(select) {select.replaceChildren(...state.profiles.map(p=>{const n=make('option',p.name);n.value=p.id;return n;}));}
 let handoffSource=null;
 // Canceled next-task preparation belongs to its source, not the shared dialog.
-const handoffGoals=new Map();
+const handoffGoals=new Map(), handoffEvidence=new Map();
 $('handoff-goal').oninput=()=>{if(handoffSource)handoffGoals.set(handoffSource,$('handoff-goal').value);};
+$('handoff-text').oninput=()=>{if(handoffSource)handoffEvidence.set(handoffSource,$('handoff-text').value);};
 async function showHandoff(thread,cwd,valid=()=>true) {
   const current=generation;
-  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;handoffSource=thread;$('handoff-goal').value=handoffGoals.get(thread) || '';$('handoff-error').hidden=true;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
+  try {const r=await api('/api/handoff',{thread});if(current!==generation || !valid())return;handoffSource=thread;$('handoff-goal').value=handoffGoals.get(thread) || '';$('handoff-error').hidden=true;$('handoff-cwd').value=cwd;fillProfiles($('handoff-profile'));$('handoff-text').value=handoffEvidence.has(thread)?handoffEvidence.get(thread):r.text;$('history').close();$('preview').showModal();}catch(e){if(current===generation && valid())error(e);}
 }
 $('browse').onclick=()=>{$('history').showModal();nativeList();};
 $('history-search').oninput=resetNative;
@@ -536,7 +552,7 @@ $('history').addEventListener('close',()=>{if(!$('history').open)resetNative();}
 $('more').onclick=()=>nativeList(nativeCursor);
 $('history-close').onclick=()=>$('history').close();$('preview-close').onclick=()=>$('preview').close();
 $('handoff').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)showHandoff(s.thread_id,s.cwd);};
-$('handoff-start').onclick=async()=>{const b=$('handoff-start'),source=handoffSource,goal=$('handoff-goal').value;b.disabled=true;$('handoff-error').hidden=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text:$('handoff-text').value,goal});if(handoffGoals.get(source)===goal)handoffGoals.delete(source);$('preview').close();await open(r.id);}catch(e){$('handoff-error').textContent=e.message;$('handoff-error').hidden=false;}finally{b.disabled=false;}};
+$('handoff-start').onclick=async()=>{const b=$('handoff-start'),source=handoffSource,goal=$('handoff-goal').value,text=$('handoff-text').value;b.disabled=true;$('handoff-error').hidden=true;try{const r=await api('/api/handoff/start',{cwd:$('handoff-cwd').value,profile:$('handoff-profile').value,text,goal});if(handoffGoals.get(source)===goal)handoffGoals.delete(source);if(handoffEvidence.get(source)===text)handoffEvidence.delete(source);$('preview').close();await open(r.id);}catch(e){$('handoff-error').textContent=e.message;$('handoff-error').hidden=false;}finally{b.disabled=false;}};
 
 let providerEditing=null, providerVersion=0, providerReturn=false;
 function drawProfiles(){

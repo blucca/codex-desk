@@ -3,6 +3,7 @@
 DESK_TEST_TEMP=/your/workspace/temp DESK_CHROMIUM=/path/to/chromium \
   python tests/browser_startup.py
 Set DESK_USE_INSTALLED=1 to exercise an installed release instead of source.
+DESK_STARTUP_CASES=access runs only protected URL recovery and pagehide saving.
 """
 import asyncio
 from collections import Counter
@@ -204,12 +205,80 @@ async def check():
                         assert await page.locator('#task').is_hidden()
                         assert desk.store.get('a')['thread_id'] == 'native-a'
 
-                    await case('initial state retry and exact saved return', state_retry)
-                    await case('saved open retry preserves error and preparation', open_retry)
-                    await case('manual selection supersedes delayed startup return', superseded_return)
-                    await case('recovery preserves an unrelated user error', unrelated_error)
-                    await case('saved return retains archive eligibility', archive_eligibility)
-                    await case('permanent native rejection stays explicit without repeated opens', permanent_rejection)
+                    async def protected_return():
+                        controls.clear()
+                        token = 'controlled-current-launch'
+                        gated = ThreadingHTTPServer(('127.0.0.1', 0), handler(desk, access_token=token))
+                        gated_worker = threading.Thread(target=gated.serve_forever, daemon=True)
+                        gated_worker.start()
+                        protected_url = f'http://127.0.0.1:{gated.server_port}'
+                        try:
+                            context = await browser.new_context(viewport={'width': 390, 'height': 844})
+                            await context.add_init_script('localStorage.setItem("codex-desk-session", "a");')
+                            page = await context.new_page()
+                            page.on('pageerror', lambda e: errors.append(str(e)))
+                            before = len(open_calls)
+                            await page.goto(protected_url)
+                            await page.locator('#error:not([hidden])').wait_for()
+                            expected = 'Open the current printed Codex Desk URL to access your local workbench'
+                            assert await page.locator('#error').inner_text() == expected
+                            await page.evaluate('sessionStorage.setItem("codex-desk-access", "previous-launch")')
+                            await page.reload()
+                            await page.locator('#error:not([hidden])').wait_for()
+                            assert await page.locator('#error').inner_text() == expected
+                            assert await page.evaluate('state.sessions.length') == 0 and len(open_calls) == before
+                            await page.goto(protected_url + '#access=' + token)
+                            await restored(page, 'a')
+                            assert not urlsplit(page.url).fragment
+                            assert await page.locator('#error').is_hidden()
+                            await page.evaluate('''() => {
+                                const original=window.fetch;
+                                window.fetch=(path,options)=>{
+                                    if(options?.keepalive)sessionStorage.setItem('access-pagehide-request',
+                                        JSON.stringify({path,headers:options.headers}));
+                                    return original(path,options);
+                                };
+                            }''')
+                            candidate = 'Keep this edited preparation through protected reload'
+                            await page.locator('#prompt').fill(candidate)
+                            await page.locator('#turn-mode').select_option('native')
+                            assert await page.evaluate('draftTimers.has("a")')
+                            assert load_draft(desk.store, 'a')['text'] == 'Prepared next task for a'
+                            await page.reload()
+                            await page.wait_for_function('selected==="a" && !opening && !$("task").hidden')
+                            assert await page.locator('#prompt').input_value() == candidate
+                            assert await page.locator('#turn-mode').input_value() == 'native'
+                            flushed = await page.evaluate('JSON.parse(sessionStorage.getItem("access-pagehide-request"))')
+                            assert flushed['path'] == '/api/draft'
+                            assert flushed['headers']['X-Codex-Desk-Access'] == token
+                            assert flushed['headers']['Content-Type'] == 'application/json'
+                            receipt = {'bareAndStale403Guidance': True, 'currentFragmentRestored': True,
+                                'pagehideAuthorized': True, 'reloadText': candidate, 'reloadMode': 'native',
+                                'nativeModelTurns': 0}
+                            if os.environ.get('DESK_TEST_EVIDENCE'):
+                                evidence = Path(os.environ['DESK_TEST_EVIDENCE'])
+                                evidence.mkdir(parents=True, exist_ok=True, mode=0o700)
+                                await page.screenshot(path=str(evidence / 'access-recovery-390.png'), full_page=True)
+                                (evidence / 'access-result.json').write_text(json.dumps(receipt, indent=2) + '\n')
+                                for path in evidence.iterdir():
+                                    if path.is_file():
+                                        path.chmod(0o600)
+                            await page.locator('#prompt').fill('Prepared next task for a')
+                            await page.locator('#turn-mode').select_option('plan')
+                            await page.wait_for_function('draftSaved.get("a")?.text==="Prepared next task for a" && draftSaved.get("a")?.mode==="plan"')
+                        finally:
+                            gated.shutdown()
+                            gated.server_close()
+                            gated_worker.join(timeout=5)
+
+                    if os.environ.get('DESK_STARTUP_CASES') != 'access':
+                        await case('initial state retry and exact saved return', state_retry)
+                        await case('saved open retry preserves error and preparation', open_retry)
+                        await case('manual selection supersedes delayed startup return', superseded_return)
+                        await case('recovery preserves an unrelated user error', unrelated_error)
+                        await case('saved return retains archive eligibility', archive_eligibility)
+                        await case('permanent native rejection stays explicit without repeated opens', permanent_rejection)
+                    await case('bare/stale access recovery and authorized pagehide draft return', protected_return)
                     for identifier in threads:
                         assert load_draft(desk.store, identifier)['text'] == 'Prepared next task for ' + identifier
                     assert not errors, errors

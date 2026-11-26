@@ -14,7 +14,7 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from codex_desk import __version__
 from codex_desk import server as desk_server
@@ -74,7 +74,7 @@ class CliTests(unittest.TestCase):
                     desk_server.main()
             self.assertEqual(exit.exception.code, 2)
             self.assertIn(f'http://127.0.0.1:{port} is already in use', errors.getvalue())
-            self.assertIn('If Codex Desk is already running, reopen that URL', errors.getvalue())
+            self.assertIn('If Codex Desk is already running, use the complete printed URL from its existing terminal', errors.getvalue())
             self.assertIn('--port 8788', errors.getvalue())
             self.assertNotIn('Traceback', errors.getvalue())
             self.assertEqual(output.getvalue(), '')
@@ -121,10 +121,11 @@ class CliTests(unittest.TestCase):
                     patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
                     patch.object(desk_server, 'LoopbackHTTPServer', side_effect=bind), \
                     patch.object(desk_server, 'Desk', side_effect=initialize), \
+                    patch.object(desk_server.secrets, 'token_urlsafe', return_value='controlled-launch-token'), \
                     patch.object(desk_server.webbrowser, 'open') as browser, \
                     contextlib.redirect_stdout(io.StringIO()) as output:
                 desk_server.main()
-            self.assertEqual(output.getvalue(), f'Codex Desk: http://127.0.0.1:{servers[0].server_port}\n')
+            self.assertEqual(output.getvalue(), f'Codex Desk: http://127.0.0.1:{servers[0].server_port}#access=controlled-launch-token\n')
             self.assertEqual(servers[0].socket.fileno(), -1)
             self.assertEqual(desks[0].runtimes, {})
             with self.assertRaises(sqlite3.ProgrammingError):
@@ -372,16 +373,18 @@ for line in sys.stdin:
                 line = lines.get(timeout=10)
                 self.assertTrue(line.startswith('Codex Desk: http://127.0.0.1:'), line)
                 address = urlsplit(line.removeprefix('Codex Desk: ').strip())
+                access_token = parse_qs(address.fragment)['access'][0]
                 connection = http.client.HTTPConnection(address.hostname, address.port, timeout=10)
                 try:
                     connection.request('POST', '/api/sessions',
                         json.dumps({'cwd': str(project), 'profile': 'default'}),
-                        {'Content-Type': 'application/json'})
+                        {'Content-Type': 'application/json', 'X-Codex-Desk-Access': access_token})
                     response = connection.getresponse()
                     created = json.loads(response.read())
                     self.assertEqual(response.status, 200, created)
                     connection.request('POST', '/api/open',
-                        json.dumps({'session': created['id']}), {'Content-Type': 'application/json'})
+                        json.dumps({'session': created['id']}),
+                        {'Content-Type': 'application/json', 'X-Codex-Desk-Access': access_token})
                     response = connection.getresponse()
                     opened = json.loads(response.read())
                     self.assertEqual(response.status, 200, opened)

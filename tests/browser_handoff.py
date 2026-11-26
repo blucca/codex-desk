@@ -96,9 +96,12 @@ async def check():
 
                         await review('a')
                         await page.fill('#handoff-goal', 'Change only project A login')
+                        edited_a_evidence = (await page.input_value('#handoff-text')) + '\nReviewed A: skip the completed login edit; verify remaining logout only.'
+                        await page.fill('#handoff-text', edited_a_evidence)
                         await page.click('#preview-close')
                         await review('a')
                         same_source_goal = await page.input_value('#handoff-goal')
+                        same_source_evidence = await page.input_value('#handoff-text')
                         await page.click('#preview-close')
                         await review('b')
                         cancelled_goal = await page.input_value('#handoff-goal')
@@ -129,18 +132,29 @@ async def check():
                             goal:$('handoff-goal').value,evidence:$('handoff-text').value,
                             profile:$('handoff-profile').value})""")
                         await page.screenshot(path=str(evidence / f'handoff-retry-{width}.png'), full_page=True)
+                        await page.click('#preview-close')
+                        await review('b')
+                        failed_reopen_evidence = await page.input_value('#handoff-text')
+                        failed_reopen_goal = await page.input_value('#handoff-goal')
                         await page.fill('#handoff-cwd', str(projects['b']))
                         await page.click('#handoff-start')
                         await page.wait_for_function("!$('preview').open && !$('task').hidden")
                         await review('b')
                         completed_goal = await page.input_value('#handoff-goal')
+                        completed_evidence = await page.input_value('#handoff-text')
                         await page.click('#preview-close')
                         await review('a')
                         retained_source_goal = await page.input_value('#handoff-goal')
+                        retained_source_evidence = await page.input_value('#handoff-text')
                         overflow = await page.evaluate('document.documentElement.scrollWidth > innerWidth')
                         await page.click('#preview-close')
                         result = {'width': width, 'cancelledGoal': cancelled_goal,
                                   'sameSourceGoal': same_source_goal,
+                                  'sameSourceEvidenceRetained': same_source_evidence == edited_a_evidence,
+                                  'failedReopenEvidenceRetained': failed_reopen_evidence == b_evidence,
+                                  'failedReopenGoal': failed_reopen_goal,
+                                  'completedEvidenceFresh': completed_evidence != b_evidence and not completed_evidence.endswith('Reviewed remaining: run the project B build.'),
+                                  'otherSourceEvidenceRetained': retained_source_evidence == edited_a_evidence,
                                   'completedGoal': completed_goal, 'failedStart': failure,
                                   'pendingCommandEvidence': pending_evidence,
                                   'nativeFailureEvidence': failure_evidence,
@@ -153,6 +167,9 @@ async def check():
                     (evidence / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')
                     print(json.dumps(receipt, indent=2), flush=True)
                     for result in results:
+                        assert result['sameSourceEvidenceRetained'] and result['failedReopenEvidenceRetained'], result
+                        assert result['completedEvidenceFresh'] and result['otherSourceEvidenceRetained'], result
+                        assert result['failedReopenGoal'] == 'Verify only project B build', result
                         assert result['cancelledGoal'] == '', result
                         assert result['sameSourceGoal'] == 'Change only project A login', result
                         assert result['completedGoal'] == '', result

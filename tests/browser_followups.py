@@ -6,6 +6,7 @@ DESK_TEST_TEMP=/your/workspace/temp DESK_CHROMIUM=/path/to/chromium \
 The fixture subclasses Runtime, retaining its attachment/turn/approval lifecycle.
 Only request/send transport is controlled; it starts no native process or inference.
 DESK_FOLLOWUP_CASES=unknown runs only the retirement/restart/review acceptance.
+DESK_FOLLOWUP_CASES=edit-return runs only saved-entry edit/return acceptance.
 """
 import asyncio
 import json
@@ -67,6 +68,8 @@ async def check():
 
             def request(self, method, params, timeout=30):
                 native_calls.append({'method': method, 'session': self.id, 'params': params})
+                if method == 'thread/list':
+                    return {'data': [], 'nextCursor': None}
                 if method == 'thread/resume':
                     return {'thread': threads[self.id], 'model': 'fixture-model',
                             'modelProvider': 'desk_provider'}
@@ -267,6 +270,81 @@ async def check():
                             await refresh(page)
 
                         only_unknown = os.environ.get('DESK_FOLLOWUP_CASES') == 'unknown'
+                        if not only_unknown:
+                            first = await add(page, 'session-a', 'Inspect parser behavior', 'native')
+                            second = await add(page, 'session-a', 'Run saved verification', 'plan')
+                            await page.reload()
+                            await page.wait_for_function('selected==="session-a" && !opening && !$("task").hidden')
+                            await queue_refresh(page)
+                            for width in (1250, 390):
+                                await page.set_viewport_size({'width': width, 'height': 900 if width == 1250 else 844})
+                                candidate = f'Inspect parser behavior\nKeep API compatibility and verify empty input at {width}px.'
+                                mode = 'plan' if first['mode'] == 'native' else 'native'
+                                await row(page, first['id']).get_by_role('button', name='Edit', exact=True).click()
+                                await row(page, first['id']).get_by_role('textbox', name='Follow-up task').fill(candidate)
+                                await row(page, first['id']).get_by_role('combobox', name='Follow-up mode').select_option(mode)
+                                other_edit = row(page, second['id']).get_by_role('button', name='Edit', exact=True)
+                                if await other_edit.is_enabled():
+                                    await other_edit.click()
+                                    await row(page, first['id']).get_by_role('button', name='Edit', exact=True).click()
+                                actual = await row(page, first['id']).get_by_role('textbox', name='Follow-up task').input_value()
+                                assert actual == candidate, {'width': width, 'expected': candidate, 'actual': actual}
+                                assert await other_edit.is_disabled()
+                                await queue_refresh(page)
+                                await open_session(page, 'session-b')
+                                await open_session(page, 'session-a')
+                                await queue_refresh(page)
+                                assert await row(page, first['id']).get_by_role('textbox', name='Follow-up task').input_value() == candidate
+                                assert await row(page, first['id']).get_by_role('combobox', name='Follow-up mode').input_value() == mode
+                                assert queue() == [first, second]
+                                await layout(page, width, 'edit-return')
+                                async with page.expect_response(lambda response:
+                                        urlsplit(response.url).path == '/api/followups/edit') as response:
+                                    await row(page, first['id']).get_by_role('button', name='Save changes', exact=True).click()
+                                assert (await response.value).status == 200
+                                await other_edit.wait_for(state='visible')
+                                await page.wait_for_function('document.querySelectorAll("#followup-list textarea").length===0')
+                                first = queue()[0]
+                                assert (first['text'], first['mode']) == (candidate, mode)
+                                assert await other_edit.is_enabled()
+                                await row(page, first['id']).get_by_role('button', name='Edit', exact=True).click()
+                                await row(page, first['id']).get_by_role('textbox', name='Follow-up task').fill('Explicitly cancelled candidate')
+                                await row(page, first['id']).get_by_role('button', name='Cancel edit', exact=True).click()
+                                assert queue() == [first, second]
+                                await other_edit.click()
+                                await row(page, second['id']).get_by_role('button', name='Cancel edit', exact=True).click()
+                                await page.reload()
+                                await page.wait_for_function('selected==="session-a" && !opening && !$("task").hidden')
+                                await queue_refresh(page)
+                                assert await row(page, first['id']).locator('pre').inner_text() == candidate
+                                assert queue() == [first, second]
+                                checkpoint(f'{width}px edit survives entry-switch attempt and project return; Save/Cancel unlock other edits')
+                            async with page.expect_response(lambda response:
+                                    urlsplit(response.url).path == '/api/followups/remove') as response:
+                                await row(page, first['id']).get_by_role('button', name='Remove', exact=True).click()
+                            assert (await response.value).status == 200
+                            await queue_refresh(page)
+                            assert [entry['id'] for entry in queue()] == [second['id']]
+                            await row(page, second['id']).get_by_role('button', name='Edit', exact=True).click()
+                            await clear(page)
+                            replacement = await add(page, 'session-a', 'Preparation after explicit Clear', 'native')
+                            replacement_edit = row(page, replacement['id']).get_by_role('button', name='Edit', exact=True)
+                            assert await replacement_edit.is_enabled(), 'An explicitly cleared editor must not block a new preparation'
+                            await replacement_edit.click()
+                            await row(page, replacement['id']).get_by_role('button', name='Cancel edit', exact=True).click()
+                            await clear(page)
+                            checkpoint('explicit Clear of an edited entry permits editing a new preparation')
+                            assert not queue() and not queue('session-b') and not turns()
+                            assert not errors and not external, (errors, external)
+                            assert {p.name: p.read_bytes() for p in home.iterdir()} == settings
+                            if os.environ.get('DESK_FOLLOWUP_CASES') == 'edit-return':
+                                result = {'passed': completed, 'controlled_turns': 0,
+                                    'native_processes': 0, 'provider_inference_turns': 0,
+                                    'javascript_errors': errors, 'external_requests': external,
+                                    'overflow_1250': False, 'overflow_390': False}
+                                (evidence / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+                                print(json.dumps(result, indent=2), flush=True)
+                                return
                         if only_unknown:
                             await open_session(page, 'session-b')
                             other = await add(page, 'session-b', 'Only project B verification', 'plan')

@@ -26,7 +26,7 @@ The reader uses 40-entry pages (native items or turn-only outcomes) and 20,000-c
 
 ## Prepare a task and come back later
 
-Write your next task and select Work or Plan. **Draft saved locally** confirms the text and mode are saved for this specific Desk session. Reopen the page or restart Desk with the same state directory to recover them; restoration does not send a task. A failed task submission keeps its preparation.
+Write your next task and select Work or Plan. **Draft saved locally** confirms the text and mode are saved for this specific Desk session. Reopen the page or restart Desk with the same state directory to recover them; restoration does not send a task. A failed task submission keeps its preparation. After restarting the server, open its newly printed complete launch URL to restore browser access.
 
 If another tab changes the same draft, choose **Keep this tab draft** or **Load saved draft** before saving or sending again. Sending clears only the preparation actually accepted; newer edits stay in their own session.
 
@@ -46,6 +46,8 @@ Expanded entries show reported agent paths/IDs, lifecycle events, models, prompt
 
 Write a task, choose **Work** or **Plan**, then click **Save as follow-up**. This saves preparation for the current Desk conversation and provider, even while another task runs. Expand **Prepared follow-ups** to edit, remove, reorder or clear the saved instructions.
 
+While editing a follow-up, choose **Save changes** or **Cancel edit** before editing another row.
+
 When the current turn finishes, choose **Send next**. It submits one reviewed saved instruction to this conversation, not whichever project you select while its response arrives. Remaining instructions stay paused. Opening a page or restarting Desk never sends a queued task.
 
 If a start cannot be confirmed, the queue shows its captured instruction. Check the conversation activity, then choose **It started — record accepted** or **It did not start — keep prepared**. Pending starts block another send; edits made after a start was captured remain prepared instead of being deleted by its receipt.
@@ -61,6 +63,8 @@ Saving does not reconfigure a running native backend. If the profile is already 
 [Step-by-step provider-switch task guide](https://blucca.github.io/guides/switch-codex-api-provider/): verify the local API profile, review the saved evidence, run one next task, and return to the new conversation.
 
 Choose **Continue with another provider** in an open session, or **Review handoff** beside a saved conversation. Review the visible messages, commands, file changes and MCP results; state the next goal and select the target profile. Desk starts a **distinct native thread** with that reviewed text, leaving the original rollout intact. Reading a handoff does not run a model turn or attempt compaction through the old provider. Encrypted reasoning is not replayed into the new thread. Pending commands retain their reported status; an unreported exit or output is shown as unreported, so you can review that evidence before continuing.
+
+Canceling the handoff retains that source’s edited goal and evidence for this page; reviewing another source keeps its preparation separate. A successful start clears the exact submitted edits.
 
 This is useful when the old provider is unavailable and you want to carry useful task evidence into a fresh conversation. Verify the target profile’s endpoint/model in **Open a project** before selecting its name in the handoff. Same-thread resume uses the current selected settings.
 

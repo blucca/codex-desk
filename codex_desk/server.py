@@ -4,6 +4,7 @@ import errno
 import json
 import os
 from pathlib import Path
+import secrets
 import shlex
 import shutil
 import signal
@@ -328,7 +329,12 @@ class Desk:
             runtime.close()
 
 
-def handler(desk):
+def handler(desk, access_token=None):
+    """Build the UI handler with a per-launch private-API capability.
+
+    access_token=None is internal controlled-fixture mode. Production main
+    always injects a fresh capability shared through its printed launch URL.
+    """
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -348,10 +354,19 @@ def handler(desk):
             origin = self.headers.get('Origin')
             if origin and origin != 'http://' + expected:
                 raise ValueError("Cross-origin requests are not accepted")
+        def authorized(self):
+            if access_token is not None and not secrets.compare_digest(
+                    self.headers.get('X-Codex-Desk-Access', '').encode('utf-8'),
+                    access_token.encode('utf-8')):
+                self.reply({'error': 'Open the current printed Codex Desk URL to access your local workbench'}, 403)
+                return False
+            return True
         def do_GET(self):
             try:
                 self.local()
                 url = urlsplit(self.path)
+                if url.path.startswith('/api/') and not self.authorized():
+                    return
                 if url.path == '/api/history/index':
                     return self.reply({'job': desk.history_scanner.status(),
                                        'coverage': desk.native_index.stats()})
@@ -421,6 +436,8 @@ def handler(desk):
         def do_POST(self):
             try:
                 self.local()
+                if not self.authorized():
+                    return
                 if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                     raise ValueError("Expected JSON request")
                 size = int(self.headers.get('Content-Length', '0'))
@@ -563,7 +580,7 @@ def main():
         alternate = 8788 if args.port != 8788 else 8787
         if error.errno in (errno.EADDRINUSE, 10048):
             parser.error(f'{url} is already in use. If Codex Desk is already running, '
-                         f'reopen that URL in your browser; otherwise choose another port '
+                         f'use the complete printed URL from its existing terminal; otherwise choose another port '
                          f'with --port {alternate}')
         parser.error(f'Could not listen on {url}: {error.strerror or error}. '
                      f'Choose another port with --port {alternate}')
@@ -571,8 +588,9 @@ def main():
     previous_signals = {}
     try:
         desk = Desk(args.codex, args.codex_home, args.state_dir)
-        server.RequestHandlerClass = handler(desk)
-        url = f'http://127.0.0.1:{server.server_port}'
+        access_token = secrets.token_urlsafe(32)
+        server.RequestHandlerClass = handler(desk, access_token=access_token)
+        url = f'http://127.0.0.1:{server.server_port}#access={access_token}'
         print('Codex Desk: ' + url, flush=True)
         if not args.no_browser:
             webbrowser.open(url)

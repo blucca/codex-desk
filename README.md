@@ -23,11 +23,11 @@ uvx --prerelease allow codex-desk
 
 The current version is an alpha, so `--prerelease allow` selects the preview from [PyPI](https://pypi.org/project/codex-desk/). [The accepted GitHub wheel](https://github.com/blucca/codex-desk/releases) is also available.
 
-Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
+Keep that terminal running. Desk opens the **complete launch URL printed in that terminal** in your browser (normally at `http://127.0.0.1:8787`). Run the same command next time and open its newly printed URL; your saved conversations and drafts remain local.
 
 For a remembered answer, choose **Find a decision in past work → Index existing Codex history**, enter the phrase and choose **Search**, then **Read original conversation**. Use the original evidence to decide which check to change or skip; continuing the conversation is optional.
 
-If that address is already in use, reopening it uses the Desk server already running there. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
+If that address is already in use, use the complete URL in the existing Desk terminal to reopen that running server. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
 
 ### Update an existing uvx installation
 
@@ -108,7 +108,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 ## Local by design
 
-Desk runs on loopback and uses your installed Codex app-server. Existing sign-in, model/provider, MCP, trust and sandbox settings come from your Codex configuration. A new Desk account or API key is unnecessary.
+Desk runs on loopback and uses your installed Codex app-server. The printed URL carries a per-launch browser access fragment; the browser keeps it in this tab’s session storage and uses it for private API requests. After a server restart, open the newly printed complete URL. Existing sign-in, model/provider, MCP, trust and sandbox settings come from your Codex configuration. A new Desk account or API key is unnecessary.
 
 Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing and the original-conversation reader use native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
 

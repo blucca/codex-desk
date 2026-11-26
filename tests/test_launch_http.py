@@ -19,7 +19,7 @@ import tempfile
 import threading
 import time
 import unittest
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 
 SOURCE = Path(__file__).resolve().parents[1]
@@ -159,10 +159,10 @@ class LaunchHTTPTests(unittest.TestCase):
                   f'native_home_exists={self.home.exists()}; browser_called={self.browser.exists()}')
 
     @staticmethod
-    def get(address, path):
+    def get(address, path, headers=None):
         connection = http.client.HTTPConnection(address.hostname, address.port, timeout=2)
         try:
-            connection.request('GET', path)
+            connection.request('GET', path, headers=headers or {})
             response = connection.getresponse()
             return response.status, response.getheader('Content-Type'), response.read()
         finally:
@@ -202,6 +202,17 @@ class LaunchHTTPTests(unittest.TestCase):
             self.assertEqual(address.hostname, '127.0.0.1')
             self.assertGreater(address.port, 0)
             self.assertLessEqual(address.port, 65535)
+            access_token = parse_qs(address.fragment)['access'][0]
+            self.assertTrue(access_token)
+            status, mime, body = self.get(address, '/api/state')
+            self.assertEqual((status, mime), (403, 'application/json; charset=utf-8'))
+            self.assertIn('current printed Codex Desk URL', json.loads(body)['error'])
+            self.assertNotIn(access_token.encode(), body)
+            status, mime, body = self.get(address, '/api/state', {'X-Codex-Desk-Access': access_token})
+            self.assertEqual((status, mime), (200, 'application/json; charset=utf-8'))
+            self.assertEqual(json.loads(body), {'profiles': [{'id': 'default',
+                'name': 'Current Codex settings', 'editable': False}],
+                'sessions': [], 'organized': [], 'pending': {}})
             status, mime, body = self.get(address, '/')
             self.assertEqual((status, mime), (200, 'text/html; charset=utf-8'))
             static = Path(desk_server.__file__).resolve().parent / 'static'
