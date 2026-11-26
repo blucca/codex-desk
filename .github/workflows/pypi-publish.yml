@@ -1,0 +1,50 @@
+name: Publish accepted wheel to PyPI
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing accepted GitHub release tag
+        required: true
+        default: v0.1.0a29
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: pypi
+      url: https://pypi.org/project/codex-desk/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch accepted release wheel
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python - <<'PY'
+          import email, os, pathlib, re, urllib.request, zipfile
+          tag = os.environ['RELEASE_TAG']
+          assert re.fullmatch(r'v\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?', tag), tag
+          version = tag[1:]
+          name = f'codex_desk-{version}-py3-none-any.whl'
+          folder = pathlib.Path('temp/pypi-dist')
+          folder.mkdir(parents=True)
+          wheel = folder / name
+          url = f'https://github.com/blucca/codex-desk/releases/download/{tag}/{name}'
+          with urllib.request.urlopen(url, timeout=60) as response:
+              wheel.write_bytes(response.read())
+          with zipfile.ZipFile(wheel) as archive:
+              metadata = email.message_from_bytes(archive.read(f'codex_desk-{version}.dist-info/METADATA'))
+              assert metadata['Name'] == 'codex-desk', metadata['Name']
+              assert metadata['Version'] == version, metadata['Version']
+          print(f'Accepted {tag}: {name} ({wheel.stat().st_size} bytes)')
+          PY
+      - name: Publish with trusted GitHub identity
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: temp/pypi-dist/
+          skip-existing: true
