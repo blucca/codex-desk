@@ -78,6 +78,20 @@ async def check(width, playwright, evidence):
             'newer-context': source('newer-context', [agent('NEWER ANSWER remains the current reader.', 'newer-item')]),
             'bound-context': source('bound-context', [agent('BOUND ANSWER stays readable in imported history.', 'bound-item')]),
             'vanished-context': source('vanished-context', [agent('VANISHED ANSWER preserve the cached result.', 'vanished-item')])}
+        # Keep the original reader fixtures inside the explicit recent-200 scan,
+        # and make the title catalog the only path to these older originals.
+        for n in range(194):
+            identifier = f'padding-{n:03d}'
+            threads[identifier] = source(identifier, [agent(f'Recent retained context {n:03d}',
+                f'padding-item-{n}')], active_project)
+        catalog_query = 'Catalog + original? Café 项目'
+        for n in range(32):
+            identifier = f'catalog-old-{n:02d}'
+            thread = source(identifier, [agent(f'CATALOG ORIGINAL {n:02d} page evidence {item:02d}',
+                f'catalog-item-{n:02d}-{item:02d}') for item in range(42)],
+                deleted_project if n in (0, 31) else active_project)
+            thread.update(name=f'{catalog_query} {n:02d}', updatedAt=1795624000 - n)
+            threads[identifier] = thread
         active = source('active-thread', [agent('Active selected work stays in place.', 'active-item')], active_project)
 
         class ControlledRuntime(Runtime):
@@ -96,9 +110,12 @@ async def check(width, playwright, evidence):
                 assert method in ('thread/list', 'thread/read'), 'Unexpected native mutation: ' + method
                 if method == 'thread/list':
                     start, size = int(params.get('cursor') or 0), params.get('limit', 30)
-                    rows = list(threads.values())[start:start + size]
+                    search = params.get('searchTerm', '').casefold()
+                    matches = [t for t in threads.values() if search in t['name'].casefold()
+                               and (not params.get('cwd') or params['cwd'] == t['cwd'])]
+                    rows = matches[start:start + size]
                     return {'data': [{k: v for k, v in row.items() if k != 'turns'} for row in rows],
-                            'nextCursor': str(start + size) if start + size < len(threads) else None}
+                            'nextCursor': str(start + size) if start + size < len(matches) else None}
                 identifier = params['threadId']
                 assert params.get('includeTurns') is True
                 if identifier in holds:
@@ -180,6 +197,38 @@ async def check(width, playwright, evidence):
                 await page.locator('#history-reader-back').click()
                 await page.wait_for_function("!$('history-reader').open && $('recall').open")
 
+            async def catalog_search(text):
+                assert not await page.locator('#history-reader').evaluate('(node)=>node.open')
+                await page.locator('#history-search').fill(text)
+                await page.locator('#history-search').press('Enter')
+                await page.wait_for_function("!$('history-search-submit').disabled")
+
+            def catalog_row(identifier):
+                return page.locator('#native-list .native-row').filter(
+                    has=page.get_by_text(threads[identifier]['name'], exact=True))
+
+            async def catalog_back():
+                await page.locator('#history-reader-back').click()
+                await page.wait_for_function("!$('history-reader').open && $('history').open")
+
+            async def catalog_read(identifier):
+                row = catalog_row(identifier)
+                assert await row.count() == 1
+                assert await row.locator('button').all_text_contents() == [
+                    'Resume with current settings', 'Review handoff', 'Read original conversation']
+                before = len(paths('/api/native/thread'))
+                await row.get_by_role('button', name='Read original conversation', exact=True).click()
+                await ready()
+                assert len(paths('/api/native/thread')) == before + 1
+                assert paths('/api/native/thread')[-1]['query'] == {'id': [identifier]}
+                assert await page.locator('#history').evaluate('(node)=>node.open')
+                assert 'Thread ' + identifier in await page.locator('#history-reader-binding').inner_text()
+                assert threads[identifier]['cwd'] in await page.locator('#history-reader-binding').inner_text()
+                assert 'Page 1 of' in await page.locator('#history-reader-coverage').inner_text()
+                assert await page.locator('.history-reader-target, #history-reader-body mark').count() == 0
+                assert 'without opening or resuming a task' in await page.locator('#history-reader-match').inner_text()
+                await bounded(); await unchanged()
+
             async def unchanged():
                 current = await page.evaluate("({selected,nativeThreadId,generation,prompt:$('prompt').value,mode:$('turn-mode').value})")
                 assert current == selected_state
@@ -196,6 +245,8 @@ async def check(width, playwright, evidence):
 
             try:
                 await page.goto(url)
+                await page.wait_for_function("$('home-list').children.length===6")
+                assert await page.locator('#home-list button').all_text_contents() == ['Resume conversation'] * 6
                 await page.locator(f'.session-row[data-session="{active_id}"] .session').click()
                 await page.wait_for_function("selected==='active-session' && nativeThreadId==='active-thread' && !opening && !$('task').hidden")
                 assert await page.locator('#prompt').input_value() == draft_text
@@ -204,7 +255,9 @@ async def check(width, playwright, evidence):
                 await page.wait_for_function("!$('recall-index').disabled")
                 await page.locator('#recall-index').click()
                 await page.wait_for_function("$('recall-index-status').textContent.includes('scan completed') && !$('recall-index').disabled")
-                assert desk.history_scanner.status()['indexed'] == 6
+                assert desk.history_scanner.status()['indexed'] == 200
+                assert desk.history_scanner.status()['has_more'] is True
+                assert not any(c['params'].get('threadId', '').startswith('catalog-old-') for c in calls)
                 assert desk.native_index.stats()['truncated_threads'] == 1
                 saved_sessions, saved_draft = desk.store.sessions(), load_draft(desk.store, active_id)
                 saved_database = list(desk.store.db.iterdump())
@@ -355,6 +408,106 @@ async def check(width, playwright, evidence):
                 assert all(c['method'] in ('thread/list', 'thread/read') for c in calls)
                 assert not errors and not external
                 checkpoint('changed original text is reported accurately; reader leaves SQLite, native settings and active work untouched')
+
+                await back()
+                await page.locator('#recall-close').click()
+                await page.locator('#browse').click()
+                await page.wait_for_function("!$('history-search-submit').disabled")
+                assert paths('/api/native')[-1]['query'] == {}
+                assert await page.locator('#native-list .native-row').count() == 30
+                for cursor in range(30, 181, 30):
+                    await page.locator('#more').click()
+                    await page.wait_for_function(
+                        "$('native-list').children.length===%d && !$('more').disabled" % (cursor + 30))
+                    assert paths('/api/native')[-1]['query'] == {'cursor': [str(cursor)]}
+                assert list(threads).index('catalog-old-00') == 200
+                assert desk.history_scanner.status()['seen'] == 200
+                await catalog_read('catalog-old-00')
+                assert not deleted_project.exists()
+                assert 'CATALOG ORIGINAL 00 page evidence 00' in await page.locator('#history-reader-body').inner_text()
+                assert 'Showing items 1–40 of 42. Page 1 of 2.' in await page.locator('#history-reader-coverage').inner_text()
+                await page.screenshot(path=str(evidence / f'catalog-original-deleted-{width}.png'))
+                await catalog_back()
+                assert await page.locator('#history-search').input_value() == ''
+                assert await page.locator('#native-list .native-row').count() == 210
+                assert await page.locator('#more').is_visible()
+                checkpoint('Browse all reads an unindexed deleted-folder original beyond the recent-200 boundary without resume or import')
+
+                # The title filter is native-scoped and each page retains the
+                # exact punctuation/Unicode query; it never searches messages.
+                await catalog_search('  ' + catalog_query + '  ')
+                assert await page.locator('#native-list .native-row').count() == 30
+                assert paths('/api/native')[-1]['query'] == {'search': [catalog_query]}
+                await page.locator('#more').click()
+                await page.wait_for_function("$('native-list').children.length===32 && !$('more').disabled")
+                assert paths('/api/native')[-1]['query'] == {'search': [catalog_query], 'cursor': ['30']}
+                assert await page.locator('#more').is_hidden()
+                title_calls = [c['params'] for c in calls if c['method'] == 'thread/list'
+                               and c['params'].get('searchTerm') == catalog_query]
+                assert len(title_calls) == 2
+                assert all(p['modelProviders'] == [] and p['sortKey'] == 'updated_at'
+                           and 'cwd' not in p for p in title_calls)
+                await catalog_row('catalog-old-31').get_by_role('button', name='Read original conversation').evaluate(
+                    '(button)=>{globalThis.__catalogReadButton=button}')
+                await catalog_read('catalog-old-31')
+                assert 'CATALOG ORIGINAL 31 page evidence 00' in await page.locator('#history-reader-body').inner_text()
+                assert 'CATALOG ORIGINAL 00' not in await page.locator('#history-reader-body').text_content()
+                await page.screenshot(path=str(evidence / f'catalog-original-title-{width}.png'))
+                await page.locator('#history-reader-next').click()
+                assert await page.locator('.history-reader-item').count() == 2
+                assert 'CATALOG ORIGINAL 31 page evidence 41' in await page.locator('#history-reader-body').inner_text()
+                assert await page.locator('#history-reader-next').is_disabled()
+                await bounded(); await unchanged(); await catalog_back()
+                assert await page.locator('#history-search').input_value() == '  ' + catalog_query + '  '
+                assert await page.locator('#native-list .native-row').count() == 32
+                assert await page.locator('#more').is_hidden()
+                await catalog_row('catalog-old-31').scroll_into_view_if_needed()
+                await page.screenshot(path=str(evidence / f'catalog-title-back-{width}.png'))
+                checkpoint('title-list Read opens the exact deleted-folder thread on page one and Back retains its query, rows and pagination')
+
+                await catalog_search('page evidence')
+                assert await page.locator('#native-list .native-row').count() == 0
+                assert 'No saved conversation titles match' in await page.locator('#history-summary').inner_text()
+                await catalog_search('Original newer-context')
+                before = len(paths('/api/native/thread'))
+                await page.evaluate('globalThis.__catalogReadButton.click()')
+                assert not await page.locator('#history-reader').evaluate('(node)=>node.open')
+                assert len(paths('/api/native/thread')) == before
+                assert await page.locator('#native-list .native-row').count() == 1
+                await catalog_read('newer-context')
+                assert 'NEWER ANSWER' in await page.locator('#history-reader-body').inner_text()
+                await catalog_back(); await unchanged()
+                checkpoint('title search excludes body-only matches and a detached old row cannot open a reader after the catalog query changes')
+
+                await catalog_search(catalog_query)
+                await page.locator('#more').click()
+                await page.wait_for_function("$('native-list').children.length===32 && !$('more').disabled")
+                entered, release = threading.Event(), threading.Event()
+                holds['catalog-old-31'] = entered, release
+                await catalog_row('catalog-old-31').get_by_role('button', name='Read original conversation').click()
+                assert await asyncio.to_thread(entered.wait, 5)
+                assert await page.locator('#history-reader-body').get_attribute('aria-busy') == 'true'
+                await catalog_back()
+                await page.locator('#history-close').click()
+                await page.locator('#browse').click()
+                await page.wait_for_function("!$('history-search-submit').disabled")
+                await catalog_search('Original retry-context')
+                await catalog_read('retry-context')
+                async with page.expect_response(lambda response: urlsplit(response.url).path == '/api/native/thread'
+                    and parse_qs(urlsplit(response.url).query).get('id') == ['catalog-old-31']):
+                    release.set()
+                await page.wait_for_timeout(150)
+                assert await page.locator('#history-reader').evaluate('(node)=>node.open')
+                assert 'RETRY ANSWER' in await page.locator('#history-reader-body').inner_text()
+                assert 'CATALOG ORIGINAL 31' not in await page.locator('#history-reader-body').text_content()
+                await bounded(); await unchanged(); await catalog_back()
+                assert await page.locator('#history-search').input_value() == 'Original retry-context'
+                assert await page.locator('#native-list .native-row').count() == 1
+                assert list(desk.store.db.iterdump()) == saved_database
+                assert {p.name: p.read_bytes() for p in home.iterdir()} == settings
+                assert all(c['method'] in ('thread/list', 'thread/read') for c in calls)
+                assert not errors and not external
+                checkpoint('late catalog original read cannot replace a newer reader after Back, close/reopen and a different title query; active work and native settings stay exact')
                 (evidence / f'acceptance-{width}.json').write_text(json.dumps({'viewport': width, 'passed': completed,
                     'javascript_errors': errors, 'external_requests': external, 'controlled_model_turns': 0,
                     'native_resume_calls': 0, 'native_calls': calls, 'http_calls': http,
@@ -365,7 +518,7 @@ async def check(width, playwright, evidence):
                 diagnostic = {'viewport': width, 'passed': completed, 'javascript_errors': errors,
                     'recent_native_calls': calls[-15:], 'recent_http_calls': http[-30:]}
                 try:
-                    diagnostic['page'] = await page.evaluate("({selected,generation,query:$('recall-query').value,reader:$('history-reader').open,status:$('history-reader-status').textContent,match:$('history-reader-match').textContent,coverage:$('history-reader-coverage').textContent,error:$('history-reader-error').textContent})")
+                    diagnostic['page'] = await page.evaluate("({selected,generation,query:$('recall-query').value,catalog:$('history').open,catalogQuery:$('history-search').value,catalogRows:$('native-list').children.length,catalogSummary:$('history-summary').textContent,reader:$('history-reader').open,status:$('history-reader-status').textContent,match:$('history-reader-match').textContent,coverage:$('history-reader-coverage').textContent,error:$('history-reader-error').textContent})")
                     await page.screenshot(path=str(evidence / f'failure-{width}.png'), full_page=True)
                 except Exception:
                     pass

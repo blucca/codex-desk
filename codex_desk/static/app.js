@@ -465,7 +465,7 @@ DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>gener
 tick();
 
 let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;
-function nativeRow(t, resume, handoff, label='Resume with current settings') {
+function nativeRow(t, resume, handoff, label='Resume with current settings', read=null) {
   const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
   const actions=make('div','','actions'),view=make('button',label);view.type='button';
   view.onclick=async()=>{
@@ -474,6 +474,7 @@ function nativeRow(t, resume, handoff, label='Resume with current settings') {
     try {await resume();} finally {view.disabled=false;}
   };actions.append(view);
   if(handoff){const review=make('button','Review handoff');review.type='button';review.onclick=handoff;actions.append(review);}
+  if(read){const original=make('button','Read original conversation');original.type='button';original.onclick=read;actions.append(original);}
   box.append(actions);return box;
 }
 function resetNative() {
@@ -486,7 +487,7 @@ function nativeCurrent(version, query) {return version===nativeVersion && $('his
 function nativeSummary(query) {
   const count=$('native-list').children.length;
   $('history-summary').textContent=count
-    ? (query?`Saved conversations with titles matching “${query}”. `:'')+'Resume with current settings, or review a handoff.'
+    ? (query?`Saved conversations with titles matching “${query}”. `:'')+'Read the original conversation, resume with current settings, or review a handoff.'
     : query?`No saved conversation titles match “${query}”.`:'No saved conversations found.';
 }
 async function nativeList(cursor=null) {
@@ -500,11 +501,14 @@ async function nativeList(cursor=null) {
     const data=await api(historyPath(query,null,cursor));
     if(!nativeCurrent(current,query))return;
     for(const t of data.data || []) {
-      $('native-list').append(nativeRow(t,async()=>{
+      const row=nativeRow(t,async()=>{
         if(!nativeCurrent(current,query))return;
         try {const r=await api('/api/import',{thread:t.id,profile:'default'});if(!nativeCurrent(current,query))return;$('history').close();await open(r.id);}
         catch(e){if(nativeCurrent(current,query)){$('history-error').textContent=e.message;$('history-error').hidden=false;}}
-      },()=>{if(nativeCurrent(current,query))showHandoff(t.id,t.cwd,()=>nativeCurrent(current,query));}));
+      },()=>{if(nativeCurrent(current,query))showHandoff(t.id,t.cwd,()=>nativeCurrent(current,query));},
+      'Resume with current settings',()=>DeskHistoryReader.show({thread_id:t.id,cwd:t.cwd},
+        {valid:()=>nativeCurrent(current,query)&&row.isConnected}));
+      $('native-list').append(row);
     }
     nativeCursor=data.nextCursor;$('more').hidden=!nativeCursor;nativeSummary(query);
   } catch(e) {
