@@ -34,8 +34,7 @@
   function json(value) {return JSON.stringify(review(value), null, 2) ?? 'null';}
   function location(value) {
     if(typeof value!=='string')return '';
-    if(value.toLowerCase().startsWith('data:'))return value.split(';')[0]+' (embedded)';
-    try {const u=new URL(value);u.username='';u.password='';u.search='';u.hash='';return u.toString();}catch {return value.split(/[?#]/)[0];}
+    return reviewLocation(value);
   }
   function annotations(block) {
     const value=block.annotations;

@@ -202,6 +202,46 @@ class ToolEvidenceTests(unittest.TestCase):
                 self.assertEqual(public_uri(value), expected)
         self.assertEqual(public_uri(None), '[Unavailable URI]')
 
+    @unittest.skipUnless(NODE, 'Node is needed for JavaScript formatter acceptance')
+    def test_reader_resource_and_media_descriptors_never_restore_uri_access_or_inline_bytes(self):
+        cases = [
+            ('//reader:URI-SECRET@docs.example/report?token=QUERY-SECRET#auth',
+             '//docs.example/report'),
+            ('https://reader:URI-SECRET@docs.example:bad/report?token=QUERY-SECRET#auth',
+             'https://docs.example:bad/report'),
+            ('https://reader:URI-SECRET@[broken/report?token=QUERY-SECRET', '[Invalid URI]'),
+            ('data:image/svg+xml,%3Csvg%3EINLINE-SECRET%3C/svg%3E',
+             'image/svg+xml; inline payload'),
+            ('https://reader:URI-SECRET@docs.example/report?token=QUERY-SECRET#auth',
+             'https://docs.example/report'),
+            ('file:///project/report.txt', 'file:///project/report.txt'),
+            ('mcp://server/report', 'mcp://server/report'),
+        ]
+        blocks, expected = [], []
+        for uri, descriptor in cases:
+            for kind, block in (
+                    ('resource', {'type': 'resource', 'resource': {
+                        'uri': uri, 'mimeType': 'text/plain', 'text': 'Decisive original evidence'}}),
+                    ('inputImage', {'type': 'inputImage', 'imageUrl': uri}),
+                    ('inputAudio', {'type': 'inputAudio', 'audioUrl': uri})):
+                blocks.append(block)
+                expected.append((kind, descriptor))
+        result = subprocess.run([NODE, '-e',
+            "const e=require(process.argv[1]),b=JSON.parse(process.argv[2]),before=JSON.stringify(b);"
+            "process.stdout.write(JSON.stringify({text:b.map(e.content),unchanged:before===JSON.stringify(b)}))",
+            str(JAVASCRIPT), json.dumps(blocks)], capture_output=True, text=True, check=True, timeout=10)
+        output = json.loads(result.stdout)
+        self.assertTrue(output['unchanged'])
+        for (kind, descriptor), text in zip(expected, output['text']):
+            with self.subTest(kind=kind, descriptor=descriptor):
+                self.assertIn(descriptor, text)
+                self.assertNotIn('-SECRET', text)
+                self.assertNotIn('%3Csvg', text)
+                if kind == 'resource':
+                    self.assertIn('Decisive original evidence', text)
+                else:
+                    self.assertIn('binary omitted', text)
+
 
 if __name__ == '__main__':
     unittest.main()

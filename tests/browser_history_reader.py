@@ -76,6 +76,21 @@ async def check(width, playwright, evidence):
                 '_meta': {'secret': 'HIDDEN READER SECRET'}}}
         context[50] = {'id': 'reasoning-only', 'type': 'reasoning', 'text': 'REASONING READER SECRET',
                        'encryptedContent': 'ENCRYPTED READER SECRET'}
+        uri_locations = [
+            '//reader:URI READER SECRET@docs.example/report?token=URI QUERY SECRET#auth',
+            'https://reader:URI READER SECRET@docs.example:bad/report?token=URI QUERY SECRET#auth',
+            'data:image/svg+xml,%3Csvg%3EINLINE READER SECRET%3C/svg%3E',
+        ]
+        context[48] = {'id': 'safe-resource', 'type': 'mcpToolCall', 'server': 'local', 'tool': 'resource',
+            'status': 'completed', 'arguments': {}, 'result': {'content': [
+                {'type': 'resource', 'resource': {'uri': uri, 'mimeType': 'text/plain',
+                                                'text': 'URI RESOURCE ORIGINAL avoids a repeated probe.'}}
+                for uri in uri_locations]}}
+        context[49] = {'id': 'safe-media', 'type': 'dynamicToolCall', 'tool': 'inspect',
+            'status': 'completed', 'success': True, 'arguments': {}, 'contentItems': [
+                {'type': 'inputText', 'text': 'URI MEDIA ORIGINAL retains the inspection result.'},
+                *[block for uri in uri_locations for block in (
+                    {'type': 'inputImage', 'imageUrl': uri}, {'type': 'inputAudio', 'audioUrl': uri})]]}
         context[51] = {'id': 'media-only', 'type': 'imageGeneration', 'data': 'BINARY READER SECRET'}
         original = source('deleted-context', [])
         original['turns'] = [{'id': f'turn-deleted-context-{n}', 'status': 'completed',
@@ -366,6 +381,23 @@ async def check(width, playwright, evidence):
                         await page.screenshot(path=str(evidence / f'resource-public-match-{width}.png'))
                     await back()
                 checkpoint('indexed MCP resource name/title, MIME, numeric size and public annotations remain original-readable and highlighted across bounded text windows')
+
+                for phrase, identifier in (('URI RESOURCE ORIGINAL', 'safe-resource'),
+                                           ('URI MEDIA ORIGINAL', 'safe-media')):
+                    await read(phrase)
+                    target = page.locator('.history-reader-target')
+                    assert await target.get_attribute('data-item-id') == identifier
+                    assert await target.locator('mark').inner_text() == phrase
+                    text = await target.locator('pre').text_content()
+                    for descriptor in ('//docs.example/report', 'https://docs.example:bad/report',
+                                       'image/svg+xml; inline payload'):
+                        assert descriptor in text
+                    assert all(secret not in text for secret in ('URI READER SECRET', 'URI QUERY SECRET',
+                                                                 'INLINE READER SECRET', '%3Csvg'))
+                    assert await page.locator('#history-reader-body img, #history-reader-body audio').count() == 0
+                    await page.screenshot(path=str(evidence / f'{identifier}-{width}.png'))
+                    await bounded(); await unchanged(); await back()
+                checkpoint('original MCP resources and dynamic media retain public addresses and evidence, without URI credentials or semicolon-free inline bytes')
 
                 await read('bound answer')
                 row = page.locator('.recall-result')
