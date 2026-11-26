@@ -25,6 +25,8 @@ The current version is an alpha, so `--prerelease allow` selects the preview fro
 
 Keep that terminal running. Desk opens **http://127.0.0.1:8787** in your browser. Run the same command next time; your saved conversations and drafts remain local.
 
+For a remembered answer, choose **Find a decision in past work → Index existing Codex history**, enter the phrase and choose **Search**, then **Read original conversation**. Use the original evidence to decide which check to change or skip; continuing the conversation is optional.
+
 If that address is already in use, reopening it uses the Desk server already running there. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
 
 ### Update an existing uvx installation
@@ -67,6 +69,17 @@ For later launches, use `codex-desk` in the activated environment, or `.\.venv\S
 
 </details>
 
+## Find an earlier answer
+
+1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
+2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
+3. Enter a word or phrase from the answer, command output or tool result, then **Search**. You can search while indexing: when the explicit scan completes, an unchanged submitted query in the active search dialog refreshes once. Edits stay unsent; choose **Search** after changing the phrase or scope. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Your selected task and draft stay unchanged; **Back to search** keeps the query and results.
+4. Ready to work on it? Choose **Continue this conversation** to resume the **original native thread** using **Current Codex settings**. Continuing requires the saved project folder to exist. Prepare the next instruction, then send it when ready.
+
+Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-cached activity, drafts and prepared follow-ups. **Index coverage and text limits** shows cached coverage and shortened or omitted text; this is a bounded recent-history cache. Reindexing refreshes the recent window and skips unchanged snapshots. For older conversations beyond that window, browse titles and open the conversation first.
+
+[Short guide: find a past Codex answer and reopen its task](docs/find-past-answer.md)
+
 ## Bring your existing work
 
 1. **Your recent Codex work** appears on the first screen, including the project folder. Click **Resume conversation** to open the one you want.
@@ -80,17 +93,6 @@ For later launches, use `codex-desk` in the activated environment, or `.\.venv\S
 Know the title? **Browse all conversations** searches native conversation titles across folders. **Open a project** lets you choose an exact folder, another retained profile, or explicitly start a new conversation. For a custom Codex history location, add `--codex-home /your/codex-home` to the launch command.
 
 [中文：打开已有会话并继续工作](docs/first-project.zh-CN.md) · [Illustrated walkthrough](docs/task-walkthrough.md)
-
-## Find an earlier answer
-
-1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
-2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
-3. Enter a word or phrase from the answer, command output or tool result, then **Search**. You can search while indexing: when the explicit scan completes, an unchanged submitted query in the active search dialog refreshes once. Edits stay unsent; choose **Search** after changing the phrase or scope. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Your selected task and draft stay unchanged; **Back to search** keeps the query and results.
-4. Ready to work on it? Choose **Continue this conversation** to resume the **original native thread** using **Current Codex settings**. Continuing requires the saved project folder to exist. Prepare the next instruction, then send it when ready.
-
-Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-cached activity, drafts and prepared follow-ups. **Index coverage and text limits** shows cached coverage and shortened or omitted text; this is a bounded recent-history cache. Reindexing refreshes the recent window and skips unchanged snapshots. For older conversations beyond that window, browse titles and open the conversation first.
-
-[Short guide: find a past Codex answer and reopen its task](docs/find-past-answer.md)
 
 ## Why use Desk?
 
