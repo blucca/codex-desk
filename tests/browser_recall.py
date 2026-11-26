@@ -104,6 +104,8 @@ async def check(width, playwright, evidence):
 
             def request(self, method, params, timeout=30):
                 native_calls.append({'method': method, 'session': self.id, 'params': params})
+                if method == 'thread/list':
+                    return {'data': [], 'nextCursor': None}
                 assert method == 'thread/resume', 'Recall must not start a native task or new thread: ' + method
                 wait_hold('open', self.id)
                 return {'thread': copy.deepcopy(threads[self.id]), 'model': 'fixture-model',
@@ -220,7 +222,10 @@ async def check(width, playwright, evidence):
             try:
                 await page.goto(url)
                 await page.wait_for_function('state.sessions.length===6')
-                assert not native_calls and not desk.runtimes
+                await page.wait_for_function('document.querySelector("#home-list").getAttribute("aria-busy")==="false"')
+                assert all(c['method']=='thread/list' for c in native_calls)
+                native_calls.clear()  # Home discovery is separate from cold SQLite recall.
+                assert not native_calls and not {k:v for k,v in desk.runtimes.items() if k!='native-catalog'}
                 if os.environ.get('DESK_RECALL_CASES') == 'undo':
                     await page.locator('.session-row[data-session="session-a"] .session').click()
                     await page.wait_for_function("selected==='session-a' && !opening && !$('task').hidden")
@@ -247,7 +252,7 @@ async def check(width, playwright, evidence):
                 assert '<script>globalThis.__recallXss=2</script>' in await page.locator('.recall-snippet').inner_text()
                 assert await page.locator('#recall-results img, #recall-results script').count() == 0
                 assert not await page.evaluate('globalThis.__recallXss')
-                assert not native_calls and not desk.runtimes and not open_requests()
+                assert not native_calls and not {k:v for k,v in desk.runtimes.items() if k!='native-catalog'} and not open_requests()
                 assert await page.evaluate('selected===null')
                 await no_horizontal_overflow()
                 await page.screenshot(path=str(evidence / f'recall-safety-{width}.png'))
