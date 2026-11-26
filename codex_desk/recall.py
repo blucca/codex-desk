@@ -3,6 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import time
 import unicodedata
 
@@ -15,6 +16,7 @@ VISIBLE_TYPES = frozenset(('userMessage', 'agentMessage', 'commandExecution',
     'fileChange', 'mcpToolCall', 'dynamicToolCall', 'collabAgentToolCall', 'subAgentActivity'))
 DELTA_TYPES = {'item/agentMessage/delta': 'agentMessage',
                'item/commandExecution/outputDelta': 'commandExecution'}
+_ASCII_RUN = re.compile(r'[\x00-\x7f]+')
 
 
 def normalize(value):
@@ -160,34 +162,51 @@ def save_snapshot(store, session, thread):
     # Native summary/read responses can omit turns/items; never erase known evidence.
 
 
+def _folded_chunks(text):
+    start = 0
+    while start < len(text):
+        ascii_run = _ASCII_RUN.match(text, start)
+        if ascii_run:
+            end = ascii_run.end()
+            # A following combining mark belongs with the last ASCII base.
+            if end < len(text) and unicodedata.combining(text[end]):
+                end -= 1
+            if end > start:
+                yield text[start:end].casefold(), start, end, True
+                start = end
+                continue
+        end = start + 1
+        while end < len(text) and (unicodedata.combining(text[end])
+                or (0x1100 <= ord(text[end]) <= 0x11ff and 0x1100 <= ord(text[end - 1]) <= 0x11ff)):
+            end += 1
+        yield normalize(text[start:end]), start, end, False
+        start = end
+
+
 def _snippet(text, needle):
     # ASCII normalization only changes case, so folded offsets stay exact.
     if text.isascii():
         position = text.casefold().find(needle)
         left = min(max(position, 0), max(len(text) - 1, 0))
         return _snippet_range(text, left, min(len(text), left + len(needle)))
-    # Keep offsets in original visible text across accents, casefold expansions
-    # and compatibility characters, rather than slicing at normalized offsets.
-    clusters, starts, ends = [], [], []
-    start = 0
-    for index in range(1, len(text) + 1):
-        continuation = index < len(text) and (unicodedata.combining(text[index])
-            or (0x1100 <= ord(text[index]) <= 0x11ff and 0x1100 <= ord(text[index - 1]) <= 0x11ff))
-        if continuation:
-            continue
-        folded = normalize(text[start:index])
-        clusters.append(folded)
-        starts.extend([start] * len(folded))
-        ends.extend([index] * len(folded))
-        start = index
-    position = ''.join(clusters).find(needle)
+    # ASCII spans have unit-stride offsets; Unicode spans retain whole clusters.
+    chunks = list(_folded_chunks(text))
+    position = ''.join(chunk[0] for chunk in chunks).find(needle)
     if position < 0:
         # Rare cross-cluster compatibility composition still has a literal hit.
         position = normalize(text).find(needle)
         left = min(max(position, 0), max(len(text) - 1, 0))
         right = min(len(text), left + len(needle))
     else:
-        left, right = starts[position], ends[position + len(needle) - 1]
+        offset, left, last = 0, None, position + len(needle) - 1
+        for folded, start, end, ascii_span in chunks:
+            following = offset + len(folded)
+            if left is None and position < following:
+                left = start + position - offset if ascii_span else start
+            if last < following:
+                right = start + last - offset + 1 if ascii_span else end
+                break
+            offset = following
     return _snippet_range(text, left, right)
 
 

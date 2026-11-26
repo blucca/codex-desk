@@ -154,6 +154,22 @@ class NativeRecallTests(unittest.TestCase):
                 self.assertIn(match, hit['snippet'])
                 self.assertLessEqual(len(hit['snippet']), 422)
 
+    def test_mixed_unicode_command_spans_keep_exact_cluster_and_late_ascii_matches(self):
+        self.index.replace_snapshot(snapshot([{'id': 'mixed-command', 'type': 'commandExecution',
+            'command': 'fixture inspect', 'status': 'completed', 'exitCode': 0, 'aggregatedOutput':
+                'Start Cafe\u0301 / Straße / 가 proof / 𝔄🧪 proof\n' + 'x' * 199_500 + '\nEND ascii decision'}]))
+        for query, match in [('start CAFÉ', 'Start Cafe\u0301'), ('STRASS', 'Straß'),
+                             ('가 proof', '가 proof'), ('a🧪 proof', '𝔄🧪 proof'),
+                             ('END ASCII DECISION', 'END ascii decision')]:
+            with self.subTest(query=query):
+                result = self.index.search(query)
+                self.assertEqual(result['total'], 1)
+                hit = result['results'][0]
+                self.assertEqual(hit['item_id'], 'mixed-command')
+                self.assertEqual(hit['match_text'], match)
+                self.assertIn(match, hit['snippet'])
+                self.assertLessEqual(len(hit['snippet']), 422)
+
     def test_exact_canonical_cwd_and_missing_folder_metadata_are_retained(self):
         project = self.root / 'missing-project'
         source = snapshot([agent('Scoped native decision')], cwd=str(project))

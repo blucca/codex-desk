@@ -125,6 +125,22 @@ class RecallTests(unittest.TestCase):
                 self.assertIn(match, hit['snippet'])
                 self.assertLessEqual(len(hit['snippet']), 422)
 
+    def test_mixed_unicode_command_spans_keep_exact_cluster_and_late_ascii_matches(self):
+        self.snapshot([{'id': 'mixed-command', 'type': 'commandExecution', 'command': 'fixture inspect',
+            'status': 'completed', 'exitCode': 0, 'aggregatedOutput':
+                'Start Cafe\u0301 / Straße / 가 proof / 𝔄🧪 proof\n' + 'x' * 199_500 + '\nEND ascii decision'}])
+        for query, match in [('start CAFÉ', 'Start Cafe\u0301'), ('STRASS', 'Straß'),
+                             ('가 proof', '가 proof'), ('a🧪 proof', '𝔄🧪 proof'),
+                             ('END ASCII DECISION', 'END ascii decision')]:
+            with self.subTest(query=query):
+                result = self.store.recall(query)
+                self.assertEqual(result['total'], 1)
+                hit = result['results'][0]
+                self.assertEqual(hit['item_id'], 'mixed-command')
+                self.assertEqual(hit['match_text'], match)
+                self.assertIn(match, hit['snippet'])
+                self.assertLessEqual(len(hit['snippet']), 422)
+
     def test_literal_sql_and_regex_characters_do_not_expand_matches(self):
         self.snapshot([agent("Use a%b_c[0].* literally, not regex; ' OR 1=1 -- stays text.")])
         for query in ('a%b_c[0].*', "' OR 1=1 --"):
