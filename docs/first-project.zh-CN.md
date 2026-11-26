@@ -47,7 +47,7 @@ uvx --refresh --prerelease allow codex-desk@latest
 
 **项目目录已删除，也能阅读原历史。** 阅读不导入、不续接 thread。点击 **Back to search** 或 **Close** 返回原查询和结果。
 
-长会话每页显示 **40 个条目**，用 **Previous items**／**Next items** 换页。长输出用 **Earlier text**／**Later text** 阅读其他文字窗口，每个窗口最多 **20,000 个字符**。原匹配项已变化时，查看器显示实际定位状态；读取失败用 **Retry read** 重试。
+长会话每页最多显示 **40 个条目**（原生内容项或未产生内容项的回合结果），用 **Previous items**／**Next items** 换页；含无内容项回合时按钮为 **Previous entries**／**Next entries**。没有内容项的回合仍显示原生 ID、状态和已报告的错误信息，计数与原始内容项分开。长输出用 **Earlier text**／**Later text** 阅读其他文字窗口，每个窗口最多 **20,000 个字符**。原匹配项已变化时，查看器显示实际定位状态；读取失败用 **Retry read** 重试。
 
 ### 已知标题，或会话不在近期索引里
 

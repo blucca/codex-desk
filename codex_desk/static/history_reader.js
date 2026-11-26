@@ -1,6 +1,6 @@
 /* Original native history, read independently of the active task and workspace. */
 (function(root) {
-  const PAGE_ITEMS=40, TEXT_CHARS=20000;
+  const PAGE_ENTRIES=40, TEXT_CHARS=20000;
   const visibleTypes=new Set(['userMessage','agentMessage','commandExecution','fileChange',
     'mcpToolCall','dynamicToolCall','collabAgentToolCall','subAgentActivity']);
   const labels={userMessage:'Your message',agentMessage:'Codex reply',commandExecution:'Command',
@@ -10,7 +10,7 @@
   const str=value=>typeof value==='string'?value:'';
   const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   let api,version=0,source=null,rows=[],page=0,requested=null,options=null,targetIndex=-1;
-  let loading=false,originalItems=0,unsupportedItems=0;
+  let loading=false,originalItems=0,unsupportedItems=0,turnOnlyRows=0;
 
   function current(ticket) {
     return ticket===version && el('').open && (!options?.valid || options.valid());
@@ -44,15 +44,19 @@
     } catch {return '[This native item could not be read.]';}
   }
   function flatten(thread) {
-    const result=[];originalItems=0;unsupportedItems=0;
+    const result=[];originalItems=0;unsupportedItems=0;turnOnlyRows=0;
     for(const turn of thread.turns) {
       if(!turn || typeof turn!=='object' || !Array.isArray(turn.items))continue;
+      const first=result.length;
       for(const item of turn.items) {
         ++originalItems;
         if(!item || typeof item!=='object' || Array.isArray(item)) {++unsupportedItems;continue;}
         if(!visibleTypes.has(item.type))++unsupportedItems;
         result.push({turn,item});
       }
+      // A failed or interrupted turn can finish without any native items.
+      // Retain its outcome as a separate entry, not a made-up readable item.
+      if(result.length===first){result.push({turn,item:null});++turnOnlyRows;}
     }
     return result;
   }
@@ -111,7 +115,7 @@
   }
   function render() {
     if(!source || !available())return;
-    const ticket=version,first=page*PAGE_ITEMS,last=Math.min(rows.length,first+PAGE_ITEMS);
+    const ticket=version,first=page*PAGE_ENTRIES,last=Math.min(rows.length,first+PAGE_ENTRIES);
     const body=el('body');body.replaceChildren();body.scrollTop=0;
     let previousTurn=null,section=null;
     for(let index=first;index<last;index++) {
@@ -124,13 +128,20 @@
         if(str(row.turn.error?.message))section.append(node('p',str(row.turn.error.message).slice(0,2000),'history-reader-turn-error'));
         body.append(section);
       }
-      section.append(itemNode(row,index,ticket));
+      if(row.item)section.append(itemNode(row,index,ticket));
+      else {
+        section.classList.add('history-reader-turn-only');
+        section.append(node('p',row.turn.items.length?'No readable native items were returned for this turn.':
+          'No native items were returned for this turn.','muted'));
+      }
     }
     if(!rows.length)body.append(node('p','The original native read contains no readable items.','muted'));
-    const pages=Math.max(1,Math.ceil(rows.length/PAGE_ITEMS));
-    el('coverage').textContent=`Showing items ${rows.length?first+1:0}–${last} of ${rows.length}. Page ${page+1} of ${pages}. `+
+    const pages=Math.max(1,Math.ceil(rows.length/PAGE_ENTRIES)),unit=turnOnlyRows?'entries':'items';
+    el('coverage').textContent=`Showing ${unit} ${rows.length?first+1:0}–${last} of ${rows.length}. Page ${page+1} of ${pages}. `+
       `${originalItems} original native items; ${unsupportedItems} unsupported or unreadable. `+
-      `Up to ${PAGE_ITEMS} items per page and ${TEXT_CHARS.toLocaleString()} text characters per item window.`;
+      (turnOnlyRows?`${turnOnlyRows} turn-only outcomes. `:'')+
+      `Up to ${PAGE_ENTRIES} ${unit}${turnOnlyRows?' (native items or turn-only outcomes)':''} per page and ${TEXT_CHARS.toLocaleString()} text characters per item window.`;
+    el('previous').textContent='Previous '+unit;el('next').textContent='Next '+unit;
     el('previous').disabled=page===0;el('next').disabled=last>=rows.length;
     el('previous').hidden=el('next').hidden=pages===1;
     const target=body.querySelector('.history-reader-target');if(target)scrollMatch(target,ticket);
@@ -152,8 +163,8 @@
         (str(thread.modelProvider)?'\nProvider: '+thread.modelProvider:'');
       el('status').textContent='Read-only original conversation. Your selected task and draft stay unchanged.';
       const hasIdentity=typeof requested.turn_id==='string' && typeof requested.item_id==='string';
-      targetIndex=hasIdentity?rows.findIndex(row=>row.turn.id===requested.turn_id && row.item.id===requested.item_id):-1;
-      page=targetIndex>=0?Math.floor(targetIndex/PAGE_ITEMS):0;
+      targetIndex=hasIdentity?rows.findIndex(row=>row.item && row.turn.id===requested.turn_id && row.item.id===requested.item_id):-1;
+      page=targetIndex>=0?Math.floor(targetIndex/PAGE_ENTRIES):0;
       if(hasIdentity && targetIndex<0)el('match').textContent='The requested native turn/item is not present in this original read. You can still read the conversation.';
       else if(targetIndex>=0) {
         const row=rows[targetIndex],phrase=str(requested.match_text);
@@ -192,7 +203,7 @@
     el('back').onclick=el('close').onclick=close;
     el('retry').onclick=()=>{el('retry').disabled=true;read();};
     el('previous').onclick=()=>{if(source && available() && page>0){--page;render();}};
-    el('next').onclick=()=>{if(source && available() && (page+1)*PAGE_ITEMS<rows.length){++page;render();}};
+    el('next').onclick=()=>{if(source && available() && (page+1)*PAGE_ENTRIES<rows.length){++page;render();}};
     el('').addEventListener('close',()=>{if(!el('').open)invalidate();});
   }
   root.DeskHistoryReader={configure,show,close};

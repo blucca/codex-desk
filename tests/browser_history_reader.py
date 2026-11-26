@@ -605,11 +605,192 @@ async def check(width, playwright, evidence):
                         path.chmod(0o600)
 
 
+async def check_empty_turns(width, playwright, evidence):
+    """Focused original-read acceptance; includes item-free outcomes and a page edge."""
+    root = Path(os.environ['DESK_TEST_TEMP'])
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=root, prefix=f'desk-empty-turns-{width}-') as temporary:
+        folder = Path(temporary)
+        home, project = folder / 'home', folder / 'project'
+        home.mkdir(); project.mkdir()
+        (home / 'config.toml').write_text('model="fixture-model"\n')
+        settings = {p.name: p.read_bytes() for p in home.iterdir()}
+        calls, errors, external, completed = [], [], [], []
+        empty = [
+            {'id': 'empty-completed', 'status': 'completed', 'itemsView': 'full', 'items': [], 'error': None},
+            {'id': 'empty-failed', 'status': 'failed', 'itemsView': 'full', 'items': [],
+             'error': {'message': 'Provider rejected the original retry.', 'codexErrorInfo': 'usageLimitExceeded'}},
+            {'id': 'empty-interrupted', 'status': 'interrupted', 'itemsView': 'full', 'items': [], 'error': None},
+        ]
+        def source(identifier, turns):
+            return {'id': identifier, 'cwd': str(project), 'name': 'Original ' + identifier,
+                    'modelProvider': 'fixture-provider', 'updatedAt': 1795720000, 'turns': turns}
+        boundary = source('boundary-outcomes', [
+            {'id': 'earlier-context', 'status': 'completed', 'items': [
+                {'id': f'context-{n}', 'type': 'agentMessage', 'text': f'Original context {n:02d}'}
+                for n in range(39)]},
+            *copy.deepcopy(empty),
+            {'id': 'answer-turn', 'status': 'completed', 'items': [
+                {'id': 'boundary-answer', 'type': 'agentMessage', 'text': 'BOUNDARY ANSWER remains exact.'}]},
+            {'id': 'invalid-items-turn', 'status': 'failed', 'items': [None, False, 'invalid native item'],
+             'error': {'message': 'This original outcome remains visible despite unreadable items.'}},
+        ])
+        only_empty = source('only-empty-outcomes', copy.deepcopy(empty))
+        active = source('active-thread', [{'id': 'active-turn', 'status': 'completed', 'items': [
+            {'id': 'active-item', 'type': 'agentMessage', 'text': 'Selected work stays unchanged.'}]}])
+        threads = {t['id']: t for t in (boundary, only_empty)}
+
+        class ControlledRuntime:
+            def __init__(self, store, identifier, binary, native_home):
+                assert binary == 'never-executed'
+                self.process = SimpleNamespace(poll=lambda: None)
+                self.approvals = {}
+                self.thread_result = {'thread': active, 'model': 'fixture-model', 'modelProvider': 'fixture-provider'}
+            def request(self, method, params, timeout=30):
+                calls.append({'method': method, 'params': dict(params)})
+                assert method in ('thread/list', 'thread/read'), 'Unexpected native mutation: ' + method
+                if method == 'thread/list':
+                    query = params.get('searchTerm', '').casefold()
+                    return {'data': [{key: value for key, value in t.items() if key != 'turns'}
+                                     for t in threads.values() if query in t['name'].casefold()], 'nextCursor': None}
+                assert params == {'threadId': params['threadId'], 'includeTurns': True}
+                return {'thread': copy.deepcopy(threads[params['threadId']])}
+            def close(self):
+                self.process.poll = lambda: 0
+
+        with patch.object(desk_server, 'Runtime', ControlledRuntime):
+            desk = desk_server.Desk('never-executed', home, folder / 'state')
+            active_id = desk.store.create(str(project), 'default', identifier='active-session', name='Selected active task')
+            desk.store.update(active_id, thread_id=active['id'], status='ready', model='fixture-model',
+                              provider='fixture-provider', thread_saved=1, name_pending=0)
+            desk.runtimes[active_id] = ControlledRuntime(desk.store, active_id, 'never-executed', home)
+            draft_text = 'Unsent selected draft — preserve exactly. 保留'
+            save_draft(desk.store, active_id, draft_text, 'plan', 0)
+            desk.native_index.replace_snapshot(boundary)
+            saved_draft = load_draft(desk.store, active_id)
+            server = desk_server.ThreadingHTTPServer(('127.0.0.1', 0), desk_server.handler(desk))
+            worker = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+            worker.start()
+            browser = await playwright.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM'),
+                headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
+            page = await browser.new_page(viewport={'width': width, 'height': 900 if width > 390 else 844})
+            page.set_default_timeout(10_000)
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.on('request', lambda request: external.append(request.url)
+                    if urlsplit(request.url).hostname != '127.0.0.1' else None)
+            try:
+                await page.goto(f'http://127.0.0.1:{server.server_port}')
+                await page.wait_for_function("$('home-list').children.length===2")
+                await page.locator(f'.session-row[data-session="{active_id}"] .session').click()
+                await page.wait_for_function("selected==='active-session' && nativeThreadId==='active-thread' && !opening && !$('task').hidden")
+                assert await page.locator('#prompt').input_value() == draft_text
+                selected_state = await page.evaluate("({selected,generation,title:$('title').textContent,prompt:$('prompt').value,mode:$('turn-mode').value})")
+                saved_database = list(desk.store.db.iterdump())
+                async def unchanged():
+                    assert await page.evaluate("({selected,generation,title:$('title').textContent,prompt:$('prompt').value,mode:$('turn-mode').value})") == selected_state
+                    assert load_draft(desk.store, active_id) == saved_draft
+                    assert list(desk.store.db.iterdump()) == saved_database
+                    assert {p.name: p.read_bytes() for p in home.iterdir()} == settings
+                    assert not errors and not external
+                    assert all(c['method'] in ('thread/list', 'thread/read') for c in calls)
+                async def ready():
+                    await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+                    assert await page.locator('#history-reader-error').is_hidden()
+                    assert await page.locator('.history-reader-item').count() <= 40
+                    assert await page.locator('.history-reader-item, .history-reader-turn-only').count() <= 40
+
+                await page.locator('#search-saved-content').click()
+                await page.locator('#recall-query').fill('boundary answer')
+                await page.locator('#recall-query').press('Enter')
+                await page.wait_for_function("!$('recall-search').disabled")
+                assert await page.locator('.recall-result').count() == 1
+                await page.locator('.recall-read').click(); await ready()
+                target = page.locator('.history-reader-target')
+                assert await target.get_attribute('data-turn-id') == 'answer-turn'
+                assert await target.get_attribute('data-item-id') == 'boundary-answer'
+                assert await target.locator('mark').inner_text() == 'BOUNDARY ANSWER'
+                coverage = await page.locator('#history-reader-coverage').inner_text()
+                assert 'Showing entries 41–44 of 44. Page 2 of 2.' in coverage
+                assert '43 original native items; 3 unsupported or unreadable. 4 turn-only outcomes.' in coverage
+                for identifier, status in (('empty-failed', 'failed'), ('empty-interrupted', 'interrupted'),
+                                           ('invalid-items-turn', 'failed')):
+                    section = page.locator(f'.history-reader-turn-only[data-turn-id="{identifier}"]')
+                    assert await section.count() == 1
+                    assert status in await section.locator('h3').inner_text()
+                    assert await section.locator('.history-reader-item').count() == 0
+                assert 'Provider rejected the original retry.' in await page.locator('#history-reader-body').inner_text()
+                assert 'This original outcome remains visible' in await page.locator('#history-reader-body').inner_text()
+                await page.screenshot(path=str(evidence / f'empty-outcomes-boundary-{width}.png'))
+                await unchanged()
+                await page.locator('#history-reader-previous').click(); await ready()
+                assert 'Showing entries 1–40 of 44. Page 1 of 2.' in await page.locator('#history-reader-coverage').inner_text()
+                assert await page.locator('.history-reader-item').count() == 39
+                assert await page.locator('.history-reader-item, .history-reader-turn-only').count() == 40
+                completed_turn = page.locator('.history-reader-turn-only[data-turn-id="empty-completed"]')
+                assert 'completed' in await completed_turn.locator('h3').inner_text()
+                assert await completed_turn.locator('.history-reader-item').count() == 0
+                await page.locator('#history-reader-next').click(); await ready()
+                assert await page.locator('.history-reader-target mark').inner_text() == 'BOUNDARY ANSWER'
+                await page.locator('#history-reader-back').click()
+                assert await page.locator('#recall').evaluate('(node)=>node.open')
+                assert await page.locator('#recall-query').input_value() == 'boundary answer'
+                assert await page.locator('.recall-result').count() == 1
+                await unchanged()
+                completed.append('exact original answer survives empty completed/failed/interrupted turns at a 40-entry page edge; unreadable-only outcomes retain native IDs and errors without fake items')
+
+                await page.locator('#recall-close').click()
+                await page.locator('#browse').click()
+                await page.wait_for_function("!$('history-search-submit').disabled")
+                await page.locator('#history-search').fill('Original only-empty-outcomes')
+                await page.locator('#history-search').press('Enter')
+                await page.wait_for_function("!$('history-search-submit').disabled")
+                assert await page.locator('#native-list .native-row').count() == 1
+                await page.locator('#native-list').get_by_role('button', name='Read original conversation', exact=True).click()
+                await ready()
+                assert await page.locator('.history-reader-item').count() == 0
+                assert await page.locator('.history-reader-turn-only').count() == 3
+                assert await page.locator('.history-reader-target').count() == 0
+                for turn in empty:
+                    section = page.locator(f'.history-reader-turn-only[data-turn-id="{turn["id"]}"]')
+                    assert turn['status'] in await section.locator('h3').inner_text()
+                assert 'Provider rejected the original retry.' in await page.locator('#history-reader-body').inner_text()
+                coverage = await page.locator('#history-reader-coverage').inner_text()
+                assert 'Showing entries 1–3 of 3. Page 1 of 1.' in coverage
+                assert '0 original native items; 0 unsupported or unreadable. 3 turn-only outcomes.' in coverage
+                assert 'contains no readable items' not in await page.locator('#history-reader-body').inner_text()
+                await page.screenshot(path=str(evidence / f'only-empty-outcomes-{width}.png'))
+                await page.locator('#history-reader-back').click()
+                assert await page.locator('#history').evaluate('(node)=>node.open')
+                assert await page.locator('#history-search').input_value() == 'Original only-empty-outcomes'
+                assert await page.locator('#native-list .native-row').count() == 1
+                await unchanged()
+                completed.append('an item-free original retains completed/failed/interrupted outcomes and accurate zero-item coverage; Read and Back keep saved work exact')
+                (evidence / f'empty-turns-acceptance-{width}.json').write_text(json.dumps({
+                    'viewport': width, 'passed': completed, 'javascript_errors': errors,
+                    'external_requests': external, 'controlled_model_turns': 0,
+                    'native_resume_calls': 0, 'native_calls': calls,
+                    'selected_state': selected_state}, ensure_ascii=False, indent=2) + '\n')
+                return completed
+            except Exception:
+                await page.screenshot(path=str(evidence / f'empty-turns-failure-{width}.png'), full_page=True)
+                raise
+            finally:
+                await browser.close()
+                server.shutdown(); server.server_close(); worker.join(timeout=5)
+                desk.close(); desk.store.db.close()
+                for path in evidence.iterdir():
+                    if path.is_file():
+                        path.chmod(0o600)
+
+
 async def main():
     evidence = Path(os.environ.get('DESK_TEST_EVIDENCE', str(Path(os.environ['DESK_TEST_TEMP']) / 'history-reader-evidence')))
     evidence.mkdir(parents=True, exist_ok=True, mode=0o700); evidence.chmod(0o700)
     async with async_playwright() as playwright:
-        results = {width: await check(width, playwright, evidence) for width in (1250, 390)}
+        results = {}
+        for width in (1250, 390):
+            results[width] = [] if os.environ.get('DESK_HISTORY_READER_EMPTY_TURNS_ONLY') == '1' else await check(width, playwright, evidence)
+            results[width] += await check_empty_turns(width, playwright, evidence)
     print(json.dumps({'original_history_reader_acceptance': 'passed', 'checks': sum(map(len, results.values())),
         'viewports': list(results), 'controlled_model_turns': 0, 'native_resume_calls': 0}), flush=True)
 

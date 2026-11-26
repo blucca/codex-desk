@@ -22,7 +22,7 @@ The live catalog and original reader use `--codex-home`, otherwise `CODEX_HOME`,
 
 The reader shows **40 original items per page**. **Previous items** and **Next items** replace the page; it initially selects the page containing the matching native turn and item. Messages and tool evidence are displayed as readable text, with command results expanded at the match.
 
-Each item shows a window of up to **20,000 text characters**. For longer output, **Earlier text** and **Later text** reveal other windows; the character range and total stay visible. The reader reports unsupported or unreadable items. If the saved turn/item or phrase is missing from the fresh native read, it reports that accurately while keeping the rest of the conversation readable. **Retry read** retries a failed native read.
+Each item shows a window of up to **20,000 text characters**. For longer output, **Earlier text** and **Later text** reveal other windows; the character range and total stay visible. The reader reports unsupported or unreadable items. Turns that produced no items still show their native ID, status and reported error message; they are counted separately from original items. If the saved turn/item or phrase is missing from the fresh native read, it reports that accurately while keeping the rest of the conversation readable. **Retry read** retries a failed native read.
 
 ## What the index covers
 

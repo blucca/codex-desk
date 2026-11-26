@@ -120,6 +120,7 @@ class Desk:
             except NativeRequestUnknown:
                 result = self.started_since(identifier, cursor)
                 if result is not None:
+                    self.record_admission_mode(identifier, mode)
                     return result
                 self.retire_runtime(identifier, runtime)
                 raise
@@ -161,6 +162,9 @@ class Desk:
                     and isinstance(turn, dict) and isinstance(turn.get('id'), str) and turn['id']):
                 return {'turn': turn}
         return None
+    def record_admission_mode(self, identifier, mode):
+        """Remember accepted Work/Plan intent without replacing the native outcome."""
+        self.store.update(identifier, mode=mode, thread_saved=1)
     def send_followup(self, data):
         identifier = data['session']
         gate = self.admission_lock(identifier)
@@ -200,6 +204,8 @@ class Desk:
             else:
                 rejected = False
             outcome = 'accepted' if result is not None else 'rejected' if rejected else 'unknown'
+            if outcome == 'accepted':
+                self.record_admission_mode(identifier, reservation['mode'])
             receipt = record_followup_receipt(self.store, identifier, reservation['token'],
                 reservation['entry_id'], reservation['revision'], outcome)
             if outcome == 'unknown' and runtime is not None:
@@ -237,6 +243,8 @@ class Desk:
                     raise FollowupConflict(snapshot)
                 receipt = record_followup_receipt(self.store, identifier, data['token'], data['id'],
                     data['revision'], data['outcome'])
+                if data['outcome'] == 'accepted':
+                    self.record_admission_mode(identifier, snapshot['reservation']['mode'])
                 return {**followup_snapshot(self.store, identifier), 'receipt': receipt}
         finally:
             gate.release()

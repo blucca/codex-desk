@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 from codex_desk.runtime import Runtime, NativeRequestRejected, NativeRequestUnknown
 from codex_desk.server import Desk, handler
+from codex_desk.drafts import load_draft, save_draft
 from http.server import ThreadingHTTPServer
 from test_approval_lifecycle import NativeHTTPFixture, ROOT
 from pathlib import Path
@@ -128,7 +129,7 @@ class FollowupApiTests(NativeHTTPFixture):
         self.assertNotIn('collaborationMode', self.requests[0]['params'])
 
     def test_definite_native_rejection_retains_queue_and_retry_is_explicit(self):
-        entry = self.add('Keep until admitted')
+        entry = self.add('Keep until admitted', 'plan')
 
         def reject(method, params):
             self.requests.append({'method': method, 'params': params})
@@ -141,12 +142,13 @@ class FollowupApiTests(NativeHTTPFixture):
         self.assertIsNone(snapshot['reservation'])
         self.assertEqual(snapshot['entries'], [entry])
         self.assertEqual(self.desk.store.get(self.identifier)['status'], 'ready')
+        self.assertEqual(self.desk.store.get(self.identifier)['mode'], 'native')
         self.runtime.request = self.native_request
         self.assertEqual(self.send(entry)[0], 200)
         self.assertEqual(len(self.requests), 2)
 
     def test_timeout_is_unknown_blocks_normal_tasks_and_requires_exact_review(self):
-        entry = self.add('Unconfirmed task')
+        entry = self.add('Unconfirmed task', 'plan')
 
         def unknown(method, params):
             self.requests.append({'method': method, 'params': params})
@@ -159,6 +161,7 @@ class FollowupApiTests(NativeHTTPFixture):
         reservation = snapshot['reservation']
         self.assertEqual(reservation['state'], 'unknown')
         self.assertEqual(snapshot['entries'][0]['state'], 'needs_review')
+        self.assertEqual(self.desk.store.get(self.identifier)['mode'], 'native')
         self.assertTrue(self.runtime.closing)
         self.assertNotIn(self.identifier, self.desk.runtimes)
         before = self.desk.store.get(self.identifier)
@@ -170,6 +173,7 @@ class FollowupApiTests(NativeHTTPFixture):
                                    revision=entry['revision'], outcome='rejected')[0], 409)
         self.assertEqual(self.resolve(reservation, 'unknown')[0], 400)
         self.assertEqual(self.resolve(reservation, 'rejected')[1]['entries'], [entry])
+        self.assertEqual(self.desk.store.get(self.identifier)['mode'], 'native')
         self.assertEqual(len(self.requests), 2)  # Explicit late fixture event was ignored.
 
     def test_started_notification_proves_admission_when_response_is_lost(self):
@@ -203,11 +207,12 @@ class FollowupApiTests(NativeHTTPFixture):
 
     def test_ordinary_unknown_task_retires_transport_and_ignores_late_native_start(self):
         self.runtime.request = Mock(side_effect=NativeRequestUnknown('Request timed out'))
-        status, result = self.post('/api/turn', text='Ordinary unconfirmed task')
+        status, result = self.post('/api/turn', text='Ordinary unconfirmed task', mode='plan')
         self.assertEqual((status, result), (400, {'error': 'Request timed out'}))
         self.assertTrue(self.runtime.closing)
         self.assertNotIn(self.identifier, self.desk.runtimes)
         before = self.desk.store.get(self.identifier)
+        self.assertEqual(before['mode'], 'native')
         self.native_request('turn/start', {'threadId': 'native-original'})
         self.assertEqual(self.desk.store.get(self.identifier), before)
         self.assertEqual(self.get()[1], {'entries': [], 'reservation': None})
@@ -223,6 +228,84 @@ class FollowupApiTests(NativeHTTPFixture):
         self.assertEqual(result['turn']['id'], 'follow-up-turn')
         self.assertFalse(self.runtime.closing)
         self.assertIs(self.desk.runtimes[self.identifier], self.runtime)
+
+    def check_lost_plan_reply_preserves_next_work(self, queued, terminal):
+        draft = save_draft(self.desk.store, self.identifier, 'Separate saved Plan draft', 'plan', 0)
+        first = self.add('Review the project before implementing', 'plan') if queued else None
+        later = self.add('Implement the reviewed change', 'native')
+        native_outcome = {}
+
+        def started_then_lost(method, params):
+            self.native_request(method, params)
+            with self.runtime.lifecycle_lock:
+                self.runtime._message({'method': 'thread/tokenUsage/updated', 'params': {
+                    'threadId': 'native-original', 'tokenUsage': {'total': {'totalTokens': 42}}}})
+                completed = self.completed(terminal)
+                if terminal == 'failed':
+                    completed['params']['turn']['error'] = {'message': 'Fixture task failed'}
+                self.runtime._message(completed)
+                native_outcome.update(self.desk.store.get(self.identifier))
+            raise NativeRequestUnknown('Lost native reply after Plan task')
+
+        self.runtime.request = started_then_lost
+        status, result = (self.send(first) if queued else
+                          self.post('/api/turn', text='Review the project before implementing', mode='plan'))
+        self.assertEqual(status, 200)
+        self.assertEqual(self.requests[0]['params']['collaborationMode']['mode'], 'plan')
+        recovered = self.desk.store.get(self.identifier)
+        self.assertEqual(recovered['mode'], 'plan')
+        for field in ('id', 'cwd', 'profile', 'thread_id', 'name', 'created', 'status', 'usage', 'error'):
+            self.assertEqual(recovered[field], native_outcome[field], field)
+        self.assertTrue(recovered['thread_saved'])
+        self.assertEqual(load_draft(self.desk.store, self.identifier), draft)
+        self.assertEqual(self.get()[1], {'entries': [dict(later, order=1)], 'reservation': None})
+        if queued:
+            self.assertEqual(result['receipt']['outcome'], 'accepted')
+            self.assertTrue(result['receipt']['consumed'])
+        self.runtime.request = self.native_request
+        self.assertEqual(self.send(later)[0], 200)
+        self.assertEqual(self.requests[-1]['params']['collaborationMode'], {
+            'mode': 'default', 'settings': {'model': 'fixture-model', 'developer_instructions': None}})
+        self.assertEqual(load_draft(self.desk.store, self.identifier), draft)
+
+    def test_ordinary_lost_plan_reply_keeps_mode_after_fast_completion(self):
+        self.check_lost_plan_reply_preserves_next_work(False, 'completed')
+
+    def test_followup_lost_plan_reply_keeps_mode_and_native_failure(self):
+        self.check_lost_plan_reply_preserves_next_work(True, 'failed')
+
+    def test_accepted_review_records_captured_plan_not_newer_work_mode(self):
+        draft = save_draft(self.desk.store, self.identifier, 'Separate saved Plan draft', 'plan', 0)
+        first = self.add('Review the implementation approach', 'plan')
+        later = self.add('Later Work task', 'native')
+        self.runtime.request = Mock(side_effect=NativeRequestUnknown('Native reply unavailable'))
+        _, unknown = self.send(first)
+        captured = unknown['reservation']
+        self.assertEqual(captured['mode'], 'plan')
+        self.assertEqual(self.desk.store.get(self.identifier)['mode'], 'native')
+        _, edited = self.post('/api/followups/edit', id=first['id'], text='Newer Work preparation',
+                              mode='native', revision=first['revision'])
+        before = self.desk.store.get(self.identifier)
+        status, reviewed = self.resolve(captured, 'accepted')
+        self.assertEqual(status, 200)
+        self.assertFalse(reviewed['receipt']['consumed'])
+        self.assertEqual(reviewed['entries'], [dict(edited['entries'][0], state='queued'), later])
+        recovered = self.desk.store.get(self.identifier)
+        self.assertEqual(recovered['mode'], 'plan')
+        for field in ('id', 'cwd', 'profile', 'thread_id', 'name', 'created', 'status', 'usage', 'error'):
+            self.assertEqual(recovered[field], before[field], field)
+        self.assertTrue(recovered['thread_saved'])
+        self.assertEqual(load_draft(self.desk.store, self.identifier), draft)
+        # Match the existing explicit reopen fixture; confirmation itself starts no task.
+        self.assertEqual(self.requests, [])
+        self.runtime.closing = False
+        self.desk.runtimes[self.identifier] = self.runtime
+        self.desk.store.update(self.identifier, status='ready')
+        self.runtime.request = self.native_request
+        self.assertEqual(self.send(reviewed['entries'][0])[0], 200)
+        self.assertEqual(self.requests[-1]['params']['collaborationMode']['mode'], 'default')
+        self.assertEqual(self.get()[1]['entries'], [dict(later, order=1)])
+        self.assertEqual(load_draft(self.desk.store, self.identifier), draft)
 
     def test_approval_or_question_retains_queue_without_dispatch(self):
         entry = self.add()

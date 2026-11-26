@@ -22,7 +22,7 @@ Content recall reads your private local Desk database: explicitly indexed native
 
 Queries are literal, Unicode-normalized and case-insensitive. The dialog shows up to 30 matching items. **Index coverage and text limits** reports cached native coverage; each conversation retains the newest readable items first, bounded at 5,000 items, 2,000,000 characters total and 200,000 characters per item. Reindexing refreshes the recent 200-conversation window and skips unchanged snapshots. [Short answer-finding guide](find-past-answer.md).
 
-The reader uses 40-item pages and 20,000-character text windows, with **Previous items**／**Next items** and **Earlier text**／**Later text** controls. Missing native IDs or changed phrases are reported while the original conversation remains readable; **Retry read** retries a failed read.
+The reader uses 40-entry pages (native items or turn-only outcomes) and 20,000-character text windows. Use **Previous items**／**Next items**, or **Previous entries**／**Next entries** when turn-only outcomes are present, and **Earlier text**／**Later text**. A turn with no items still shows its native ID, status and reported error message. Missing native IDs or changed phrases are reported while the original conversation remains readable; **Retry read** retries a failed read.
 
 ## Prepare a task and come back later
 
