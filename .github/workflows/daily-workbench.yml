@@ -2,10 +2,10 @@ name: Installed daily workbench
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['codex_desk/**', 'tests/**', 'pyproject.toml', '.github/workflows/daily-workbench.yml']
+    paths: ['codex_desk/**', 'examples/**', 'tests/**', 'pyproject.toml', '.github/workflows/daily-workbench.yml']
   push:
     branches: [main]
-    paths: ['codex_desk/**', 'tests/**', 'pyproject.toml', '.github/workflows/daily-workbench.yml']
+    paths: ['codex_desk/**', 'examples/**', 'tests/**', 'pyproject.toml', '.github/workflows/daily-workbench.yml']
 permissions:
   contents: read
 jobs:
@@ -36,6 +36,10 @@ jobs:
         run: |
           python -m pip install . playwright==1.56.0
           python -m playwright install --with-deps chromium
+      - name: Check zero-install browser sample
+        run: |
+          python examples/build_browser_preview.py --out temp/static-preview/demo
+          python examples/check_browser_preview.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview
       - name: Check installed daily workflows
         working-directory: temp
         run: |

@@ -1,0 +1,43 @@
+name: Browser sample feedback
+description: Share the step you tried in the no-install sample and whether it fits your own Codex work.
+title: "[Browser sample]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Try the sample at https://blucca.github.io/codex-desk/demo/. Your feedback helps choose the next useful workflow."
+  - type: dropdown
+    id: reached-step
+    attributes:
+      label: Step reached in the sample
+      options:
+        - Open recent sample work
+        - Index and search for retry budget
+        - Read original conversation
+        - Continue sample conversation
+        - Save Plan draft or follow-ups
+        - Reload and return
+        - Install Desk for my own history
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: sample-result
+    attributes:
+      label: What happened?
+      description: Tell us the result you reached or the first control that did not work as expected.
+      placeholder: I read the original retry-budget answer, saved my next task, and reloaded to find it still there.
+    validations:
+      required: true
+  - type: textarea
+    id: own-work
+    attributes:
+      label: Would this help with your own Codex work?
+      description: Describe one old answer or next task you want to return to. If you stopped before installing, tell us what got in the way.
+      placeholder: I use the Codex CLI and want to reopen a test decision from last week, then prepare the next verification.
+    validations:
+      required: true
+  - type: input
+    id: browser-os
+    attributes:
+      label: Browser and operating system (optional)
+      placeholder: Safari on macOS, Chrome on Android, or Firefox on Linux

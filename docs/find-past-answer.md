@@ -2,6 +2,8 @@
 
 Remember a phrase from a decision or test result, but not the conversation title? Search your local Codex history and read the original answer first. Continuing the task is a separate choice.
 
+[Try the interactive browser sample](https://blucca.github.io/codex-desk/demo/) — find the checkout retry decision, read its original answer, save a next task, then reload to return. No install is needed for this sample.
+
 [Watch the 20-second local demo](find-answer.gif) — synthetic checkout history.
 
 ## Install once, then find the answer

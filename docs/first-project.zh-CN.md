@@ -2,11 +2,19 @@
 
 记得答案中的一句话，却忘了会话标题？用已有的 Codex CLI 和登录，索引本机历史、查找文字并阅读原会话；准备好后再续接同一个任务。界面目前使用英文，下面保留实际按钮名称。
 
+[免安装交互示例](https://blucca.github.io/codex-desk/demo/)：在合成会话中查找 `retry budget`、阅读原文、保存 Plan 草稿，再刷新回来。示例准备保存在当前浏览器；使用自己的 Codex 历史时按下方安装。
+
 [20 秒示例：索引 → 查找答案 → 阅读原会话](find-answer.gif)（合成的结账项目历史）
 
 ## 1. 安装并启动
 
 在准备启动 Desk 的终端确认 `codex --version` 可用。按 [README 维护中的安装步骤](../README.md#install-the-preview)运行单条 uvx 命令；使用 Python 安装时，展开对应系统的虚拟环境步骤，需要 Python 3.11+。
+
+使用 uv 时运行：
+
+```sh
+uvx --prerelease allow codex-desk
+```
 
 保持终端运行，打开它打印的地址，默认是 **`http://127.0.0.1:8787`**。 如果提示地址已占用，原 Desk 终端仍运行时直接重新打开该地址；需要换端口时，在启动命令后加 `--port 8788`。端口占用不会创建或修改 Desk 记录。如果 Codex 历史位于其他目录，在启动命令后加 `--codex-home /你的目录`。Windows 与 WSL 使用各自启动环境中可访问的 Codex home 和项目路径。
 
