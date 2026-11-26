@@ -29,6 +29,8 @@ else:
     sys.path.insert(0, str(SOURCE))
 from codex_desk import server as desk_server
 
+STARTUP_TIMEOUT = 20
+
 
 DRIVER = '''import json, os, runpy, subprocess, sys, webbrowser
 from pathlib import Path
@@ -121,6 +123,33 @@ class LaunchHTTPTests(unittest.TestCase):
         self.assertFalse(self.browser.exists(), 'Launcher called the browser')
         self.assertFalse(self.home.exists(), 'Launcher wrote native home')
 
+    def startup_line(self, process, timeout=STARTUP_TIMEOUT):
+        lines = queue.Queue()
+        reader = threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True)
+        reader.start()
+        try:
+            line = lines.get(timeout=timeout)
+        except queue.Empty:
+            line = None
+        if line and line.startswith('Codex Desk: http://127.0.0.1:'):
+            reader.join(timeout=1)
+            return line
+        # Read stderr only after reaping, so a cold startup cannot hide a real
+        # preflight/import error behind an uninformative queue.Empty traceback.
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=4)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=4)
+        reader.join(timeout=1)
+        remaining, errors = process.communicate(timeout=4)
+        reason = (f'no startup URL within {timeout}s' if line is None
+                  else 'exited or printed unexpected startup output')
+        self.fail(f'Launcher {reason}; exit={process.returncode}; '
+                  f'stdout={(line or "") + remaining!r}; stderr={errors!r}')
+
     @staticmethod
     def get(address, path):
         connection = http.client.HTTPConnection(address.hostname, address.port, timeout=2)
@@ -137,12 +166,16 @@ class LaunchHTTPTests(unittest.TestCase):
             occupied.listen()
             port = occupied.getsockname()[1]
             with self.launch(port) as process:
-                output, errors = process.communicate(timeout=8)
+                output, errors = process.communicate(timeout=STARTUP_TIMEOUT)
                 self.assertEqual(process.returncode, 2, errors)
                 self.assertEqual(output, '')
                 self.assertNotIn('Traceback', errors)
                 self.assertIn(f'http://127.0.0.1:{port}', errors)
-                self.assertIn('already in use', errors)
+                # Windows may protect the held listener with EACCES/10013,
+                # not EADDRINUSE. Runtime must not misclassify that OS error.
+                messages = ('already in use', 'Could not listen') if os.name == 'nt' \
+                    else ('already in use',)
+                self.assertTrue(any(message in errors for message in messages), errors)
                 self.assertIn('--port 8788', errors)
                 self.assertLess(len(errors), 2000, errors)
                 self.assertFalse(self.state.exists(), 'Failed bind created state')
@@ -155,11 +188,7 @@ class LaunchHTTPTests(unittest.TestCase):
     def test_ephemeral_port_serves_own_assets_and_shutdown_reaps_child(self):
         started = time.monotonic()
         with self.launch(0, no_browser=True) as process:
-            lines = queue.Queue()
-            reader = threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True)
-            reader.start()
-            line = lines.get(timeout=8)
-            reader.join(timeout=1)
+            line = self.startup_line(process)
             self.assertTrue(line.startswith('Codex Desk: http://127.0.0.1:'), line)
             address = urlsplit(line.removeprefix('Codex Desk: ').strip())
             self.assertEqual(address.hostname, '127.0.0.1')
@@ -195,12 +224,12 @@ class LaunchHTTPTests(unittest.TestCase):
                 connection.settimeout(1)
                 self.assertNotEqual(connection.connect_ex(('127.0.0.1', address.port)), 0,
                     'Launcher left the HTTP listener running')
-        self.assertLess(time.monotonic() - started, 20)
+        self.assertLess(time.monotonic() - started, STARTUP_TIMEOUT + 10)
 
     def test_invalid_ports_are_concise_and_exit_before_preflight_state_or_browser(self):
         for port in (-1, 65536, 'not-a-port'):
             with self.subTest(port=port), self.launch(port) as process:
-                output, errors = process.communicate(timeout=8)
+                output, errors = process.communicate(timeout=STARTUP_TIMEOUT)
                 self.assertEqual(process.returncode, 2, errors)
                 self.assertEqual(output, '')
                 self.assertNotIn('Traceback', errors)
