@@ -8,15 +8,17 @@
 
 ## 1. 安装并启动
 
-在准备启动 Desk 的终端确认 `codex --version` 可用；它显示的是原生 Codex CLI 版本。按 [README 维护中的安装步骤](../README.md#install-the-preview)运行单条 uvx 命令；使用 Python 安装时，展开对应系统的虚拟环境步骤，需要 Python 3.11+。
+独立 CLI：在准备启动 Desk 的终端确认 `codex --version` 可用；它显示的是原生 Codex CLI 版本。只有 Desktop 内置 Codex 时，按 [macOS](find-desktop-answer.macos.md) 或 [Windows](find-desktop-answer.windows.md) 指南检查所选可执行文件，并用 `--codex` 传给 Desk，无需另装 CLI。按 [README 维护中的安装步骤](../README.md#install-the-preview)启动；使用 Python 安装时，展开对应系统的虚拟环境步骤，需要 Python 3.11+。
 
-使用 uv 时运行：
+独立 CLI 使用 uv 时运行（Desktop 内置版本使用上方系统指南中的 `--codex` 命令）：
 
 ```sh
 uvx --prerelease allow codex-desk
 ```
 
 保持终端运行，打开它打印的地址，默认是 **`http://127.0.0.1:8787`**。如果地址已占用，重新打开它会回到仍在运行的 Desk；要换成更新后的版本，先在旧终端按 **Ctrl+C** 再启动。需要换端口时，在启动命令后加 `--port 8788`。端口占用不会创建或修改 Desk 记录。如果 Codex 历史位于其他目录，在启动命令后加 `--codex-home /你的目录`。Windows 与 WSL 使用各自启动环境中可访问的 Codex home 和项目路径。
+
+原生目录列表和原文阅读使用 `--codex-home`，未指定时使用 `CODEX_HOME`，否则使用当前启动环境的 `~/.codex`。正文搜索使用 `--state-dir` 中保留的数据库；只更换 Codex home 不会清除原有匹配。切换到另一套历史时，同时指定不同的 `--state-dir`，保留旧目录和启动参数以便返回原有准备内容。阅读旧匹配的原文时，用原来的 home 和 state directory 启动。
 
 ### 更新已缓存的 uvx 预览
 
@@ -26,7 +28,7 @@ uvx 可能复用缓存中的旧版 Desk。需要更新时，先在旧 Desk 启�
 uvx --prerelease allow codex-desk@latest
 ```
 
-以后仍用普通的 `uvx --prerelease allow codex-desk` 启动。更新和以后启动时，都附上原有的 `--codex`、`--codex-home`、`--state-dir` 和 `--port` 参数；保持同一 state directory，会话、索引、草稿和准备列表留在原数据库。uvx 选中的 Desk 软件包版本用 `uvx --prerelease allow codex-desk --version` 查看；原生 Codex CLI 的版本另用 `codex --version` 检查。
+以后仍用普通的 `uvx --prerelease allow codex-desk` 启动。更新和以后启动时，都附上原有的 `--codex`、`--codex-home`、`--state-dir` 和 `--port` 参数；保持同一 state directory，会话、索引、草稿和准备列表留在原数据库。uvx 选中的 Desk 软件包版本用 `uvx --prerelease allow codex-desk --version` 查看；原生版本用启动时所选可执行文件的 `--version` 检查。独立 CLI 使用 `codex --version`，Desktop 内置版本按上方系统指南检查。
 
 ## 2. 按答案中的文字查找
 
