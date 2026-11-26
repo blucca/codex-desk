@@ -14,7 +14,7 @@ Follow the [maintained installer](../README.md#install-the-preview), choosing **
 
 ## A 90-second walkthrough
 
-**0–15s · Find the work.** Choose **Open a project**, enter its exact saved working directory, and keep **Current Codex settings**. Enter part of your conversation title, then choose **Find existing sessions** and resume it. This example searches “Native MCP” and opens **Native MCP tool evidence**. Search matches titles, not tool output; use **Browse existing Codex sessions** across folders.
+**0–15s · Find the work.** On the first screen, choose **Resume conversation** beside your recent work. For older work or a specific profile, choose **Open a project**, enter its exact saved working directory, and keep **Current Codex settings**. Enter part of your conversation title, then choose **Find existing sessions** and resume it. This example searches “Native MCP” and opens **Native MCP tool evidence**. Search matches titles, not tool output; use **Browse existing Codex sessions** across folders.
 
 **15–35s · Read the result.** Expand both MCP cards: three synthetic checks passed, with `passed: 3` in the structured result; the deliberate failure says “fixture unavailable.” Read the tool evidence alongside the summary.
 
@@ -31,6 +31,8 @@ Click **Run task** in your project. Review any native command approval, then che
 **80–90s · Optional branch.** **Continue with another provider** opens a handoff to review. Choose the next goal and profile. **Start new native conversation** creates a distinct thread, keeping the original intact.
 
 ## Next launch — no reinstall
+
+With uv, repeat the launch command in the [README](../README.md#install-the-preview). With the Python virtual-environment installation:
 
 ```sh
 cd "$HOME/codex-desk-install"

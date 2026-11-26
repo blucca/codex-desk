@@ -119,6 +119,8 @@ async def check(resume_only=False):
                             'method': r.method, 'query': parse_qs(urlsplit(r.url).query)}))
                         await page.goto(url)
                         await page.wait_for_function('state.profiles.length === 2')
+                        await page.wait_for_function('document.querySelector("#home-list").getAttribute("aria-busy") === "false"')
+                        native_calls.clear()  # First-use discovery is covered by browser_home.py.
 
                         async def project_search(query):
                             await page.locator('#project-search').fill(query)

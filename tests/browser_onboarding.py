@@ -111,6 +111,8 @@ async def check():
                             'method': r.method, 'data': r.post_data_json if r.method == 'POST' else None}))
                         await page.goto(url)
                         await page.wait_for_function('state.profiles.length === 2')
+                        await page.wait_for_function('document.querySelector("#home-list").getAttribute("aria-busy") === "false"')
+                        native_calls.clear()  # First-use discovery is covered by browser_home.py.
 
                         async def choose(project):
                             await page.locator('#new').click()
@@ -134,6 +136,7 @@ async def check():
                         await page.locator('#profile').select_option('sidecar:retained')
                         await page.locator('#project-list button').first.click()
                         await page.locator('#task').wait_for()
+                        await page.locator('#activity details summary').first.click()
                         assert '4 tests passed' in await page.locator('#activity').inner_text()
                         assert workspaces()[0]['thread_id'] == 'used-native'
                         assert workspaces()[0]['profile'] == 'sidecar:retained'

@@ -98,6 +98,7 @@ async def check():
 
                         async def manage():
                             if not await page.locator('#profiles-dialog').evaluate('(d) => d.open'):
+                                await page.locator('#provider-settings summary').click()
                                 await page.locator('#manage-profiles').click()
                             await page.wait_for_function("$('profiles-dialog').open")
 
@@ -264,7 +265,7 @@ async def check():
                         await layout('finalEdit390')
                         await page.screenshot(path=str(root / 'profile-edit-390.png'), full_page=True)
                         await cancel()
-                        result['checks']['savedBindingsUnchanged'] = desk.store.sessions() == bindings
+                        result['checks']['savedBindingsUnchanged'] = [s for s in desk.store.sessions() if s['id'] != 'native-catalog'] == bindings
                         result['checks']['currentAuthCustomUnchanged'] = \
                             all((home / name).read_bytes() == content for name, content in unchanged.items())
                         result['checks']['privateProfileMode'] = (home / 'retained.config.toml').stat().st_mode & 0o777 == 0o600

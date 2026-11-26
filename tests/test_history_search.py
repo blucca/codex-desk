@@ -61,6 +61,17 @@ class HistorySearchTests(unittest.TestCase):
     def base_options():
         return {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
 
+    def test_recent_preview_marks_missing_folders_without_mutating_native_metadata(self):
+        status, body = self.get({'recent': '1'})
+        self.assertEqual(status, 200)
+        self.assertTrue(body['data'][0]['cwdExists'])
+        self.assertNotIn('cwdExists', self.metadata['data'][0])
+        self.project.rmdir()
+        status, body = self.get({'recent': '1'})
+        self.assertFalse(body['data'][0]['cwdExists'])
+        self.assertEqual(self.get()[1], self.metadata)
+        self.catalog.request.assert_called_with('thread/list', self.base_options())
+
     def test_title_search_preserves_canonical_project_and_all_providers(self):
         status, body = self.get({'cwd': str(self.project / '..' / self.project.name),
                                  'search': '  verification  '})

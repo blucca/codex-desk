@@ -4,21 +4,25 @@
 
 适用于当前预览版。Codex Desk 在本机浏览器中展示项目会话、命令输出、MCP 工具结果、失败和原生用量；实际任务由已安装的 Codex CLI 执行。界面目前使用英文，下面保留实际按钮名称。
 
-![Codex Desk 中的 MCP 工具结果与失败](workflow.png)
+![Codex Desk：打开已有会话、查看结果并保存下一任务](resumed-work.png)
 
-*项目自有的合成 MCP 示例：文本和结构化结果、刻意触发的工具失败，以及重新打开的会话。*
+*示例项目：阅读已完成的结账测试结果，保存下一步任务。*
 
 ## 1. 安装并启动
 
-准备 **Python 3.11+** 和完整的 **Codex CLI**。先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。当前原生集成已在 **Linux / Codex CLI 0.171.0** 上运行验证。
+准备完整的 **Codex CLI**。使用 uv 可通过 README 中的一条命令启动；手动虚拟环境安装需要 **Python 3.11+**。先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。当前原生集成已在 **Linux / Codex CLI 0.171.0** 上运行验证。
 
 先在同一终端确认 `python3 --version`（Windows 用 `py -3 --version`）为 3.11 或更高，且 `codex --version` 可用。
 
-按[维护中的安装步骤](../README.md#install-the-preview)选择 **Linux/macOS/WSL** 或 **Windows PowerShell** 命令，在独立安装目录创建虚拟环境、安装当前已发布预览包并启动 Desk。发布包安装不需要 Git；网页中再选择实际项目目录。安装包地址以该页面为准。
+按[维护中的安装步骤](../README.md#install-the-preview)使用单条 uvx 命令，或展开 Python 安装方式选择系统对应的虚拟环境命令。发布包安装不需要 Git；网页中再选择实际项目目录。安装包地址以该页面为准。
 
 Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打印的完整地址。需要指定 Codex 启动器或手动打开浏览器时，可用 `codex-desk --codex /path/to/codex --no-browser`。
 
 ## 2. 选择已有会话或新会话
+
+首次打开会直接显示 **Your recent Codex work**。点击所需会话的 **Resume conversation** 即可阅读并续接，不用先输入项目路径。近期列表为空时可用 **Open a project**；历史存在其他目录时启动参数加 `--codex-home /你的目录`。
+
+以下是指定文件夹或选择另一 profile 的方式：
 
 1. 点击 **Open a project**，在 **Project folder** 输入实际项目的完整路径。使用 WSL 启动 Desk 时，输入 WSL 中可访问的路径。
 2. 首次续接，在 **Provider profile** 保持 **Current Codex settings**，使用当前 Codex 配置。
@@ -50,7 +54,7 @@ Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打�
 - **只关闭浏览器：** Desk 终端和后台任务继续运行。重新打开终端打印的 URL，在侧栏选择同一个命名会话，核对刚才的消息和命令结果后继续。
 - **停止 Desk：** 在启动它的终端按 **Ctrl+C**，Desk 会停止自己管理的 app-server 和正在运行的原生任务。下次从同一个虚拟环境启动，并沿用相同的 Codex home 和 Desk state directory，再选择该会话。
 
-再次启动不需要重新安装：
+使用 uv 启动的用户，再次运行 README 中同一条 uvx 命令即可。使用虚拟环境的用户，再次启动不需要重新安装：
 
 ```sh
 cd "$HOME/codex-desk-install"
@@ -89,7 +93,7 @@ Desk 的项目／profile／原生 thread 绑定和活动记录保存在本机 SQ
 
 已有密钥沿用 Codex 配置或启动进程的环境。新 profile 的密钥保存在本地 sidecar 文件（Linux 权限 0600），配置通过 app-server 的私有 stdin 协议传入。Desk 保留主配置、auth 和原生 rollout，继承主配置中的 MCP、项目 trust 和 sandbox 设置。
 
-**Add API provider** 中有明确标注的可选 CometAPI、88API 联盟账户链接；通过这些链接使用服务可能为 Blucca 带来佣金。现有账户和密钥也可直接使用。
+
 
 需要协助完成一个项目任务或续接时，[填写任务求助表单](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)：
 

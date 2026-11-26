@@ -33,6 +33,7 @@ async def check():
                     errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
                     await page.goto(f'http://127.0.0.1:{server.server_port}')
                     await page.wait_for_function('state.profiles.length===2')
+                    await page.locator('#provider-settings').evaluate('el=>el.open=true')
                     await page.click('#add-provider')
                     for name,value in [('name','retained'),('endpoint','https://example.com/v1'),('model','retry-model'),('key','synthetic-new-key')]:
                         await page.fill('#provider-'+name,value)
@@ -45,6 +46,7 @@ async def check():
                         await page.click('#provider-save');await page.wait_for_function("!$('provider').open")
                     retrySaved=(desk.home/'retry.config.toml').exists()
                     # Esc closes native dialogs too: it must clear the key.
+                    await page.locator('#provider-settings').evaluate('el=>el.open=true')
                     await page.click('#add-provider');await page.fill('#provider-key','synthetic-cancel-key');await page.press('#provider-key','Escape')
                     await page.wait_for_function("!$('provider').open && $('provider-key').value===''")
                     escapeCleared=await page.evaluate("$('provider-key').value===''")
@@ -52,8 +54,8 @@ async def check():
                     await page.click('#handoff-start');await page.wait_for_function("!$('handoff-start').disabled")
                     handoff=await page.evaluate("""() => ({open:$('preview').open,error:$('handoff-error')?.textContent||'',errorVisible:!!$('handoff-error')&&!$('handoff-error').hidden,evidence:$('handoff-text').value,goal:$('handoff-goal').value,globalErrorHidden:$('error').hidden})""")
                     await page.click('#preview-close')
-                    await page.click('#browse');await page.wait_for_selector('.native-row button')
-                    await page.click('.native-row button');await page.wait_for_function("!document.querySelector('.native-row button').disabled")
+                    await page.click('#browse');await page.wait_for_selector('#native-list .native-row button')
+                    await page.click('#native-list .native-row button');await page.wait_for_function("!document.querySelector('#native-list .native-row button').disabled")
                     history=await page.evaluate("""() => ({open:$('history').open,error:$('history-error').textContent,errorVisible:!$('history-error').hidden,globalErrorHidden:$('error').hidden})""")
                     overflow=await page.evaluate('document.documentElement.scrollWidth>innerWidth')
                     result={'provider':provider,'providerRetrySaved':retrySaved,'escapeKeyCleared':escapeCleared,'handoff':handoff,'history':history,'mobileOverflow':overflow,'javascriptErrors':errors,'nativeTurns':0}

@@ -91,6 +91,7 @@ function sidebarGroups(){
   return [...groups.values()].sort((a,b)=>Number(!!b.active.length)-Number(!!a.active.length));
 }
 function drawSidebar(){
+  $('session-tools').hidden=state.sessions.length===0;
   const list=$('sessions'), left=list.scrollLeft, top=list.scrollTop;
   list.replaceChildren();
   const query=$('session-filter').value.trim().normalize('NFC').toLocaleLowerCase(), showArchived=$('show-archived').checked;
@@ -123,7 +124,7 @@ function drawSidebar(){
     }
     list.append(section);
   }
-  if(!visible)list.append(make('p',query?'No saved titles or project folders match.':'No recent saved sessions. Open a project or show archived sessions.','muted'));
+  if(!visible && state.sessions.length)list.append(make('p',query?'No saved titles or project folders match.':'No recent saved sessions. Open a project or show archived sessions.','muted'));
   $('session-count').textContent=`${visible} shown · ${state.sessions.length} saved${state.sessions.some(s=>activeSession(s))?' · active tasks stay visible':''}`;
   list.scrollLeft=left;list.scrollTop=top;
 }
@@ -276,7 +277,7 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
-  selected=id;DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
+  selected=id;$('welcome').hidden=true;DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
   if(!keepError)$('error').hidden=true;
   $('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
@@ -427,6 +428,7 @@ async function startup(){
     }
   }
   starting=false;
+  if(!selected)DeskHome.load();
   if(startupError && $('error').textContent===startupError)$('error').hidden=true;
   startupError='';return true;
 }
@@ -457,6 +459,8 @@ async function tick(){
   catch(e){if(++failures===1){error(new Error(connectionError));if(starting)startupError=connectionError;}}
   finally{setTimeout(tick,failures?3000:800);}
 }
+DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>generation,open,
+  browse:()=>$('browse').click(),project:()=>$('new').click()});
 tick();
 
 let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;

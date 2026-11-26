@@ -59,6 +59,7 @@ class AssetsTests(unittest.TestCase):
                 self.assertIn('/followups.js', page.scripts)
                 self.assertIn('/native-state.js', page.scripts)
                 self.assertIn('/recall.js', page.scripts)
+                self.assertIn('/home.js', page.scripts)
                 self.assertIn('/style.css', page.styles)
                 static = Path(desk_server.__file__).parent / 'static'
                 for asset, expected in ([(a, 'text/javascript; charset=utf-8') for a in page.scripts]
