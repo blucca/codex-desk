@@ -1,0 +1,36 @@
+{
+  "thread": {
+    "id": "synthetic-checkout-thread",
+    "name": "Synthetic retry-budget example",
+    "cwd": "/synthetic/checkout",
+    "turns": [
+      {
+        "id": "synthetic-turn",
+        "status": "completed",
+        "items": [
+          {
+            "id": "synthetic-answer",
+            "type": "agentMessage",
+            "text": "RETRY BUDGET: retain the original retry limit."
+          },
+          {
+            "id": "synthetic-command",
+            "type": "commandExecution",
+            "command": "synthetic-checkout-test",
+            "status": "completed",
+            "exitCode": 0,
+            "aggregatedOutput": "Retry budget verified: 2 attempts retained."
+          },
+          {
+            "id": "synthetic-null-output",
+            "type": "commandExecution",
+            "command": "synthetic-empty-output-test",
+            "status": "completed",
+            "exitCode": 0,
+            "aggregatedOutput": null
+          }
+        ]
+      }
+    ]
+  }
+}

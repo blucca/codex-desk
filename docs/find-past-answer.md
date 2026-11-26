@@ -30,4 +30,6 @@ Each item shows a window of up to **20,000 text characters**. For longer output,
 
 For work beyond the recent index window, use **Browse all conversations** on the first screen or **Browse existing Codex sessions** in the sidebar. Search its title and use **Load more** as needed. Choose **Read original conversation** on any catalog row to read that history without importing or resuming it, even when its folder is gone. **Back to search** keeps your title query and loaded rows. Resume it when the folder exists if you want to continue; opening the workbench caches readable evidence for content search.
 
+[Python snapshot-search example: original thread/turn/item IDs](native-history-search-example.md)
+
 [中文首次使用指南](first-project.zh-CN.md) · [Full workflow reference](workbench.md) · [Ask for task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)
