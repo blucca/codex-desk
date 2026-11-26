@@ -438,7 +438,9 @@ async def check(width, playwright, evidence):
                 assert 'narrow the query or project' in await page.locator('#recall-summary').inner_text()
                 await search('no-match-anywhere')
                 assert await page.locator('.recall-result').count() == 0
-                assert 'No saved content matches' in await page.locator('#recall-summary').inner_text()
+                assert 'Native history is not indexed yet' in await page.locator('#recall-summary').inner_text()
+                assert await page.locator('#recall-index').count() == 1
+                assert await page.locator('#recall-index').evaluate("n=>n.parentElement.id==='recall-actions'")
                 await search('fixture-error')
                 assert 'Fixture saved-content store unavailable' in await page.locator('#recall-error').inner_text()
                 assert await page.locator('#recall-search').is_enabled()
