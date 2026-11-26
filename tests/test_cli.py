@@ -1,4 +1,5 @@
 import contextlib
+import errno
 import http.client
 import io
 import json
@@ -6,6 +7,7 @@ import os
 from pathlib import Path
 import queue
 import shlex
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -23,6 +25,156 @@ ROOT.mkdir(parents=True, exist_ok=True)
 
 
 class CliTests(unittest.TestCase):
+    def test_invalid_ports_stop_before_preflight_state_server_or_browser(self):
+        for port in ('-1', '65536', 'not-a-port'):
+            with self.subTest(port=port), \
+                    patch.object(sys, 'argv', ['codex-desk', '--port', port]), \
+                    patch.object(desk_server, 'resolve_codex') as preflight, \
+                    patch.object(desk_server, 'Desk') as desk, \
+                    patch.object(desk_server, 'ThreadingHTTPServer') as server, \
+                    patch.object(desk_server.webbrowser, 'open') as browser, \
+                    contextlib.redirect_stdout(io.StringIO()) as output, \
+                    contextlib.redirect_stderr(io.StringIO()) as errors:
+                with self.assertRaises(SystemExit) as exit:
+                    desk_server.main()
+                self.assertEqual(exit.exception.code, 2)
+                self.assertIn('Use port 0 or an integer from 1 to 65535', errors.getvalue())
+                self.assertNotIn('Traceback', errors.getvalue())
+                self.assertEqual(output.getvalue(), '')
+                preflight.assert_not_called()
+                desk.assert_not_called()
+                server.assert_not_called()
+                browser.assert_not_called()
+
+    def test_occupied_loopback_port_has_guidance_without_creating_state(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder, \
+                desk_server.ThreadingHTTPServer(('127.0.0.1', 0),
+                    desk_server.BaseHTTPRequestHandler) as occupied:
+            state = Path(folder) / 'state'
+            port = occupied.server_port
+            output, errors = io.StringIO(), io.StringIO()
+            with patch.object(sys, 'argv', ['codex-desk', '--port', str(port),
+                    '--state-dir', str(state)]), \
+                    patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
+                    patch.object(desk_server, 'Desk') as desk, \
+                    patch.object(desk_server.webbrowser, 'open') as browser, \
+                    contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                with self.assertRaises(SystemExit) as exit:
+                    desk_server.main()
+            self.assertEqual(exit.exception.code, 2)
+            self.assertIn(f'http://127.0.0.1:{port} is already in use', errors.getvalue())
+            self.assertIn('If Codex Desk is already running, reopen that URL', errors.getvalue())
+            self.assertIn('--port 8788', errors.getvalue())
+            self.assertNotIn('Traceback', errors.getvalue())
+            self.assertEqual(output.getvalue(), '')
+            self.assertFalse(state.exists())
+            desk.assert_not_called()
+            browser.assert_not_called()
+
+    def test_other_listener_failure_is_actionable_without_creating_state(self):
+        with patch.object(sys, 'argv', ['codex-desk', '--port', '8787']), \
+                patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
+                patch.object(desk_server, 'ThreadingHTTPServer',
+                    side_effect=OSError(errno.EACCES, 'Permission denied')), \
+                patch.object(desk_server, 'Desk') as desk, \
+                patch.object(desk_server.webbrowser, 'open') as browser, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            with self.assertRaises(SystemExit) as exit:
+                desk_server.main()
+        self.assertEqual(exit.exception.code, 2)
+        self.assertIn('Could not listen on http://127.0.0.1:8787', errors.getvalue())
+        self.assertIn('Permission denied', errors.getvalue())
+        self.assertNotIn('Traceback', errors.getvalue())
+        desk.assert_not_called()
+        browser.assert_not_called()
+
+    def test_listener_precedes_state_and_port_zero_no_browser_closes_resources(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            state = Path(folder) / 'state'
+            servers, desks = [], []
+            server_type, desk_type = desk_server.ThreadingHTTPServer, desk_server.Desk
+            def bind(*args):
+                self.assertFalse(state.exists())
+                server = server_type(*args)
+                server.serve_forever = lambda: None
+                servers.append(server)
+                return server
+            def initialize(*args):
+                self.assertGreater(servers[0].socket.fileno(), -1)
+                self.assertGreater(servers[0].server_port, 0)
+                desk = desk_type(*args)
+                desks.append(desk)
+                return desk
+            with patch.object(sys, 'argv', ['codex-desk', '--port', '0', '--no-browser',
+                    '--state-dir', str(state)]), \
+                    patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
+                    patch.object(desk_server, 'ThreadingHTTPServer', side_effect=bind), \
+                    patch.object(desk_server, 'Desk', side_effect=initialize), \
+                    patch.object(desk_server.webbrowser, 'open') as browser, \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                desk_server.main()
+            self.assertEqual(output.getvalue(), f'Codex Desk: http://127.0.0.1:{servers[0].server_port}\n')
+            self.assertEqual(servers[0].socket.fileno(), -1)
+            self.assertEqual(desks[0].runtimes, {})
+            with self.assertRaises(sqlite3.ProgrammingError):
+                desks[0].store.db.execute('SELECT 1')
+            browser.assert_not_called()
+
+    def test_state_initialization_failure_closes_partial_store_and_listener(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            servers, stores = [], []
+            server_type, store_type = desk_server.ThreadingHTTPServer, desk_server.Store
+            def bind(*args):
+                server = server_type(*args)
+                servers.append(server)
+                return server
+            def store(*args):
+                result = store_type(*args)
+                stores.append(result)
+                return result
+            with patch.object(sys, 'argv', ['codex-desk', '--port', '0',
+                    '--state-dir', str(Path(folder) / 'state')]), \
+                    patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
+                    patch.object(desk_server, 'ThreadingHTTPServer', side_effect=bind), \
+                    patch.object(desk_server, 'Store', side_effect=store), \
+                    patch.object(desk_server, 'NativeRecallIndex', side_effect=ValueError('index unavailable')), \
+                    patch.object(desk_server.webbrowser, 'open') as browser, \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                with self.assertRaisesRegex(ValueError, 'index unavailable'):
+                    desk_server.main()
+            self.assertEqual(servers[0].socket.fileno(), -1)
+            with self.assertRaises(sqlite3.ProgrammingError):
+                stores[0].db.execute('SELECT 1')
+            self.assertEqual(output.getvalue(), '')
+            browser.assert_not_called()
+
+    def test_browser_startup_failure_closes_desk_store_and_listener(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            servers, desks = [], []
+            server_type, desk_type = desk_server.ThreadingHTTPServer, desk_server.Desk
+            def bind(*args):
+                server = server_type(*args)
+                servers.append(server)
+                return server
+            def initialize(*args):
+                desk = desk_type(*args)
+                desks.append(desk)
+                return desk
+            with patch.object(sys, 'argv', ['codex-desk', '--port', '0',
+                    '--state-dir', str(Path(folder) / 'state')]), \
+                    patch.object(desk_server, 'resolve_codex', return_value=sys.executable), \
+                    patch.object(desk_server, 'ThreadingHTTPServer', side_effect=bind), \
+                    patch.object(desk_server, 'Desk', side_effect=initialize), \
+                    patch.object(desk_server.webbrowser, 'open', side_effect=RuntimeError('browser unavailable')), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(RuntimeError, 'browser unavailable'):
+                    desk_server.main()
+            self.assertEqual(servers[0].socket.fileno(), -1)
+            self.assertEqual(desks[0].runtimes, {})
+            self.assertTrue(desks[0].history_scanner.cancelled.is_set())
+            with self.assertRaises(sqlite3.ProgrammingError):
+                desks[0].store.db.execute('SELECT 1')
+
     def test_version_exits_before_codex_preflight_state_server_or_browser(self):
         output, errors = io.StringIO(), io.StringIO()
         with patch.object(sys, 'argv', ['codex-desk', '--version']), \

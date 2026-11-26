@@ -1,5 +1,6 @@
 """Loopback UI for project-bound native sessions."""
 import argparse
+import errno
 import json
 import os
 from pathlib import Path
@@ -32,8 +33,12 @@ class Desk:
     def __init__(self, binary, home, state):
         self.binary, self.home = binary, Path(home).expanduser().resolve()
         self.store = Store(Path(state) / "desk.sqlite3")
-        self.native_index = NativeRecallIndex(self.store)
-        self.history_scanner = NativeHistoryScanner(self, self.native_index)
+        try:
+            self.native_index = NativeRecallIndex(self.store)
+            self.history_scanner = NativeHistoryScanner(self, self.native_index)
+        except BaseException:
+            self.store.db.close()
+            raise
         self.runtimes = {}
         self.lock = threading.RLock()
         self.admissions = {}
@@ -495,6 +500,16 @@ def resolve_codex(value):
                      'Complete or repair that Codex CLI installation, or pass --codex /path/to/codex')
 
 
+def port_number(value):
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError('Use port 0 or an integer from 1 to 65535') from None
+    if not 0 <= port <= 65535:
+        raise argparse.ArgumentTypeError('Use port 0 or an integer from 1 to 65535')
+    return port
+
+
 def main():
     parser = argparse.ArgumentParser(description="Open your daily native Codex project workbench")
     parser.add_argument('--version', action='version', version=__version__,
@@ -503,28 +518,54 @@ def main():
                         help='Codex executable name or path (relative to this launch directory)')
     parser.add_argument('--codex-home', default=os.environ.get('CODEX_HOME', str(Path.home() / '.codex')))
     parser.add_argument('--state-dir', default=str(Path.home() / '.local' / 'state' / 'codex-desk'))
-    parser.add_argument('--port', type=int, default=8787)
+    parser.add_argument('--port', type=port_number, default=8787,
+                        help='Loopback port (default: 8787; 0 chooses an available port)')
     parser.add_argument('--no-browser', action='store_true')
     args = parser.parse_args()
     try:
         args.codex = resolve_codex(args.codex)
     except ValueError as error:
         parser.error(str(error))
-    desk = Desk(args.codex, args.codex_home, args.state_dir)
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), handler(desk))
-    url = f'http://127.0.0.1:{server.server_port}'
-    print('Codex Desk: ' + url, flush=True)
-    if not args.no_browser:
-        webbrowser.open(url)
-    def stop(*_):
-        threading.Thread(target=server.shutdown, daemon=True).start()
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
+    # Reserve the listener before creating or migrating any Desk state. No
+    # requests are handled until the initialized Desk handler is installed.
     try:
+        server = ThreadingHTTPServer(('127.0.0.1', args.port), BaseHTTPRequestHandler)
+    except OSError as error:
+        url = f'http://127.0.0.1:{args.port}'
+        alternate = 8788 if args.port != 8788 else 8787
+        if error.errno in (errno.EADDRINUSE, 10048):
+            parser.error(f'{url} is already in use. If Codex Desk is already running, '
+                         f'reopen that URL in your browser; otherwise choose another port '
+                         f'with --port {alternate}')
+        parser.error(f'Could not listen on {url}: {error.strerror or error}. '
+                     f'Choose another port with --port {alternate}')
+    desk = None
+    previous_signals = {}
+    try:
+        desk = Desk(args.codex, args.codex_home, args.state_dir)
+        server.RequestHandlerClass = handler(desk)
+        url = f'http://127.0.0.1:{server.server_port}'
+        print('Codex Desk: ' + url, flush=True)
+        if not args.no_browser:
+            webbrowser.open(url)
+        def stop(*_):
+            threading.Thread(target=server.shutdown, daemon=True).start()
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            previous_signals[signum] = signal.signal(signum, stop)
         server.serve_forever()
     finally:
-        desk.close()
-        server.server_close()
+        try:
+            for signum, previous in previous_signals.items():
+                signal.signal(signum, previous)
+        finally:
+            try:
+                server.server_close()
+            finally:
+                if desk is not None:
+                    try:
+                        desk.close()
+                    finally:
+                        desk.store.db.close()
 
 if __name__ == '__main__':
     main()

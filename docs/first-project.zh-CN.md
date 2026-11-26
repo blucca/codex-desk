@@ -1,170 +1,65 @@
-# Codex Desk：找回已有会话，准备下一步
+# Codex Desk：找回旧答案，先阅读，再继续任务
 
-[五步图解：查找会话 → 阅读结果 → 验证任务 → 再次打开](task-walkthrough.md)（英文，使用本地示例）
+记得答案中的一句话，却忘了会话标题？用已有的 Codex CLI 和登录，索引本机历史、查找文字并阅读原会话；准备好后再续接同一个任务。界面目前使用英文，下面保留实际按钮名称。
 
-用已有的 Codex CLI 和登录，在本机浏览器中打开旧会话、阅读结果、保存下一步任务；也可以按答案中的文字查找近期历史，先只读原会话，再决定是否继续任务。界面目前使用英文，下面保留实际按钮名称。
-
-![Codex Desk：打开已有会话、查看结果并保存下一任务](resumed-work.png)
-
-*示例项目：阅读已完成的结账测试结果，保存下一步任务。*
+[20 秒示例：索引 → 查找答案 → 阅读原会话](find-answer.gif)（合成的结账项目历史）
 
 ## 1. 安装并启动
 
-先按 [Codex CLI 官方安装说明](https://developers.openai.com/codex/cli)安装并完成登录或提供商配置，在准备启动 Desk 的同一终端确认 `codex --version` 可用。使用 uv 可通过 README 中的一条命令启动；手动虚拟环境安装需要 **Python 3.11+**，可用 `python3 --version`（Windows 用 `py -3 --version`）确认。
+在准备启动 Desk 的终端确认 `codex --version` 可用。按 [README 维护中的安装步骤](../README.md#install-the-preview)运行单条 uvx 命令；使用 Python 安装时，展开对应系统的虚拟环境步骤，需要 Python 3.11+。
 
-按[维护中的安装步骤](../README.md#install-the-preview)使用单条 uvx 命令，或展开 Python 安装方式选择系统对应的虚拟环境命令。发布包安装不需要 Git；网页中再选择实际项目目录。安装包地址以该页面为准。
+保持终端运行，打开它打印的地址，默认是 **`http://127.0.0.1:8787`**。 如果提示地址已占用，原 Desk 终端仍运行时直接重新打开该地址；需要换端口时，在启动命令后加 `--port 8788`。端口占用不会创建或修改 Desk 记录。如果 Codex 历史位于其他目录，在启动命令后加 `--codex-home /你的目录`。Windows 与 WSL 使用各自启动环境中可访问的 Codex home 和项目路径。
 
-Desk 会打印 **`http://127.0.0.1:8787`** 并打开浏览器；使用终端打印的完整地址。需要指定 Codex 启动器或手动打开浏览器时，可用 `codex-desk --codex /path/to/codex --no-browser`。
+## 2. 按答案中的文字查找
 
-## 2. 选择已有会话或新会话
+1. 首页点击 **Find a decision in past work**；已有会话打开时，点击侧栏 **Search saved content**。
+2. 点击 **Index existing Codex history**，明确读取最近更新的最多 **200 个原生会话**，包括尚未在 Desk 打开过的历史。等状态显示完成，核对 seen／indexed／unchanged／failed 数量。索引只读取历史并保存本地缓存，不创建会话绑定或发送任务。
+3. 先保持 **All indexed projects**。在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 **2–200 个字符**，再点击 **Search** 或按 Enter。搜索按字面文字匹配，忽略大小写并规范化 Unicode。索引完成后，再点一次 **Search** 更新结果。
+4. 核对结果中的会话、项目目录和匹配片段。需要缩小范围时，选择 **Project folder (optional)**，再点 **Search**。
 
-首次打开会直接显示 **Your recent Codex work**。点击所需会话的 **Resume conversation** 即可阅读并续接，不用先输入项目路径。近期列表为空时可用 **Open a project**；历史存在其他目录时启动参数加 `--codex-home /你的目录`。
+**Index coverage and text limits** 显示实际缓存范围和缩短／省略的条目。**Index existing history again** 刷新最近 200 个会话并跳过未变化的快照，不会自动进入更旧历史。**Cancel indexing** 保留已缓存的内容；关闭搜索对话框后，正在进行的索引仍会继续。失败或取消后用 **Retry** 重试。
 
-以下是指定文件夹或选择另一 profile 的方式：
+## 3. 只读原会话
 
-1. 点击 **Open a project**，在 **Project folder** 输入实际项目的完整路径。使用 WSL 启动 Desk 时，输入 WSL 中可访问的路径。
-2. 首次续接，在 **Provider profile** 保持 **Current Codex settings**，使用当前 Codex 配置。
-3. 点击 **Find existing sessions**，查看这个项目的 **Saved conversations**；需要更多结果时点击 **Load more**。
-4. 找到要继续的会话，点击 **Resume this conversation**。要开始独立的新任务，则填写可选的 **New conversation name (optional)**，点击 **Start new conversation**。
+在原生历史结果或带有原 thread 的缓存活动结果中，点击 **Read original conversation**。查看器定位原 turn／item，并高亮匹配文字；当前打开的任务和草稿保持不变。
 
-若已知部分会话标题，在 **Search conversation titles** 输入这些文字，再点击 **Find existing sessions** 或按 Enter。侧栏的 **Browse existing Codex sessions** 可跨项目浏览所选 Codex home 中的原生会话；在其中输入标题文字并点击 **Search titles**。修改搜索文字会清空旧结果和分页，需要再次提交；标题框留空则列出当前范围内的会话，**Load more** 继续同一次搜索和范围。
+**项目目录已删除，也能阅读原历史。** 阅读不导入、不续接 thread。点击 **Back to search** 或 **Close** 返回原查询和结果。
 
-项目列表按会话保存的工作目录（`cwd`）精确匹配：在子目录中创建的会话，需要输入该子目录或使用侧栏的全局浏览。标题搜索按子串匹配原生提取出的会话标题，不搜索消息正文、命令输出或 MCP 结果。
+长会话每页显示 **40 个条目**，用 **Previous items**／**Next items** 换页。长输出用 **Earlier text**／**Later text** 阅读其他文字窗口，每个窗口最多 **20,000 个字符**。原匹配项已变化时，查看器显示实际定位状态；读取失败用 **Retry read** 重试。
 
-全局列表中的 **Resume with current settings** 使用当前 Codex 配置。新建但还未发送过任务的空会话，原生 Codex 尚未写入会话记录（rollout），重启后可能获得新的原生线程（thread）；已使用过的会话按保存的 thread 续接。
+### 已知标题，或会话不在近期索引里
 
-## 3. 阅读结果，保存下一步
+首页点击 **Browse all conversations**，或侧栏 **Browse existing Codex sessions**。输入标题文字，点击 **Search titles**，需要时用 **Load more**。在该行直接点击 **Read original conversation**，无需先续接，也不要求原目录存在。返回后保留标题查询和已加载列表。
 
-打开已有会话后，先确认页眉的项目路径、提供商和模型，再阅读历史消息、实际命令输出与退出状态、文件变化，以及已有的 MCP 文本／结构化结果和失败。
+标题搜索不搜索正文。若要把更旧会话的正文加入内容搜索，可在目录存在时明确续接它；打开后的可读活动会缓存到 Desk。
 
-先把下一步写入任务框，选择 **Work — native tools and edits** 或 **Plan — clarify before execution**。看到 **Draft saved locally** 后，文字和模式已保存在这个 Desk 会话的本地数据库。也可以点击 **Save as follow-up**，将它存入当前会话的准备列表；这些准备都不会自动发送。
+## 4. 准备好后再继续任务
 
-例如，可以先保存下面这个只读检查任务：
+阅读后先用 **Back to search** 返回结果，再点击 **Continue this conversation**。它使用 **Current Codex settings** 续接原来的原生 thread；**这一步需要保存的项目目录仍然存在**。缓存活动的 **Open matching activity** 使用原有 Desk 绑定和 profile。
 
-```text
-只读检查这个项目：列出项目根目录的一层文件，读取 README（若存在），找出其中说明的验证命令。报告实际执行的命令、输出和退出状态；若未记载验证命令，直接说明未找到。只说明验证命令，不运行它，不安装依赖，不修改文件。
-```
+如果只是想打开近期任务，首页 **Your recent Codex work** 中的 **Resume conversation** 可直接续接。按指定目录查找时，用 **Open a project** → **Project folder** → **Find existing sessions** → **Resume this conversation**，首次保持 **Current Codex settings**。
 
-准备好执行时再点击 **Run task**，或在 **Prepared follow-ups** 中点击 **Send next**。出现原生命令审批时，查看实际命令后点击 **Allow once**；拒绝该命令用 **Decline**。需要中断当前任务用 **Stop turn**。任务结束后核对命令结果；**Thread usage** 显示原生 Codex 最近报告的当前 thread 累计用量。
+在任务框写下一步，选择 **Work — native tools and edits** 或 **Plan — clarify before execution**。等 **Draft saved locally** 出现，或点击 **Save as follow-up** 保存到当前会话的准备列表。准备完成后才点击 **Run task**，或在 **Prepared follow-ups** 中点击 **Send next**。
 
-可用 **Rename session** → **Save name** 为会话取一个容易再次找到的名字。
+## 5. 关闭后回来
 
-## 4. 记得答案，但忘了会话标题
+- **只关闭页面：** 终端和后台任务继续运行。在同一浏览器重新打开终端打印的 URL，会恢复上次打开的会话及草稿；也可在侧栏选择已保存的会话。
+- **停止 Desk：** 在启动终端按 **Ctrl+C**，停止 Desk 管理的 app-server 和原生任务。再次运行 README 中同一条 uvx 命令，或从原虚拟环境启动 `codex-desk`。保持原来的 `--codex-home`、`--state-dir` 和 `--codex` 参数。
+- **检查准备是否恢复：** 选中同一会话，核对任务文字、Work／Plan 模式和 **Prepared follow-ups**。草稿和后续任务保存在本地，不会因重启自动发送。
 
-[20 秒本地示例：索引 → 查找答案 → 只读原会话](find-answer.gif)（使用合成的结账项目历史）
+本地记录默认位于 `~/.local/state/codex-desk/desk.sqlite3`。同一 state directory 保留会话绑定、索引缓存和准备内容；浏览器记住上次选中的会话。换浏览器时，在侧栏重新选择它。
 
-1. 首页点击 **Find a decision in past work**；已打开会话时，使用侧栏的 **Search saved content**。
-2. 点击 **Index existing Codex history**，明确读取所选 Codex home 中最近更新的最多 **200 个原生会话**，把可读文本存入本地缓存。包括尚未在 Desk 打开过的会话；索引过程不创建这些会话的 Desk 绑定，也不发送任务。
-3. 等待索引完成，先保持 **All indexed projects**，在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 2–200 个字符，再点 **Search** 或按 Enter。搜索为字面文字匹配，忽略大小写并规范化 Unicode；索引完成后需要再次点击 **Search** 更新结果。可选择已有的 **Project folder (optional)**，按精确项目目录缩小范围。
-4. 核对结果中的会话、目录和匹配片段，点击原生结果的 **Read original conversation**。只读查看器按原来的 turn／item 定位并高亮匹配文字；即使项目目录已被删除，也可阅读原会话，不导入、不续接 thread。当前选中的任务和草稿保持不变，**Back to search** 或 **Close** 返回原查询和结果。
-5. 想继续这个任务时，再点 **Continue this conversation**，用 **Current Codex settings** 续接原来的原生 thread；这一步需要原项目目录仍然存在。准备下一步后再发送。**Open matching activity** 打开已缓存的 Desk 会话，保留它的 profile。草稿和已准备的后续任务也能搜索并打开。
+## 6. 卡在哪一步？
 
-查看器每页显示 **40 个原始条目**，用 **Previous items**／**Next items** 换页。每条正文按最多 **20,000 个字符**的窗口显示，长输出使用 **Earlier text**／**Later text** 阅读其他窗口，字符范围和总量可见。原 turn／item 或匹配文字已变化时，查看器明确说明，仍可阅读其余历史；读取失败用 **Retry read** 重试。
+[填写任务求助表单](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)，说明 **Operating system**、**Codex CLI version**、**The task you want to complete**、**Step reached**、**Expected result** 和 **Actual result**。CLI 版本使用启动 Desk 的同一终端中的 `codex --version` 输出；命令不可用时填写实际错误。
 
-**Index coverage and text limits** 显示实际缓存范围，以及缩短、省略、不支持或不可读的条目。每个原生会话优先保留最新可读条目，最多 **5,000 个条目、共 2,000,000 个字符**，每条最多 **200,000 个字符**。结果最多显示 **30 条匹配项**；结果更多时缩小文字或项目范围。**Include archived sessions** 包含本地已归档的 Desk 条目，打开结果会恢复该条目。
+**Steps and controls used**、**Context for this step**、**Codex Desk version** 和 **Short error text** 是可选项。复现可以用中性示例或搜索词长度，附简短的状态／错误文字即可。
 
-**Index existing history again** 重新检查最近 200 个会话的窗口，跳过未变化的快照，不会自动向更旧历史翻页。窗口之外的旧会话可先用 **Browse all conversations**／**Browse existing Codex sessions** 按标题查找，使用 **Load more**，打开后再搜索正文。**Cancel indexing** 保留已缓存的文本；关闭搜索对话框时，正在进行的索引仍会继续。失败或取消后用 **Retry** 重试。
-
-[简短英文指南：找回过去的 Codex 答案并打开原任务](find-past-answer.md)
-
-## 5. 关闭页面后怎样回来
-
-- **只关闭浏览器：** Desk 终端和后台任务继续运行。重新打开终端打印的 URL，在侧栏选择同一个命名会话，核对刚才的消息和命令结果后继续。
-- **停止 Desk：** 在启动它的终端按 **Ctrl+C**，Desk 会停止自己管理的 app-server 和正在运行的原生任务。下次从同一个虚拟环境启动，并沿用相同的 Codex home 和 Desk state directory，再选择该会话。
-
-使用 uv 启动的用户，再次运行 README 中同一条 uvx 命令即可。使用虚拟环境的用户，再次启动不需要重新安装：
-
-```sh
-cd "$HOME/codex-desk-install"
-. .venv/bin/activate
-codex-desk
-```
-
-PowerShell 对应为：
-
-```powershell
-Set-Location "$HOME\codex-desk-install"
-.\.venv\Scripts\codex-desk.exe
-```
-
-若之前使用 `--codex-home`、`--state-dir` 或 `--codex`，再次启动时保留这些参数；依赖环境变量提供密钥的配置，也从设置了该变量的终端启动。
-
-## 6. 当前配置、提供商 profile 与交接
-
-[提供商切换任务指南（英文）](https://blucca.github.io/guides/switch-codex-api-provider/)：核对本地 API profile，审阅旧会话证据，运行一个验证任务，再次打开新会话。
-
-**Current Codex settings** 使用主配置。已有的原生文件 profile 会出现在下拉框；**Add API provider** 可保存新的本地 profile。表单填写 **Profile name**（1–41 个英文字母、数字、下划线或连字符，首字符为字母或数字）、**API base URL**、账户可用的准确 **Model** 和已有 **API key**，点击 **Save local profile**。该账户需支持 Responses API，base URL 使用提供商为 Codex 指定的完整地址。
-
-在项目对话框选择 profile 后点击 **Resume this conversation**，仍然续接原来的原生 thread，只是使用所选配置；这不是交接到新 thread。名为 `default` 的文件 profile 与 **Current Codex settings** 是不同选项。
-
-要把可见工作证据交给另一提供商，使用以下流程：
-
-1. 在打开的会话点击 **Continue with another provider**，或在原生历史列表点击 **Review handoff**。
-2. 在 **Review the handoff** 中核对可见消息、命令、文件变化和 MCP 结果，编辑完成情况与剩余工作，并查看省略提示。填写 **What should Codex do next?**，确认 **Project folder** 和 **Next provider**。
-3. 点击 **Start new native conversation**，Desk 会创建**不同的原生 thread**，立即向目标提供商运行你审阅后的交接文本和下一目标。原会话 rollout 保持原样。
-
-只读取或审阅交接文本不运行模型回合，也不向旧提供商请求压缩。交接使用可见任务证据，加密推理内容（reasoning）不重放到新 thread。
-
-## 7. 本地记录与任务求助
-
-Desk 的项目／profile／原生 thread 绑定、活动记录、索引后的原生历史文本和草稿保存在本机 SQLite，默认路径为 `~/.local/state/codex-desk/desk.sqlite3`。索引和原会话查看器使用原生会话列表／读取请求，文字搜索读取本地缓存；沿用相同 state directory 重启后仍可搜索。实际运行任务时，模型请求由原生 Codex 发往所选提供商。
-
-已有密钥沿用 Codex 配置或启动进程的环境。新 profile 的密钥保存在本地 sidecar 文件（Linux 权限 0600），配置通过 app-server 的私有 stdin 协议传入。Desk 保留主配置、auth 和原生 rollout，继承主配置中的 MCP、项目 trust 和 sandbox 设置。
-
-
-
-需要协助完成一个项目任务或续接时，[填写任务求助表单](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)：
-
-- **Operating system**：Linux、macOS、Windows、WSL 或 Other。
-- **Codex CLI version**：启动 Desk 的终端中 `codex --version` 的完整输出。
-- **The task you want to complete**：一个具体的项目／会话目标。
-- **Step reached**：选择已到达的英文步骤，见下表。
-- **Short error text (optional)**：可选的短错误原文，去掉密钥、私有 URL 和项目路径。
-
-| Step reached 选项 | 对应步骤 |
+| 症状 | 可复现路径与可选信息 |
 | --- | --- |
-| Install and launch | 安装与启动 |
-| Find/import saved conversation | 查找／导入已有会话 |
-| Resume/send task | 续接／发送任务 |
-| Tool approval or planning question | 工具审批或规划问题 |
-| New-provider handoff | 新提供商交接 |
-| Return after closing/stopping | 关闭页面／停止后返回 |
-| Other | 其他 |
+| 正文搜索没有结果 | Find → Index → All indexed projects → Search；注明索引数量、搜索词长度和所选范围 |
+| 匹配结果无法阅读 | 注明从正文结果还是标题列表点击 Read；记录 Retry read 后的实际状态 |
+| 删除目录后无法继续 | 区分 Read original conversation 与 Continue this conversation；注明目录是否仍存在 |
+| 返回后没有草稿 | 先等 Draft saved locally → 关闭／重启 → 选择同一会话；注明浏览器、state directory 和启动参数是否改变 |
 
-## 阅读长任务，留在当前项目
-
-助手结果按标题、列表和代码块显示；代码块的 **Copy** 只复制代码文本。命令、文件改动与 MCP 结果收在可展开的证据卡片里，进行中的工具默认展开。手动收起或展开后，后续输出不会改变你的选择。
-
-阅读旧结果时新输出不会把页面拉到底部。点击 **Latest output ↓** 回到最新结果和任务输入框；本来就在底部时会跟随新输出。切到另一个项目后，侧栏仍更新先前项目的等待批准和完成状态，浏览器标题显示活跃任务数。
-
-## 找不到已有会话的历史时
-
-如果打开已保存会话时提示 `no rollout found`，Desk 保留原会话绑定。恢复该会话的历史文件，或用原来的 `--codex-home` 重新启动 Desk 后再打开；要开始无旧上下文的新工作，请明确选择 **Start new conversation**。新建但从未运行任务的空会话才可能自动重建。
-
-添加同名提供商、打开不存在的交接目录或恢复已删除的项目失败时，错误显示在当前对话框内。修改后重试即可；提供商表单保留名称、地址和模型，API key 需重新输入。
-
-## 保留下一步任务和供应商配置
-
-在任务输入框准备下一步，并选择 **Work** 或 **Plan**。看到 **Draft saved locally** 后，文字和模式已保存在这个 Desk 会话的本地数据库；刷新页面或用相同 state directory 重启 Desk 后会恢复，不会自动执行。发送失败时保留草稿。若另一标签页修改了同一草稿，选择 **Keep this tab draft**（保留当前标签页）或 **Load saved draft**（读取已保存草稿），然后再继续。
-
-选择 **Manage API profiles** → **Edit profile**，可以修改 Desk 创建的接口地址／模型，或轮换密钥，供应商名称和已有会话绑定不变。密钥留空即保留原值。当前 Codex 配置及自定义原生配置文件仍由其原文件管理。已经加载该配置的原生后端不会被热切换；保存后若提示仍在使用，按 **Ctrl+C** 停止 Desk，再用原参数启动，便会加载新配置。
-
-## 按项目整理活跃／最近会话
-
-侧栏按项目分组。**Active** 显示正在运行和等待批准的任务，**Recent** 显示空闲会话。**Find saved titles or folders** 按本地标题或项目目录筛选，不切换当前会话。
-
-**Archive session** 只把空闲的 Desk 条目从最近列表隐藏，原生历史、供应商绑定、草稿和已准备的后续任务都保留。勾选 **Show archived** 后点击 **Restore** 可恢复；仍在运行的归档会话继续显示在 Active，便于批准或停止。从原生历史再次打开时，也会复用并恢复原绑定。
-
-## 提前准备多个后续任务
-
-在输入框写任务、选择 **Work** 或 **Plan**，再点 **Save as follow-up**。任务存入当前 Desk 会话和供应商的准备列表，即使上一项任务还在运行也可准备。展开 **Prepared follow-ups** 可以编辑、删除、上下移动或清空已准备的内容。
-
-上一项结束后，点 **Send next** 只提交一项到它所属的会话。提交途中切换项目不会改变目标；剩余内容保持暂停。重新打开页面或重启 Desk 都不会自动执行。
-
-若无法确认启动结果，列表保留当时提交的指令。先检查该会话活动记录，再选 **It started — record accepted**（已启动，记为接受）或 **It did not start — keep prepared**（未启动，保留准备）。未确认的启动会阻止下一次提交；提交后又编辑过的内容不会被旧回执删除。
-
-## 原生容量和失败状态
-
-用量区分别显示原生累计输入／输出、最新请求输入和模型报告的上下文窗口。累计用量不当作当前占用比例。原生自动重试显示 **Native retry in progress**；最终失败卡片保留错误正文、类型及 HTTP 信息，并按真实错误给出检查模型／密钥、等待限流或新会话交接的下一步。先前的任务和工具输出仍可阅读。
-
-只记得旧会话标题、或它不在最近 200 条索引内？在 **Browse all conversations** 中搜索标题，用 **Load more** 翻页，再点该行的 **Read original conversation**。原项目目录已删除也能阅读；返回后保留标题查询和已加载列表。
+[完整工作流：profile、审批、交接、归档和后续任务](workbench.md)（英文） · [英文答案查找指南与缓存范围](find-past-answer.md)

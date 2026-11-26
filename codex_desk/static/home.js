@@ -34,8 +34,8 @@ const DeskHome=(()=>{
         const preview={...thread,name:title.length>160?title.slice(0,157)+'…':title};
         $('home-list').append(env.row(preview,()=>resume(thread,v,g),null,'Resume conversation'));
       }
-      $('home-status').textContent=rows.length?'Recently updated conversations. Choose one to review its saved work.':(unavailable?'Recent history points to unavailable project folders. Restore a folder to resume, or Browse all to review a handoff.':'No saved conversations in this Codex home yet. Open a project to start your first task. Use --codex-home if your CLI history is stored elsewhere.');
-      if(rows.length && unavailable)$('home-status').textContent+=` ${unavailable} recent project folder(s) unavailable; Browse all to review that history.`;
+      $('home-status').textContent=rows.length?'Recently updated conversations. Choose one to review its saved work.':(unavailable?'Recent history points to unavailable project folders. Browse all to read the original conversations. Restore a folder only to resume work.':'No saved conversations in this Codex home yet. Open a project to start your first task. Use --codex-home if your CLI history is stored elsewhere.');
+      if(rows.length && unavailable)$('home-status').textContent+=` ${unavailable} recent project folder(s) unavailable; Browse all to read their original conversations.`;
     }catch(error){
       if(current(v,g)){
         $('home-status').textContent='Recent conversations could not be loaded. Retry, or open a project.';

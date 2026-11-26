@@ -1,10 +1,10 @@
 name: Help with one project task
-description: Get help opening, continuing, or handing off an actual Codex project session.
+description: Get help finding a past answer, reading original history, or returning to a Codex task.
 title: "[Task help]: "
 body:
   - type: markdown
     attributes:
-      value: Tell us the one project/session task you want to complete and the step you reached.
+      value: Tell us the result you wanted, the control you used, and what happened. A short neutral example is enough.
   - type: dropdown
     id: operating-system
     attributes:
@@ -21,7 +21,7 @@ body:
     id: codex-version
     attributes:
       label: Codex CLI version
-      description: Run codex --version in the shell used to launch Desk.
+      description: Output of codex --version in the shell used to launch Desk, or the error if it is unavailable.
       placeholder: codex-cli 0.171.0
     validations:
       required: true
@@ -29,8 +29,8 @@ body:
     id: desired-task
     attributes:
       label: The task you want to complete
-      description: Describe one project/session goal in your own words.
-      placeholder: Resume my existing conversation, check its previous command result, then continue with my selected provider.
+      description: Describe one answer or project/session outcome you want to reach.
+      placeholder: Find a saved retry decision, read its original command output, then prepare the next task in the same conversation.
     validations:
       required: true
   - type: dropdown
@@ -39,14 +39,59 @@ body:
       label: Step reached
       options:
         - Install and launch
-        - Find/import saved conversation
-        - Resume/send task
+        - Index existing Codex history
+        - Search saved content
+        - Read original conversation
+        - Browse conversation titles
+        - Continue/resume conversation
+        - Save draft or follow-up
+        - Run task
         - Tool approval or planning question
         - New-provider handoff
         - Return after closing/stopping
         - Other
     validations:
       required: true
+  - type: textarea
+    id: expected-result
+    attributes:
+      label: Expected result
+      placeholder: Read the matching command output without changing the conversation or draft I already have open.
+    validations:
+      required: true
+  - type: textarea
+    id: actual-result
+    attributes:
+      label: Actual result
+      description: Include the visible status or the point where the result differed.
+      placeholder: The search returns a match, but Read original conversation stays on Reading original native conversation…
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and controls used (optional)
+      description: List the clicks in order, starting from the first screen or an open conversation.
+      placeholder: |
+        1. Find a decision in past work → Index existing Codex history.
+        2. All indexed projects → enter a remembered phrase → Search.
+        3. Read original conversation → Back to search.
+  - type: textarea
+    id: step-context
+    attributes:
+      label: Context for this step (optional)
+      description: For search, give a neutral phrase or its length, project filter and index counts. For reading/continuing, say whether the saved folder exists. For return, note whether the browser and launch options stayed the same.
+      placeholder: |
+        Index: 12 seen / 12 indexed / 0 unchanged / 0 failed.
+        Search: 11-character phrase, All indexed projects, 1 match.
+        Reader: opened from content search; project folder no longer exists.
+        Return: same browser and state directory; Draft saved locally was visible.
+  - type: input
+    id: desk-version
+    attributes:
+      label: Codex Desk version (optional)
+      description: Output of codex-desk --version, or the version in your launch command.
+      placeholder: 0.1.0a28
   - type: textarea
     id: error-text
     attributes:

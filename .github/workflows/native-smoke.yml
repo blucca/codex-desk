@@ -50,3 +50,11 @@ jobs:
         env:
           DESK_TEST_TEMP: ${{ github.workspace }}/temp
         run: python ../tests/ci_native_smoke.py
+
+      - name: Check installed launch, port conflicts and shutdown
+        working-directory: temp
+        shell: bash
+        env:
+          DESK_TEST_TEMP: ${{ github.workspace }}/temp
+          DESK_USE_INSTALLED: '1'
+        run: python ../tests/test_launch_http.py
