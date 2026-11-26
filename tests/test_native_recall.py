@@ -131,6 +131,67 @@ class NativeRecallTests(unittest.TestCase):
         smaller = NativeRecallIndex(self.store, max_thread_chars=100)
         self.assertTrue(smaller.needs_snapshot(summary))
 
+    def test_explicit_active_listing_requires_read_despite_matching_completed_marker(self):
+        source = snapshot([agent('Completed cached decision')], status={'type': 'idle'})
+        source['turns'][0]['status'] = 'completed'
+        self.index.replace_snapshot(source)
+        metadata = {key: value for key, value in source.items() if key != 'turns'}
+        before = list(self.store.db.iterdump())
+        self.assertTrue(self.index.needs_snapshot(
+            {**metadata, 'status': {'type': 'active', 'activeFlags': []}}))
+        for status in (None, 'active', {'type': 'idle'}, {'type': 'future-status'}):
+            self.assertFalse(self.index.needs_snapshot({**metadata, 'status': status}))
+        self.assertFalse(self.index.needs_snapshot(
+            {key: value for key, value in metadata.items() if key != 'status'}))
+        self.assertEqual(list(self.store.db.iterdump()), before)
+
+    def test_known_active_full_read_keeps_text_but_cold_retry_reads_same_second_completion(self):
+        for thread_status, turn_status in (({'type': 'active', 'activeFlags': []}, 'completed'),
+                                           ({'type': 'idle'}, 'inProgress')):
+            with self.subTest(thread_status=thread_status, turn_status=turn_status):
+                source = snapshot([agent('Unfinished cached decision')], status=thread_status)
+                source['turns'][0]['status'] = turn_status
+                stats = self.index.replace_snapshot(source)
+                self.assertTrue(stats['indexed'])
+                self.assertGreater(stats['indexed_at'], 0)
+                self.assertEqual((stats['indexed_items'], stats['omitted_items']), (1, 0))
+                self.assertEqual(self.index.search('unfinished cached')['total'], 1)
+                self.assertIsNone(self.store.db.execute('''SELECT snapshot_updated
+                    FROM native_recall_threads WHERE thread_id=?''', (source['id'],)).fetchone()[0])
+                completed = snapshot([agent('Completed same-second decision')], status={'type': 'idle'})
+                completed['turns'][0]['status'] = 'completed'
+                metadata = {key: value for key, value in completed.items() if key != 'turns'}
+                self.reopen()
+                self.assertTrue(self.index.needs_snapshot(metadata))
+                self.assertEqual(self.index.search('unfinished cached')['total'], 1)
+                self.index.replace_snapshot(completed)
+                self.assertFalse(self.index.needs_snapshot(metadata))
+                self.assertEqual(self.index.search('unfinished cached')['total'], 0)
+                self.assertEqual(self.index.search('same-second decision')['total'], 1)
+                self.reopen()
+                self.assertFalse(self.index.needs_snapshot(metadata))
+
+    def test_metadata_only_status_updates_preserve_text_counts_and_full_read_marker(self):
+        source = snapshot([agent('Retained full-read evidence')], status={'type': 'idle'})
+        source['turns'][0]['status'] = 'completed'
+        for active in (False, True):
+            with self.subTest(active=active):
+                source['status'] = {'type': 'active', 'activeFlags': []} if active else {'type': 'idle'}
+                stats = self.index.replace_snapshot(source)
+                before = self.store.db.execute('''SELECT snapshot_updated,indexed_at,indexed_items,
+                    indexed_chars FROM native_recall_threads WHERE thread_id=?''', (source['id'],)).fetchone()
+                metadata = {key: value for key, value in source.items() if key != 'turns'}
+                self.index.replace_snapshot({**metadata, 'status': {'type': 'idle'}, 'name': 'Updated title'})
+                after = self.store.db.execute('''SELECT snapshot_updated,indexed_at,indexed_items,
+                    indexed_chars FROM native_recall_threads WHERE thread_id=?''', (source['id'],)).fetchone()
+                self.assertEqual(after, before)
+                self.assertEqual(self.index.search('full-read evidence')['total'], 1)
+                self.assertEqual(self.index.stats()['indexed_threads'], 1)
+                self.assertEqual(self.index.stats()['indexed_items'], stats['indexed_items'])
+                self.reopen()
+                self.assertEqual(self.store.db.execute('''SELECT snapshot_updated,indexed_at,indexed_items,
+                    indexed_chars FROM native_recall_threads WHERE thread_id=?''', (source['id'],)).fetchone(), before)
+
     def test_literal_unicode_original_snippets_and_sql_regex_metacharacters(self):
         self.index.replace_snapshot(snapshot([agent("Décision: STRASSE / Cafe\u0301 / ＡＢＣ / 项目回归通过; "
                                                    "a%b_c[0].*; ' OR 1=1 --")]))

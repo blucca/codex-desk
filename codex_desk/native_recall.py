@@ -54,11 +54,21 @@ def _metadata(thread, previous=None):
             _native_timestamp(thread.get('updatedAt'), previous[3]))
 
 
+def _known_active(thread):
+    status = thread.get('status')
+    if isinstance(status, dict) and status.get('type') == 'active':
+        return True
+    turns = thread.get('turns')
+    return isinstance(turns, list) and any(
+        isinstance(turn, dict) and turn.get('status') == 'inProgress' for turn in turns)
+
+
 class NativeRecallIndex:
     """Copies only shared-sanitizer visible text; never creates a Desk session.
 
     A list-valued ``turns`` is an authoritative full history read. Metadata-only
     snapshots preserve all cached items and the last full-read freshness marker.
+    Known-active full reads retain text but stay refreshable after completion.
     Native turns/items are supplied oldest first; storage retains newest items.
     """
 
@@ -102,6 +112,8 @@ class NativeRecallIndex:
         """Whether metadata differs from the last full read; survives cold reopen."""
         if not isinstance(metadata, dict) or not _identifier(metadata.get('id')):
             raise ValueError('Choose a native thread')
+        if _known_active(metadata):
+            return True
         timestamp = _native_timestamp(metadata.get('updatedAt'), None)
         if timestamp is None:
             return True
@@ -133,10 +145,14 @@ class NativeRecallIndex:
                     (thread_id,turn_id,item_id,item_type,visible_text,normalized_text,updated,position)
                     VALUES(?,?,?,?,?,?,?,?)''', rows)
                 assignments = ','.join(field + '=?' for field in _COUNT_FIELDS)
+                # Native timestamps are integer seconds: an unfinished
+                # read can grow/complete without its timestamp changing.
+                snapshot_updated = (None if _known_active(thread) else
+                                    _native_timestamp(thread.get('updatedAt'), None))
                 self.store.db.execute('''UPDATE native_recall_threads SET
                     snapshot_cwd=?,snapshot_title=?,snapshot_provider=?,snapshot_updated=?,
                     indexed_at=?,char_limit=?,item_limit=?,''' + assignments + ' WHERE thread_id=?',
-                    (*metadata[:3], _native_timestamp(thread.get('updatedAt'), None), time.time(),
+                    (*metadata[:3], snapshot_updated, time.time(),
                      self.max_thread_chars, self.max_thread_items,
                      *(counts[field] for field in _COUNT_FIELDS), thread_id))
             return self._thread_stats(thread_id)

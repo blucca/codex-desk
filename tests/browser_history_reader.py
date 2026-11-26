@@ -62,7 +62,15 @@ async def check(width, playwright, evidence):
         context[46] = agent('NEIGHBOUR AFTER: apply this answer to the next patch.', 'context-46')
         context[47] = {'id': 'context-47', 'type': 'mcpToolCall', 'server': 'local', 'tool': 'inspect',
             'status': 'completed', 'arguments': {'path': 'queue.py', '_meta': {'secret': 'HIDDEN READER SECRET'}},
-            'result': {'content': [{'type': 'text', 'text': 'Original MCP evidence keeps the queue.'},
+            'result': {'content': [{'type': 'text', 'text': 'Original MCP evidence keeps the queue.\n'
+                    'RESOURCE ORIGINAL TEXT EARLIEST\n' + 'x' * 22000 + '\nRESOURCE ORIGINAL TEXT LATEST'},
+                {'type': 'resource_link',
+                 'uri': 'https://user:pass@docs.example/migration-report.md?token=LINK READER SECRET#auth',
+                 'name': 'migration-report.md', 'title': 'Migration decision ledger',
+                 'description': 'Reviewed migration notes', 'mimeType': 'text/markdown', 'size': 1200,
+                 'annotations': {'audience': ['user'], 'priority': 0.8, 'lastModified': '2026-11-24',
+                                 'private': 'ANNOTATION READER SECRET', '_meta': 'ANNOTATION READER SECRET'},
+                 '_meta': 'LINK READER SECRET'},
                 {'type': 'image', 'data': 'BINARY READER SECRET'}],
                 'structuredContent': {'decision': 'Keep existing queue', '_meta': {'secret': 'HIDDEN READER SECRET'}},
                 '_meta': {'secret': 'HIDDEN READER SECRET'}}}
@@ -329,6 +337,35 @@ async def check(width, playwright, evidence):
                 assert await page.locator('.history-reader-target mark').inner_text() == 'OLD ANSWER'
                 await unchanged(); await back()
                 checkpoint('closing and reopening retained recall results keeps Read original conversation usable')
+
+                for phrase in ('Migration decision ledger', 'text/markdown', 'size: 1200', '2026-11-24'):
+                    await read(phrase)
+                    target = page.locator('.history-reader-target')
+                    assert await target.count() == 1
+                    assert await target.get_attribute('data-turn-id') == 'turn-deleted-context-1'
+                    assert await target.get_attribute('data-item-id') == 'context-47'
+                    assert await target.locator('mark').inner_text() == phrase
+                    assert await target.evaluate('(node)=>node.open')
+                    assert await page.locator('#history-reader-match').inner_text() == 'Showing the matching original native turn and item.'
+                    assert 'Showing items 41–80 of 95. Page 2 of 3.' in await page.locator('#history-reader-coverage').inner_text()
+                    text = await target.locator('pre').text_content()
+                    for field in ('name: migration-report.md', 'title: Migration decision ledger',
+                                  'description: Reviewed migration notes', 'mimeType: text/markdown', 'size: 1200',
+                                  'Annotations: {', '"audience": [', '"priority": 0.8', '"lastModified": "2026-11-24"'):
+                        assert field in text
+                    assert all(secret not in text for secret in ('LINK READER SECRET', 'ANNOTATION READER SECRET',
+                                                                 'HIDDEN READER SECRET', 'BINARY READER SECRET',
+                                                                 'user:pass', '?token=', '#auth', '_meta'))
+                    await bounded(); await unchanged()
+                    if phrase == 'Migration decision ledger':
+                        assert 'RESOURCE ORIGINAL TEXT LATEST' in text and 'RESOURCE ORIGINAL TEXT EARLIEST' not in text
+                        await target.get_by_role('button', name='Earlier text').click()
+                        assert 'RESOURCE ORIGINAL TEXT EARLIEST' in await target.locator('pre').text_content()
+                        await target.get_by_role('button', name='Later text').click()
+                        assert await target.locator('mark').inner_text() == phrase
+                        await page.screenshot(path=str(evidence / f'resource-public-match-{width}.png'))
+                    await back()
+                checkpoint('indexed MCP resource name/title, MIME, numeric size and public annotations remain original-readable and highlighted across bounded text windows')
 
                 await read('bound answer')
                 row = page.locator('.recall-result')

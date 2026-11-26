@@ -319,7 +319,7 @@ class Store:
 
 
 class Runtime:
-    def __init__(self, store, identifier, binary, home):
+    def __init__(self, store, identifier, binary, home, *, catalog_cwd=None):
         self.store, self.id, self.home = store, identifier, home
         self.pending, self.approvals = {}, {}
         self.lock, self.write_lock = threading.Lock(), threading.Lock()
@@ -330,9 +330,10 @@ class Runtime:
         self.persisted = False
         self.counter = 0
         row = store.get(identifier)
+        cwd = catalog_cwd if identifier == 'native-catalog' and catalog_cwd is not None else row['cwd']
         env = {**os.environ, "CODEX_HOME": str(home)}
         self.process = subprocess.Popen([binary, "app-server", "--stdio"],
-            cwd=row['cwd'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         self.reader = threading.Thread(target=self._read, daemon=True)
         self.stderr_reader = threading.Thread(target=self._stderr, daemon=True)

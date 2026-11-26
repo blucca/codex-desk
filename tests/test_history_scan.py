@@ -167,6 +167,57 @@ class HistoryScanTests(unittest.TestCase):
                          ('Catalog title', '/deleted-project', 'catalog-provider'))
         self.assertEqual(self.finish(scan)['skipped'], 1)
 
+    def test_active_full_read_stays_refreshable_for_same_second_new_completed_answer(self):
+        metadata = {'id': 'same-second', 'name': 'Saved decision', 'updatedAt': 1795625000,
+                    'status': {'type': 'active', 'activeFlags': []}}
+        page = {'data': [metadata], 'nextCursor': None}
+        scan, calls, saved = self.scanner({None: page})
+        scan.index = self.real_index()
+        current = {**metadata, 'turns': [{'id': 'turn', 'status': 'inProgress', 'items': []}]}
+        def history(identifier):
+            calls.append(('thread/read', identifier))
+            return current
+        scan.desk.history = history
+        self.assertEqual(self.finish(scan)['indexed'], 1)
+        self.assertEqual(scan.index.stats()['indexed_threads'], 1)
+        self.assertEqual(scan.index.search('same-second choice')['total'], 0)
+        metadata['status'] = {'type': 'idle'}
+        current = {**metadata, 'turns': [{'id': 'turn', 'status': 'completed', 'items': [
+            {'id': 'new-answer', 'type': 'agentMessage', 'text': 'Keep the same-second choice'}]}]}
+        second = self.finish(scan)
+        self.assertEqual((second['status'], second['indexed'], second['skipped'], second['failed']),
+                         ('completed', 1, 0, 0))
+        hit = scan.index.search('same-second choice')['results'][0]
+        self.assertEqual((hit['thread_id'], hit['turn_id'], hit['item_id']),
+                         ('same-second', 'turn', 'new-answer'))
+        calls.clear()
+        self.assertEqual(self.finish(scan)['skipped'], 1)
+        self.assertEqual([method for method, _ in calls], ['thread/list'])
+        self.assertEqual(scan.index.stats()['indexed_items'], 1)
+
+    def test_active_listing_forces_read_with_same_timestamp_as_previous_completed_cache(self):
+        metadata = {'id': 'newly-active', 'name': 'Saved decision', 'updatedAt': 1795625000,
+                    'status': {'type': 'active', 'activeFlags': []}}
+        scan, calls, saved = self.scanner({None: {'data': [metadata], 'nextCursor': None}})
+        scan.index = self.real_index()
+        scan.index.replace_snapshot({**metadata, 'status': {'type': 'idle'}, 'turns': [
+            {'id': 'old-turn', 'status': 'completed', 'items': [
+                {'id': 'old-answer', 'type': 'agentMessage', 'text': 'Earlier choice'}]}]})
+        def history(identifier):
+            calls.append(('thread/read', identifier))
+            return {**metadata, 'status': {'type': 'idle'}, 'turns': [
+                {'id': 'new-turn', 'status': 'completed', 'items': [
+                    {'id': 'new-answer', 'type': 'agentMessage', 'text': 'New completed choice'}]}]}
+        scan.desk.history = history
+        self.assertEqual(self.finish(scan)['indexed'], 1)
+        self.assertEqual([method for method, _ in calls], ['thread/list', 'thread/read'])
+        self.assertEqual(scan.index.search('earlier choice')['total'], 0)
+        self.assertEqual(scan.index.search('new completed choice')['total'], 1)
+        metadata['status'] = {'type': 'idle'}
+        calls.clear()
+        self.assertEqual(self.finish(scan)['skipped'], 1)
+        self.assertEqual([method for method, _ in calls], ['thread/list'])
+
     def test_cancel_during_failed_listing_finishes_cancelled_without_error(self):
         scan, calls, saved = self.scanner({})
         entered, release = threading.Event(), threading.Event()

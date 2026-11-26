@@ -1,7 +1,16 @@
 import copy
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
 import unittest
 from codex_desk.evidence import content_text, public_uri, tool_text
 from codex_desk.handoff import build_handoff
+
+
+NODE = os.environ.get('DESK_TEST_NODE') or shutil.which('node')
+JAVASCRIPT = Path(__file__).resolve().parents[1] / 'codex_desk/static/evidence.js'
 
 
 class ToolEvidenceTests(unittest.TestCase):
@@ -91,6 +100,45 @@ class ToolEvidenceTests(unittest.TestCase):
             self.assertIn(value, text)
         for value in ('secret', 'user:pass', '?', '#auth', 'BINARY-SECRET', '_meta'):
             self.assertNotIn(value, text)
+
+    @unittest.skipUnless(NODE, 'Node is needed for JavaScript formatter parity')
+    def test_resource_link_reader_keeps_each_indexed_public_field(self):
+        block = {'type': 'resource_link', 'uri': 'https://user:pass@docs.example/report?token=secret#auth',
+                 'name': 'report.md', 'title': 'Migration decision ledger',
+                 'description': 'Reviewed migration notes', 'mimeType': 'text/markdown', 'size': 1200,
+                 'annotations': {'audience': ['user'], 'priority': 0.8, 'lastModified': '2026-11-24',
+                                 'private': 'ANNOTATION-SECRET'}, '_meta': 'LINK-SECRET'}
+        for kind, size in (('resource_link', 1200), ('resourceLink', False)):
+            with self.subTest(kind=kind, size=size):
+                block.update(type=kind, size=size)
+                result = subprocess.run([NODE, '-e',
+                    "process.stdout.write(require(process.argv[1]).content(JSON.parse(process.argv[2])))",
+                    str(JAVASCRIPT), json.dumps(block)], capture_output=True, text=True, check=True, timeout=10)
+                self.assertEqual(result.stdout, content_text(block))
+
+    @unittest.skipUnless(NODE, 'Node is needed for JavaScript formatter parity')
+    def test_reader_annotations_match_only_indexed_public_fields_on_supported_blocks(self):
+        blocks = [{'type': 'text', 'text': 'Reviewed evidence'},
+                  {'type': 'inputText', 'text': 'Reviewed evidence'},
+                  {'type': 'image', 'mimeType': 'image/png', 'data': 'BINARY-SECRET'},
+                  {'type': 'audio', 'mimeType': 'audio/wav', 'data': 'BINARY-SECRET'},
+                  {'type': 'inputImage', 'imageUrl': 'file:///project/chart.png'},
+                  {'type': 'inputAudio', 'audioUrl': 'file:///project/audio.wav'},
+                  {'type': 'resource', 'resource': {'uri': 'file:///project/report.txt', 'text': 'Reviewed evidence'}},
+                  {'type': 'resource_link', 'uri': 'file:///project/report.txt', 'name': 'report.txt'}]
+        for annotations in ({'audience': ['user', 'assistant'], 'priority': 0.8,
+                             'lastModified': '2026-11-24', 'private': 'ANNOTATION-SECRET'},
+                            {'audience': ['system'], 'priority': True,
+                             'lastModified': {'private': 'ANNOTATION-SECRET'}, '_meta': 'ANNOTATION-SECRET'}):
+            annotated = [dict(block, annotations=annotations) for block in blocks]
+            result = subprocess.run([NODE, '-e',
+                "const e=require(process.argv[1]);process.stdout.write(JSON.stringify(JSON.parse(process.argv[2]).map(e.content)))",
+                str(JAVASCRIPT), json.dumps(annotated)], capture_output=True, text=True, check=True, timeout=10)
+            for block, rendered in zip(annotated, json.loads(result.stdout)):
+                with self.subTest(kind=block['type'], annotations=annotations):
+                    expected = content_text(block).partition('\nAnnotations: ')[2]
+                    self.assertEqual(rendered.partition('\nAnnotations: ')[2], expected)
+                    self.assertNotIn('-SECRET', rendered)
 
     def test_dynamic_tool_uses_content_items_and_reports_false_success(self):
         item = {'id': 'dyn-1', 'type': 'dynamicToolCall', 'namespace': 'desk', 'tool': 'inspect',

@@ -42,7 +42,8 @@ class LoopbackHTTPServer(ThreadingHTTPServer):
 class Desk:
     def __init__(self, binary, home, state):
         self.binary, self.home = binary, Path(home).expanduser().resolve()
-        self.store = Store(Path(state) / "desk.sqlite3")
+        self._catalog_fallback_cwd = Path(state).resolve()
+        self.store = Store(self._catalog_fallback_cwd / "desk.sqlite3")
         try:
             self.native_index = NativeRecallIndex(self.store)
             self.history_scanner = NativeHistoryScanner(self, self.native_index)
@@ -247,13 +248,22 @@ class Desk:
     def catalog(self):
         with self.lock:
             identifier = 'native-catalog'
-            if not self.store.get(identifier):
-                self.store.create(str(Path.cwd()), 'default', identifier)
+            row = self.store.get(identifier)
+            if not row:
+                try:
+                    cwd = Path.cwd()
+                except FileNotFoundError:
+                    cwd = self._catalog_fallback_cwd
+                self.store.create(str(cwd), 'default', identifier)
+                row = self.store.get(identifier)
             runtime = self.runtimes.get(identifier)
             if not runtime or runtime.process.poll() is not None:
                 if runtime:
                     runtime.close()
-                runtime = Runtime(self.store, identifier, self.binary, self.home)
+                # History reads need no former project. Keep its stored cwd,
+                # but launch from the stable state directory if it disappeared.
+                options = {} if Path(row['cwd']).is_dir() else {'catalog_cwd': self._catalog_fallback_cwd}
+                runtime = Runtime(self.store, identifier, self.binary, self.home, **options)
                 self.runtimes[identifier] = runtime
             return runtime
     def history(self, thread_id):
