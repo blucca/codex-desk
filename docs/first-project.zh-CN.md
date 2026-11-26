@@ -25,7 +25,7 @@ uvx --prerelease allow codex-desk
 uvx 可能复用缓存中的旧版 Desk。需要更新时，先在旧 Desk 启动终端按 **Ctrl+C**，再运行一次：
 
 ```sh
-uvx --prerelease allow codex-desk@latest
+uvx --refresh --prerelease allow codex-desk@latest
 ```
 
 以后仍用普通的 `uvx --prerelease allow codex-desk` 启动。更新和以后启动时，都附上原有的 `--codex`、`--codex-home`、`--state-dir` 和 `--port` 参数；保持同一 state directory，会话、索引、草稿和准备列表留在原数据库。uvx 选中的 Desk 软件包版本用 `uvx --prerelease allow codex-desk --version` 查看；原生版本用启动时所选可执行文件的 `--version` 检查。独立 CLI 使用 `codex --version`，Desktop 内置版本按上方系统指南检查。

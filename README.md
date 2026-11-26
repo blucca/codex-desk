@@ -34,7 +34,7 @@ If that address is already in use, reopening it uses the Desk server already run
 uvx can reuse an older cached preview. First stop the running Desk terminal with **Ctrl+C**, then run this command once:
 
 ```sh
-uvx --prerelease allow codex-desk@latest
+uvx --refresh --prerelease allow codex-desk@latest
 ```
 
 Afterwards use the usual `uvx --prerelease allow codex-desk` launch command. Append any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to the update and later launches. Reusing the same state directory retains your saved conversations, indexed history, drafts and prepared follow-ups. Check the selected Desk package version with `uvx --prerelease allow codex-desk --version`; `codex --version` checks your separate native Codex CLI installation.
