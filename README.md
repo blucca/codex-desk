@@ -94,6 +94,8 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 ## Why use Desk?
 
+Choose Desk when you want to inspect existing Codex evidence and prepare the next task in the same local workbench. [Choose a history workflow](docs/choose-history-workflow.md) covers native terminal resume, multi-agent history browsers and agent-memory tools.
+
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
 - **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. Choose when to send them.
