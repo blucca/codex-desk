@@ -13,7 +13,7 @@
 
 ## Install the preview
 
-Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installation and sign-in. Check `codex --version` in the terminal where you will launch Desk; this reports the native Codex CLI version. On macOS, you can also [use the Codex bundled with Desktop](docs/find-desktop-answer.macos.md) through `--codex`, without installing another CLI.
+Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installation and sign-in. Check `codex --version` in the terminal where you will launch Desk; this reports the native Codex CLI version. On macOS, you can also [use the Codex bundled with Desktop](docs/find-desktop-answer.macos.md) through `--codex`, without installing another CLI. On Windows, [check the reader in your installed app](docs/find-desktop-answer.windows.md); use that bundled entry when its version check succeeds in your ordinary PowerShell terminal.
 
 With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one command** installs and opens the free local workbench on Linux, macOS, Windows or WSL:
 
