@@ -86,7 +86,7 @@ async def check(width, case, playwright, evidence):
             queries.append({'q': q, 'cwd': cwd, 'archived': include_archived,
                             'total': data['total'], 'native_coverage': data['coverage']['native']})
             count = sum(row['q'] == q for row in queries)
-            if q == 'alpha decision' and ((case == 'pending-search' and count == 1)
+            if q == 'alpha decision' and ((case in ('pending-search', 'reopen-canceled-search') and count == 1)
                                          or (case == 'newer-query' and count == 2)):
                 query_entered.set(); assert query_release.wait(30), 'Unreleased controlled search'
             return data
@@ -120,6 +120,18 @@ async def check(width, case, playwright, evidence):
                 assert await asyncio.to_thread(event.wait, 10), 'Controlled operation was not reached'
             def recall_count(): return sum(row['path'] == '/api/recall' for row in http)
             if case in ('reader', 'result-focus', 'changed-scope'): await submit('ready evidence')
+            if case in ('reopen-new-scan', 'reopen-canceled-search', 'reopen-edited-query'):
+                await submit('alpha decision', wait=case != 'reopen-canceled-search')
+                if case == 'reopen-canceled-search': await wait_event(query_entered)
+                assert await page.locator('.recall-result').count() == 0
+                if case == 'reopen-edited-query':
+                    await page.locator('#recall-query').fill('unsubmitted different phrase')
+                    await page.locator('#recall-query').fill('alpha decision')
+                await page.locator('#recall-close').click()
+                await page.wait_for_function("!$('recall').open")
+                await page.locator('#home-content').click()
+                await page.wait_for_function("!$('recall-index').disabled")
+                assert await page.locator('#recall-query').input_value() == 'alpha decision'
             index_action = None
             if case == 'empty-first-use':
                 await submit('alpha decision')
@@ -153,7 +165,8 @@ async def check(width, case, playwright, evidence):
             elif case == 'result-focus':
                 await page.locator('.recall-read').focus()
                 await page.locator('.recall-result').evaluate('(n)=>globalThis.keptRecallRow=n')
-            elif case not in ('immediate-completion', 'empty-first-use'):
+            elif case not in ('immediate-completion', 'empty-first-use', 'reopen-new-scan',
+                              'reopen-canceled-search', 'reopen-edited-query'):
                 await submit('alpha decision', wait=case != 'pending-search')
                 if case == 'pending-search': await wait_event(query_entered)
                 else: assert await page.locator('.recall-result').count() == 0
@@ -217,6 +230,14 @@ async def check(width, case, playwright, evidence):
                 assert recall_count() == before
                 assert await page.locator('.recall-read').evaluate('(n)=>n===document.activeElement')
                 assert await page.locator('.recall-result').evaluate('(n)=>n===globalThis.keptRecallRow')
+            elif case in ('reopen-canceled-search', 'reopen-edited-query'):
+                await scan_done()
+                query_release.set()
+                await page.wait_for_timeout(1000)
+                assert recall_count() == before and await page.locator('.recall-result').count() == 0
+                assert await page.locator('#recall-query').input_value() == 'alpha decision'
+                if case == 'reopen-canceled-search':
+                    assert 'Search canceled' in await page.locator('#recall-summary').inner_text()
             elif case in ('edited-query', 'edit-undo', 'changed-scope', 'changed-archived'):
                 await scan_done(); await page.wait_for_timeout(1000)
                 assert recall_count() == before and await page.locator('.recall-result').count() == 0
@@ -259,7 +280,7 @@ async def check(width, case, playwright, evidence):
                 await page.keyboard.press('Escape')
                 assert await page.locator('.recall-read').evaluate('(n)=>n===document.activeElement')
             await page.wait_for_timeout(800)
-            expected = before + (1 if case in ('first-use', 'empty-first-use', 'pending-search', 'new-submission', 'immediate-completion', 'cancel-retry') else 2 if case == 'newer-query' else 0)
+            expected = before + (1 if case in ('first-use', 'empty-first-use', 'pending-search', 'new-submission', 'immediate-completion', 'cancel-retry', 'reopen-new-scan') else 2 if case == 'newer-query' else 0)
             assert recall_count() == expected, 'Completion refresh repeated'
             assert desk.store.sessions() == saved_sessions and load_draft(desk.store, saved) == saved_draft
             assert await page.evaluate('selected===null && generation===0')
@@ -276,7 +297,7 @@ async def check(width, case, playwright, evidence):
                       'native_model_turns': 0, 'imports': 0, 'saved_preparation': saved_draft}
             (evidence / f'{case}-{width}.json').write_text(json.dumps(result, indent=2) + '\n')
             (evidence / f'{case}-{width}.json').chmod(0o600)
-            if case in ('first-use', 'empty-first-use', 'cancel-retry', 'immediate-completion'):
+            if case in ('first-use', 'empty-first-use', 'cancel-retry', 'immediate-completion', 'reopen-new-scan'):
                 await page.screenshot(path=str(evidence / f'{case}-{width}.png'))
                 (evidence / f'{case}-{width}.png').chmod(0o600)
             print(json.dumps({'viewport': width, 'case': case, 'passed': True, 'search_requests': recall_count()}), flush=True)
@@ -302,7 +323,8 @@ async def main():
     evidence.mkdir(parents=True, exist_ok=True, mode=0o700)
     cases = ('first-use', 'empty-first-use', 'edited-query', 'edit-undo', 'changed-scope', 'changed-archived',
              'pending-search', 'new-submission', 'newer-query', 'closed', 'navigation',
-             'reader', 'result-focus', 'immediate-completion', 'cancel-retry')
+             'reader', 'result-focus', 'immediate-completion', 'cancel-retry',
+             'reopen-new-scan', 'reopen-canceled-search', 'reopen-edited-query')
     if os.environ.get('DESK_RECALL_INDEX_CASES'):
         cases = tuple(os.environ['DESK_RECALL_INDEX_CASES'].split(','))
     widths = tuple(int(width) for width in os.environ.get('DESK_RECALL_INDEX_WIDTHS', '1250,390').split(','))

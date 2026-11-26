@@ -298,6 +298,11 @@ const DeskRecall=(()=>{
   function show(){
     ++navigationVersion;pendingNavigation=null;projects();
     const version=searchVersion,scope=query();
+    // A new explicit scan can refresh a retained submitted query in this
+    // dialog generation. Reopening alone never resumes a previous scan's ticket.
+    if(lastSearch && sameQuery(lastSearch.scope,scope) && lastSearch.selected===options.selected() && lastSearch.generation===options.generation()){
+      lastSearch={...lastSearch,version,navigation:navigationVersion};
+    }
     for(const row of el('recall-results').children){const result=rowData.get(row);
       if(result){
         row.querySelector('.recall-open').onclick=()=>reveal(result,row,row.querySelector('.recall-result-status'),version,scope);
@@ -319,7 +324,7 @@ const DeskRecall=(()=>{
     el('recall').addEventListener('close',()=>{
       stopScanPolling();++scanVersion;scanReading=false;scanReady=false;scanRefresh=null;
       const nav=pendingNavigation;pendingNavigation=null;++searchVersion;++openVersion;
-      if(searching)el('recall-summary').textContent='Search canceled. Choose Search to try again.';
+      if(searching){lastSearch=null;el('recall-summary').textContent='Search canceled. Choose Search to try again.';}
       searching=false;resultOpening=false;buttons();
       // show() rebinds retained results to the next dialog generation.
       if(nav)requestAnimationFrame(()=>focusMatch(nav));
