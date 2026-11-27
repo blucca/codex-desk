@@ -1,9 +1,9 @@
 /* Original native history, read independently of the active task and workspace. */
 (function(root) {
   const PAGE_ENTRIES=40, TEXT_CHARS=20000;
-  const visibleTypes=new Set(['userMessage','agentMessage','commandExecution','fileChange',
+  const visibleTypes=new Set(['userMessage','agentMessage','plan','commandExecution','fileChange',
     'mcpToolCall','dynamicToolCall','collabAgentToolCall','subAgentActivity']);
-  const labels={userMessage:'Your message',agentMessage:'Codex reply',commandExecution:'Command',
+  const labels={userMessage:'Your message',agentMessage:'Codex reply',plan:'Proposed plan',commandExecution:'Command',
     fileChange:'File changes',mcpToolCall:'MCP tool',dynamicToolCall:'Tool',
     collabAgentToolCall:'Sub-agent tool',subAgentActivity:'Sub-agent activity'};
   const el=id=>document.getElementById('history-reader'+(id?'-'+id:''));
@@ -35,6 +35,7 @@
         case 'userMessage':return 'User\n'+(Array.isArray(item.content)?item.content:[])
           .filter(c=>c && c.type==='text').map(c=>str(c.text)).join('\n');
         case 'agentMessage':return 'Codex\n'+str(item.text);
+        case 'plan':return 'Proposed plan\n'+str(item.text);
         case 'commandExecution':return 'Command\n'+str(item.command)+'\nStatus: '+(str(item.status)||'unknown')+
           '\nExit: '+(typeof item.exitCode==='number'?item.exitCode:'not reported')+'\n'+
           (typeof item.aggregatedOutput==='string'?item.aggregatedOutput:'[No command output reported.]');
@@ -227,7 +228,7 @@
     }
     earlier.onclick=()=>moveText(start-TEXT_CHARS);later.onclick=()=>moveText(start+TEXT_CHARS);
     windowText(start);detail.append(summary,identity,range,pre,controls);
-    detail.open=saved?.open ?? (matched || ['userMessage','agentMessage'].includes(item.type));
+    detail.open=saved?.open ?? (matched || ['userMessage','agentMessage','plan'].includes(item.type));
     if(saved)pre.scrollTop=saved.scroll;
     copyControls(detail,row,text,ticket);
     if(matched && (occurrence || !phrase || at>=0) && visibleTypes.has(item.type)) {
@@ -279,6 +280,39 @@
   }
   function viewItems(){return Array.from(el('body').querySelectorAll('.history-reader-item'));}
   function elementKey(item){return JSON.stringify([item.dataset.turnId,item.dataset.itemId]);}
+  function selectedText(){
+    const selection=root.getSelection?.();if(!selection || selection.isCollapsed || !selection.rangeCount)return null;
+    const range=selection.getRangeAt(0),parent=n=>n.nodeType===1?n:n.parentElement;
+    const pre=parent(range.startContainer)?.closest('.history-reader-text');
+    if(!pre || !el('body').contains(pre) || !pre.contains(range.endContainer))return null;
+    const item=pre.closest('.history-reader-item');
+    if(!item?.dataset.turnId || !item.dataset.itemId)return null;
+    const prefix=document.createRange();prefix.selectNodeContents(pre);prefix.setEnd(range.startContainer,range.startOffset);
+    const start=prefix.toString().length;prefix.setEnd(range.endContainer,range.endOffset);
+    const end=prefix.toString().length,windowStart=Number(item.dataset.windowStart)||0;
+    return {key:elementKey(item),start:windowStart+start,end:windowStart+end,text:range.toString(),
+      backward:selection.anchorNode===range.endContainer && selection.anchorOffset===range.endOffset};
+  }
+  function textPoint(pre,offset){
+    if(offset<0)return null;
+    const walker=document.createTreeWalker(pre,NodeFilter.SHOW_TEXT);let node;
+    while((node=walker.nextNode())){if(offset<=node.data.length)return {node,offset};offset-=node.data.length;}
+    return null;
+  }
+  function restoreSelectedText(saved){
+    if(!saved)return;
+    const row=rows.find(row=>rowKey(row)===saved.key),item=viewItems().find(item=>elementKey(item)===saved.key);
+    const pre=item?.querySelector('.history-reader-text'),start=saved.start-(Number(item?.dataset.windowStart)||0);
+    const end=saved.end-(Number(item?.dataset.windowStart)||0);
+    const first=pre?textPoint(pre,start):null,last=pre?textPoint(pre,end):null;
+    if(!row || !first || !last || textFor(row.item).slice(saved.start,saved.end)!==saved.text){
+      el('status').textContent='Original refreshed. The selected original text changed or is no longer at its original location; its selection was not moved to another source.';
+      return;
+    }
+    const selection=root.getSelection?.();if(!selection)return;
+    const anchor=saved.backward?last:first,focus=saved.backward?first:last;
+    selection.setBaseAndExtent(anchor.node,anchor.offset,focus.node,focus.offset);
+  }
   function captureView(){
     const body=el('body'),items=new Map(),active=document.activeElement;
     const box=body.getBoundingClientRect();let anchor=null,focus=null;
@@ -291,7 +325,7 @@
         focus={key,index:controls.indexOf(active),item:item===active};
       }
     }
-    return {items,anchor,focus,scroll:body.scrollTop,page,first:rowKey(rows[page*PAGE_ENTRIES])};
+    return {items,anchor,focus,selection:selectedText(),scroll:body.scrollTop,page,first:rowKey(rows[page*PAGE_ENTRIES])};
   }
   function restoreView(view,ticket){
     if(!current(ticket))return;
@@ -306,6 +340,7 @@
       if(target){if(view.focus.item)target.tabIndex=-1;target.focus({preventScroll:true});}
       else body.focus({preventScroll:true});
     }
+    restoreSelectedText(view.selection);
   }
   function refreshControls(){
     const button=el('refresh');if(!button)return;

@@ -298,13 +298,14 @@ async function until(fn,message){for(let i=0;i<150;i++){if(await fn())return;awa
                   fragment('async function api(', 'function make('),
                   fragment('function activeSession(', 'function sidebarGroups('),
                   fragment('function draw()', 'function itemText('),
+                  fragment('function syncInteractionCards(', 'function consume(m)'),
                   fragment('function consume(m)', 'function profileInfo('),
                   fragment("$('task').onsubmit=", "let failures=0;"),
                   fragment('async function pollActivity()', 'async function tick()'),
                   '\n'.join(line for line in source.splitlines() if line.startswith("$('prompt').oninput=") or line.startswith("$('turn-mode').onchange=") or line.startswith('DeskFollowups.configure('))]
         followups = (PRODUCT / 'codex_desk/static/followups.js').read_text()
         presentation = (PRODUCT / 'codex_desk/static/preparation.js').read_text()
-        native_readouts = (PRODUCT / 'codex_desk/static/native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
+        native_readouts = 'const interactionCards=new Map();\n' + (PRODUCT / 'codex_desk/static/native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
         native_readouts += (PRODUCT / 'codex_desk/static/turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
         native_readouts += (PRODUCT / 'codex_desk/static/stop-task.js').read_text() + '\n'
         chunks.append(next(line for line in source.splitlines() if line.startswith('DeskStopTask.configure(')))

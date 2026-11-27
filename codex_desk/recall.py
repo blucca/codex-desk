@@ -14,9 +14,10 @@ from .turn_records import unresolved_request_query
 
 MAX_ITEM_CHARS = 200_000
 SNIPPET_CHARS = 420
-VISIBLE_TYPES = frozenset(('userMessage', 'agentMessage', 'commandExecution',
+VISIBLE_TYPES = frozenset(('userMessage', 'agentMessage', 'plan', 'commandExecution',
     'fileChange', 'mcpToolCall', 'dynamicToolCall', 'collabAgentToolCall', 'subAgentActivity'))
 DELTA_TYPES = {'item/agentMessage/delta': 'agentMessage',
+               'item/plan/delta': 'plan',
                'item/commandExecution/outputDelta': 'commandExecution'}
 _ASCII_RUN = re.compile(r'[\x00-\x7f]+')
 
@@ -263,9 +264,12 @@ def _desk_query(store, scoped, include_archived, needle):
     activity = """SELECT session_id,'activity' kind,turn_id,item_id,NULL followup_id,
         visible_text text,normalized_text folded,updated,NULL token,NULL status,NULL mode FROM recall_items"""
     if 'native_recall_items' in tables:
-        # A scan can finish a reply previously copied while it was streaming.
-        # Overlay only strict growth of an incomplete bound reply. Keep its
-        # stored prefix intact so subsequent live deltas cannot duplicate it.
+        # A scan can finish an item previously copied while it was running.
+        # Reply text grows by prefix; command/tool/Plan completion also changes
+        # status and structured output. Select one final native result without
+        # rewriting the stored row ahead of delayed live delta delivery.
+        # Capture time also covers completed tools whose active turn still
+        # reports its old startedAt. Later local evidence retains ownership.
         activity = """SELECT i.session_id,'activity' kind,i.turn_id,i.item_id,NULL followup_id,
             coalesce(n.visible_text,i.visible_text) text,
             coalesce(n.normalized_text,i.normalized_text) folded,
@@ -273,8 +277,12 @@ def _desk_query(store, scoped, include_archived, needle):
             FROM recall_items i JOIN sessions b ON b.id=i.session_id
             LEFT JOIN native_recall_items n ON n.thread_id=b.thread_id
             AND n.turn_id=i.turn_id AND n.item_id=i.item_id AND n.item_type=i.item_type
-            AND i.item_type='agentMessage' AND i.complete=0
-            AND n.visible_text<>i.visible_text AND instr(n.visible_text,i.visible_text)=1"""
+            AND i.complete=0 AND n.visible_text<>i.visible_text AND (
+                (i.item_type='agentMessage' AND instr(n.visible_text,i.visible_text)=1)
+                OR (i.item_type NOT IN ('agentMessage','userMessage','subAgentActivity')
+                    AND n.complete=1 AND EXISTS (
+                        SELECT 1 FROM native_recall_threads c WHERE c.thread_id=n.thread_id
+                        AND max(n.updated,c.indexed_at)>=i.updated)))"""
     parts = [activity]
     if 'drafts' in tables:
         parts.append("""SELECT session_id,'draft',NULL,NULL,NULL,text,recall_normalize(text),NULL,NULL,NULL,NULL

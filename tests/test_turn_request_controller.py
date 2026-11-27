@@ -80,6 +80,7 @@ class TurnRequestControllerTests(unittest.TestCase):
         for begin, end in [('let state =', 'function nearLatest('),
                            ('function activeSession(', 'function sidebarGroups('),
                            ('function draw()', 'function itemText('),
+                           ('function syncInteractionCards(', 'function consume(m)'),
                            ('function consume(m)', 'async function refresh()'),
                            ('async function refresh()', 'function profileInfo()'),
                            ("$('task').onsubmit=", "let failures=0;"),
@@ -94,7 +95,7 @@ class TurnRequestControllerTests(unittest.TestCase):
             setup = setup.replace("  if(path==='/api/state')", "  if(path.startsWith('/api/followups?'))return {entries:queues.map((entry,index)=>({...entry,order:index+1,revision:1,state:'queued'})),reservation:null};\n  if(path==='/api/state')", 1)
             configuration = next(line for line in source.splitlines() if line.startswith('DeskFollowups.configure(')) + '\n'
         presenter = (APP.parent / 'preparation.js').read_text().split('/* Local preparation review;')[0]
-        native_readouts = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
+        native_readouts = 'const interactionCards=new Map();\n' + (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
         native_readouts += (APP.parent / 'turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
         native_readouts += (APP.parent / 'stop-task.js').read_text() + '\n'
         configuration += next(line for line in source.splitlines() if line.startswith('DeskStopTask.configure(')) + '\n'

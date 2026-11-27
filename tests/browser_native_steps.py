@@ -104,6 +104,11 @@ async def one(browser,width):
   await page.locator(f'.session-row[data-session="{original}"] .session').click()
   await asyncio.wait_for(held.wait(),10)
   start('turn-three');plan('turn-three',long_steps,explanation='New streamed turn after captured older snapshot')
+  r['held_snapshot_boundary']=await page.evaluate('()=>({selected,opening,generation,steps:DeskNativeSteps.state()})')
+  assert r['held_snapshot_boundary']['selected']==original and r['held_snapshot_boundary']['opening']
+  r['held_snapshot_events']=f.desk.store.events(original)[-2:]
+  assert [row['event']['method'] for row in r['held_snapshot_events']]==['turn/started','turn/plan/updated']
+  assert all((row['event']['params'].get('turnId') or row['event']['params'].get('turn',{}).get('id'))=='turn-three' for row in r['held_snapshot_events'])
   release.set();await asyncio.wait_for(delivered.wait(),10);await page.unroute('**/api/open',hold_open)
   await page.wait_for_function('(s)=>selected===s&&!opening&&DeskNativeSteps.state().turn==="turn-three"',arg=original)
   assert await page.locator('#native-steps-list li').count()==53
@@ -154,7 +159,15 @@ async def one(browser,width):
   assert not f.requests and not f.sent and not errors
   r['checks'].append('two saved Plans and queues exact; no native requests/model sends or unexpected mutation; zero browser errors')
   await page.screenshot(path=str(OUT/f'native-steps-{width}.png'));r.update(passed=True,http=requests,native_requests=0,native_sends=0,errors=errors)
- except Exception as e:r.update(error=str(e),traceback=traceback.format_exc())
+ except Exception as e:
+  r.update(error=str(e),traceback=traceback.format_exc(),http=requests,errors=errors)
+  if 'page' in locals():
+   try:
+    r['observed']=await page.evaluate('()=>({selected,opening,after,generation,nativeThreadId,currentTurn,steps:DeskNativeSteps.state(),error:$("error").textContent})')
+    r['retained_events']=[{'seq':row['seq'],'event':row['event']} for row in f.desk.store.events(original)]
+    r['session']=f.desk.store.get(original)
+    await page.screenshot(path=str(OUT/f'native-steps-failed-{width}.png'))
+   except Exception as diagnostic:r['diagnostic_error']=str(diagnostic)
  finally:
   if context:await context.close()
   f.doCleanups()

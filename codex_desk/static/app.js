@@ -404,6 +404,7 @@ async function readSelectedOriginal({find=false,returnFocus=$('read-original')}=
 }
 function draw() {
   drawSidebar();
+  $('approvals').hidden=opening;
   DeskHome.sync();
   syncSelectedOriginal();
   const running=state.sessions.filter(s=>['running','approval','starting'].includes(s.status)).length;
@@ -438,7 +439,7 @@ function draw() {
 function itemText(i) {
   switch(i.type) {
     case 'userMessage':return (i.content || []).map(c=>c.text || '').join('\n');
-    case 'agentMessage':return i.text || '';
+    case 'agentMessage':case 'plan':return i.text || '';
     case 'commandExecution':return `$ ${i.command || ''}\n${i.aggregatedOutput || ''}${i.exitCode == null ? '' : '\nExit '+i.exitCode}`;
     case 'fileChange':return (i.changes || []).map(c=>`${c.kind?.type || 'change'} ${c.path}\n${c.diff || ''}`).join('\n');
     case 'reasoning':return (i.summary || []).join('\n');
@@ -491,37 +492,101 @@ function renderItem(i,turnId) {
   DeskActivity.render(node,i,text);
 }
 let approvalsSignature='';
+const interactionCards=new Map();
 function approvals() {
   const signature=JSON.stringify([selected,[...requests]]);
   if(signature===approvalsSignature)return;
   approvalsSignature=signature;
-  $('approvals').replaceChildren();
+  const host=$('approvals'), session=selected;
+  if(!interactionCards.has(session))interactionCards.set(session,new Map());
+  const cards=interactionCards.get(session), desired=[];
+  const active=document.activeElement;
+  let retiredFocus=false;
+  function retire(card){
+    if(card.box.contains(active))retiredFocus=true;
+    for(const input of card.fields.values())input.value='';
+    card.retired=true;
+    card.box.remove();
+  }
+  for(const [id,card] of cards){
+    const message=requests.get(id);
+    if(!message || JSON.stringify(message)!==card.signature){retire(card);cards.delete(id);}
+  }
   for(const [id,m] of requests) {
-    const session=selected, current=generation;
-    const p=m.params || {}, box=make('div',`${m.method}\n${p.command || p.reason || 'Native Codex needs your input.'}`, 'approval');
-    if(['item/commandExecution/requestApproval','item/fileChange/requestApproval'].includes(m.method)) {
-      const buttons=make('div','','actions');
-      for(const [label,decision] of [['Allow once','accept'],['Decline','decline']]) {
-        const b=make('button',label); b.onclick=async()=>{try{await api('/api/approval',{session,request:id,decision});if(current===generation){requests.delete(id);approvals();}}catch(e){if(current===generation)error(e)}};buttons.append(b);
-      } box.append(buttons);
-    } else if(m.method==='item/tool/requestUserInput') {
-      const form=make('form'), fields=new Map();
-      for(const q of p.questions || []) {
-        const label=make('label',q.header+' — '+q.question);
-        const input=make(q.options?.length && !q.isOther?'select':'input');
-        if(input.tagName==='SELECT') for(const o of q.options) {const option=make('option',o.label+' — '+o.description);option.value=o.label;input.append(option);}
-        else {input.type=q.isSecret?'password':'text';input.required=true;input.autocomplete='off';if(q.options?.length)input.placeholder=q.options.map(o=>o.label).join(' / ');}
-        label.append(input);form.append(label);fields.set(q.id,input);
+    let card=cards.get(id);
+    if(!card){
+      const p=m.params || {}, title=m.method==='item/tool/requestUserInput'?'Questions for this task':m.method==='item/commandExecution/requestApproval'?'Command approval':m.method==='item/fileChange/requestApproval'?'File change approval':'Native input required';
+      const box=make('section','','approval');box.append(make('strong',title));
+      const detail=p.command || p.reason;
+      if(detail)box.append(make('pre',typeof detail==='string'?detail:JSON.stringify(detail)));
+      const status=make('p','','muted');status.setAttribute('role','status');
+      card={box,signature:JSON.stringify(m),fields:new Map(),controls:[],pending:false,retired:false,status};cards.set(id,card);
+      const owned=card;
+      async function send(path,body){
+        if(owned.pending || owned.retired)return;
+        owned.pending=true;for(const control of owned.controls)control.disabled=true;
+        status.textContent='Sending this response…';
+        try{
+          await api(path,{session,request:id,...body});
+          if(cards.get(id)!==owned || owned.retired)return;
+          if(selected===session && requests.get(id) && JSON.stringify(requests.get(id))===owned.signature){
+            requests.delete(id);approvals();
+          }else{for(const input of owned.fields.values())input.value='';owned.retired=true;cards.delete(id);owned.box.remove();}
+          await refresh();
+        }catch(e){
+          if(cards.get(id)===owned && !owned.retired){
+            status.textContent='Response not confirmed: '+e.message;
+            owned.pending=false;for(const control of owned.controls)control.disabled=false;
+          }
+        }
       }
-      const submit=make('button','Send answers');form.append(submit);
-      form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{const answers=Object.fromEntries([...fields].map(([id,input])=>[id,[input.value]]));await api('/api/answer',{session,request:id,answers});if(current===generation){requests.delete(id);approvals();await refresh();}}catch(e){if(current===generation){error(e);submit.disabled=false;}}};
-      box.append(form);
-    } else box.append(make('p','Use Stop turn for this interaction; a dedicated UI is not implemented yet.'));
-    $('approvals').append(box);
+      if(['item/commandExecution/requestApproval','item/fileChange/requestApproval'].includes(m.method)) {
+        const buttons=make('div','','actions');
+        for(const [label,decision] of [['Allow once','accept'],['Decline','decline']]) {
+          const b=make('button',label);b.type='button';b.onclick=()=>send('/api/approval',{decision});buttons.append(b);card.controls.push(b);
+        }box.append(buttons);
+      }else if(m.method==='item/tool/requestUserInput') {
+        const form=make('form');
+        for(const q of p.questions || []) {
+          const label=make('label',(q.header || '')+' — '+q.question);
+          const input=make(q.options?.length && !q.isOther?'select':'input');
+          if(input.tagName==='SELECT')for(const o of q.options){const option=make('option',o.label+' — '+o.description);option.value=o.label;input.append(option);}
+          else{input.type=q.isSecret?'password':'text';input.required=true;input.autocomplete='off';if(q.options?.length)input.placeholder=q.options.map(o=>o.label).join(' / ');}
+          label.append(input);form.append(label);card.fields.set(q.id,input);card.controls.push(input);
+        }
+        const submit=make('button','Send answers');submit.type='submit';form.append(submit);card.controls.push(submit);
+        form.onsubmit=e=>{e.preventDefault();return send('/api/answer',{answers:Object.fromEntries([...owned.fields].map(([id,input])=>[id,[input.value]]))});};
+        box.append(form);
+      }else box.append(make('p','Use Stop current task to end this native interaction.'));
+      box.append(status);
+    }
+    desired.push(card.box);
+  }
+  // Keep unchanged nodes in place: sibling requests must not reset answers,
+  // caret, selection, disclosure or a pending response's disabled controls.
+  let cursor=host.firstChild;
+  for(const box of desired){if(box===cursor)cursor=cursor.nextSibling;else host.insertBefore(box,cursor);}
+  const keep=new Set(desired);for(const box of [...host.children])if(!keep.has(box))box.remove();
+  if(retiredFocus && document.activeElement!==active){
+    const next=host.querySelector('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
+    if(next)next.focus();else if(!$('stop').disabled)$('stop').focus();else $('prompt').focus();
+  }
+}
+function syncInteractionCards(pending){
+  // Retire resolved inputs in tasks being read in the background, too.
+  for(const [session,cards] of interactionCards){
+    if(session===selected)continue;
+    const current=new Map((pending?.[session] || []).map(m=>[String(m.id),JSON.stringify(m)]));
+    for(const [id,card] of cards)if(current.get(id)!==card.signature){
+      for(const input of card.fields.values())input.value='';
+      card.retired=true;card.box.remove();cards.delete(id);
+    }
+    if(!cards.size)interactionCards.delete(session);
   }
 }
 function consume(m) {
   const p=m.params || {};
+  let planChanged=false;
   // Old cached streams may contain owned child notifications. Keep native
   // requests/resolutions, but never display a child as the selected parent.
   if(p.threadId && nativeThreadId && p.threadId!==nativeThreadId && m.id===undefined && m.method!=='serverRequest/resolved')return;
@@ -529,10 +594,33 @@ function consume(m) {
   DeskStopTask.consume(m,{session:selected,thread:nativeThreadId,generation});
   const progressChanged=DeskNativeSteps.consume(m,{session:selected,thread:nativeThreadId,generation});
   const diffChanged=DeskTurnChanges.consume(m,{session:selected,thread:nativeThreadId,generation});
-  if(m.method==='turn/started')currentTurn=p.turn?.id || p.turnId || currentTurn;
+  if(m.method==='turn/started') {
+    const nextTurn=p.turn?.id || p.turnId || currentTurn;
+    if(currentTurn && nextTurn!==currentTurn)for(const i of items.values()) {
+      if(i.type==='plan' && i._deskPlan==='streaming' && itemTurns.get(i.id)===currentTurn)
+        renderItem({...i,_deskPlan:'retired'},currentTurn);
+    }
+    currentTurn=nextTurn;
+  }
   if(m.id !== undefined && m.method) {requests.set(String(m.id),m);approvals();}
   if(m.method==='serverRequest/resolved') {requests.delete(String(p.requestId));approvals();}
-  if(m.method==='item/started' || m.method==='item/completed') renderItem(p.item,p.turnId);
+  if(m.method==='item/started' || m.method==='item/completed') {
+    const i=p.item;
+    renderItem(i?.type==='plan'?{...i,_deskPlan:m.method==='item/completed'?'complete':'streaming'}:i,p.turnId);
+  }
+  if(m.method==='item/plan/delta') {
+    const i=items.get(p.itemId);
+    if(i?.type==='plan' && i._deskPlan==='streaming' && p.turnId===currentTurn && itemTurns.get(p.itemId)===p.turnId && typeof p.delta==='string') {
+      if(p.delta){renderItem({...i,text:(i.text || '')+p.delta},p.turnId);planChanged=true;}
+    }
+  }
+  if(m.method==='turn/completed') {
+    const turn=p.turn?.id || p.turnId;
+    // Native final items replace provisional text, never append to it.
+    for(const i of p.turn?.items || [])if(i?.type==='plan')renderItem({...i,_deskPlan:'complete'},turn);
+    for(const i of items.values())if(i.type==='plan' && i._deskPlan==='streaming' && itemTurns.get(i.id)===turn)
+      renderItem({...i,_deskPlan:p.turn?.status || 'completed'},turn);
+  }
   if(m.method==='item/agentMessage/delta') {
     const i=items.get(p.itemId) || {id:p.itemId,type:'agentMessage',text:''};i.text+=p.delta || '';renderItem(i,p.turnId);
   }
@@ -544,18 +632,24 @@ function consume(m) {
     i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i,p.turnId);
   }
   if(m.method==='error')$('activity').append(DeskNativeState.card(p.error || p,!!p.willRetry,make));
-  return progressChanged || diffChanged;
+  return progressChanged || diffChanged || planChanged;
 }
 async function refresh() {
   const current=generation, version=++refreshVersion, stopSnapshot=DeskStopTask.snapshot(), next=await api('/api/state');
   if(current!==generation || version!==refreshVersion)return;
-  state=next;stopStateSnapshot=stopSnapshot;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();DeskRecall.stateChanged();if($('profiles-dialog').open)drawProfiles();
+  state=next;syncInteractionCards(state.pending);stopStateSnapshot=stopSnapshot;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();DeskRecall.stateChanged();if($('profiles-dialog').open)drawProfiles();
 }
 async function open(id,{revealLatest=true,keepError=false,steerReceiptOnly=false}={}) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
   selected=id;DeskHome.selectionChanged();DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
+  // A deliberate return starts with the latest known native pending snapshot.
+  // An initial empty reset is not a resolution of this task's retained editor.
+  const initialPending=state.pending ? state.pending[id] || [] :
+    [...(typeof interactionCards==='undefined'?[]:interactionCards.get(id)?.values() || [])]
+      .filter(card=>!card.retired).map(card=>JSON.parse(card.signature));
+  for(const message of initialPending)requests.set(String(message.id),message);
   DeskNativeSteps.select({session:id,thread:null,generation:current});
   DeskTurnChanges.select({session:id,thread:null,generation:current});
   DeskSteering.select({session:id,thread:null,generation:current});
@@ -799,15 +893,23 @@ async function pollActivity(){
   if(selected && !opening){
     const rows=await api(`/api/events?session=${selected}&after=${after}`);
     if(current!==generation)return;
-    const follow=nearLatest() && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
+    const editor=document.activeElement;
+    const editorAnchor=editor?.isConnected && editor.closest?.('.approval')
+      ? {node:editor,top:editor.getBoundingClientRect().top}:null;
+    const follow=nearLatest() && !globalThis.DeskActivity?.reading?.() && !document.activeElement?.closest?.('.approval') && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
     for(const r of rows){
       after=r.seq;const progressChanged=consume(r.event);
       if(progressChanged || ['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
     }
+    // Output inserted above a focused answer must not move its viewport.
+    if(editorAnchor && editorAnchor.node.isConnected && document.activeElement===editorAnchor.node) {
+      const delta=editorAnchor.node.getBoundingClientRect().top-editorAnchor.top;
+      if(delta)window.scrollBy({top:delta,behavior:'instant'});
+    }
     if(changed){
       if(follow)requestAnimationFrame(()=>{
         if(current!==generation)return;
-        if(($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
+        if(!globalThis.DeskActivity?.reading?.() && !document.activeElement?.closest?.('.approval') && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
         else{latestUpdates+=changed;latestLabel();}
       });
       else{latestUpdates+=changed;latestLabel();}

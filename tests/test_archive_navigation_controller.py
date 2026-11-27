@@ -55,6 +55,7 @@ class ArchiveNavigationControllerTests(unittest.TestCase):
     def check(self, body):
         source = APP.read_text()
         shipped = source[source.index('function activeSession('):source.index('function itemText(')]
+        shipped += 'const interactionCards=new Map();\n' + source[source.index('function syncInteractionCards('):source.index('function consume(m)')]
         shipped += source[source.index('async function refresh()'):source.index('async function open(id,')]
         native_readouts = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
         native_readouts += (APP.parent / 'turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'

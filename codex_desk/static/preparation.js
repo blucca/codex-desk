@@ -20,7 +20,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
 (function(root){
   const el=id=>document.getElementById('preparation'+(id?'-'+id:''));
   const editors=new Map(), projects=new Set(), writer=crypto.randomUUID();
-  let options,rows=new Map(),selected=null,listVersion=0,selectionVersion=0,saveVersion=0,reading=false,returnOrigin=null;
+  let options,rows=new Map(),selected=null,displayed=null,listVersion=0,selectionVersion=0,saveVersion=0,reading=false,returnOrigin=null;
   const scope=()=>({cwd:el('project').value,archived:el('archived').checked});
   const sameScope=(a,b)=>a.cwd===b.cwd && a.archived===b.archived;
   const make=(tag,text,cls)=>options.make(tag,text,cls);
@@ -48,6 +48,8 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     const editor=editors.get(selected);if(!editor?.ready)return;
     const text=el('text').value,mode=el('mode').value;
     if(editor.text!==text || editor.mode!==mode){editor.text=text;editor.mode=mode;++editor.sequence;}
+    const node=el('text');editor.view={text,start:node.selectionStart,end:node.selectionEnd,
+      direction:node.selectionDirection,scroll:node.scrollTop};
   }
   function edit(){
     remember();const editor=editors.get(selected);if(!editor)return;
@@ -327,7 +329,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
       if(view){text.setSelectionRange?.(view.start,view.end,view.direction);text.scrollTop=view.scroll;}
     }
   }
-  function drawEditor(){
+  function drawEditor(restore=false){
     const editor=editors.get(selected);
     const reuseEnded=!editor?.reuse && ['reuse-text','append','replace','reuse-cancel'].some(id=>document.activeElement===el(id));
     controls();if(!editor)return;
@@ -335,10 +337,15 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     el('editor-title').textContent='Preparation in '+name(row);
     el('editor-binding').textContent=row.cwd+'\n'+options.profileLabel(row.profile)+
       (row.archived?' · Archived locally':'')+(!rows.has(row.id)?'\nNot listed in the current scope; your local editor is retained.':'');
-    if(el('text').value!==editor.text)el('text').value=editor.text;
+    const switching=displayed!==selected,replaced=el('text').value!==editor.text;displayed=selected;
+    if(replaced)el('text').value=editor.text;
     if(el('mode').value!==editor.mode)el('mode').value=editor.mode;
     drawFollowups(editor);
     if(reuseEnded)focusEditor();
+    if((switching || replaced || restore) && editor.view?.text===editor.text){
+      el('text').setSelectionRange?.(editor.view.start,editor.view.end,editor.view.direction);
+      el('text').scrollTop=editor.view.scroll;
+    }
   }
   async function loadEditor(editor){
     if(editor.loading)return editor.loading;
@@ -531,7 +538,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
         end:node?.selectionEnd,direction:node?.selectionDirection,scroll:node?.scrollTop};
       el('').showModal();
     }
-    drawEditor();return refresh();
+    drawEditor(true);return refresh();
   }
   function configure(value){
     options=value;el('mode').value='native';

@@ -34,7 +34,7 @@ Results show the project, conversation and a matching snippet. On a native resul
 
 For Desk-cached work, **Open matching activity** returns to its saved binding and profile and reveals the matched evidence. A saved draft or prepared follow-up result reveals the existing instruction; it does not send it. Opening an archived Desk result restores its entry.
 
-Content recall reads your private local Desk database: explicitly indexed native history, readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. Indexing and the original-conversation reader use native list/read requests without starting tasks. Native title browsing remains separate; opening an older conversation caches its readable evidence too. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
+Content recall reads your private local Desk database: explicitly indexed native history, readable evidence cached when you open a native conversation, subsequent Desk activity, saved drafts and prepared follow-ups. An explicit history refresh also makes completed command/tool results and proposed plans searchable when their final output arrived outside Desk, while keeping one result for the same native item. Indexing and the original-conversation reader use native list/read requests without starting tasks. Native title browsing remains separate; opening an older conversation caches its readable evidence too. Search itself makes no native request or model turn, and cached evidence stays searchable after a Desk restart.
 
 Queries are literal, Unicode-normalized and case-insensitive. The dialog shows up to 30 matching items. **Index coverage and text limits** reports cached native coverage; each conversation retains the newest readable items first, bounded at 5,000 items, 2,000,000 characters total and 200,000 characters per item. **Refresh recent history** refreshes the recent 200-conversation window and skips unchanged snapshots. **Index next older conversations** continues explicitly from retained native page progress. **Continue indexing** resumes unread rows after cancellation or restart; older cached evidence is retained. [Short answer-finding guide](find-past-answer.md).
 
@@ -78,11 +78,23 @@ Native sub-agent activity appears in one collapsed **Sub-agents** group per turn
 
 Expanded entries show reported agent paths/IDs, lifecycle events, models, prompts and legacy receiver states/results. The same visible collaboration evidence is included in the editable handoff. Native child completion and usage updates keep their own thread scope; they do not finish the parent task or replace its usage. Child approval requests retain their original native request IDs.
 
+## Answer native questions and approvals
+
+Pending native questions keep their entered answers, choices and reading focus when another command or file approval arrives or is resolved. Switching between Desk tasks in the same page keeps each pending question's unsent answers separate. Native resolution removes that question and clears its fields.
+
+Choose **Send answers**, **Allow once** or **Decline** for the request you reviewed. Its controls remain disabled while that response is being sent; other requests and your Work/Plan preparation remain independent. A failed local response leaves the pending input visible with its status. Question answers are held in this page only; reloading starts with blank fields for any still-pending native question.
+
 ## Native task steps
 
 When native Codex reports a checklist, **Native task steps** shows its current step and the latest ordered statuses. Expand it to read the full explanation and checklist; updates keep the disclosure, keyboard focus and reading position. An expanded checklist pauses automatic following of live output; **Latest output ↓** remains available.
 
 These are reported task steps, separate from your Work/Plan draft and prepared follow-ups. Completion, interruption or failure retains the last reported statuses without marking unfinished steps completed. A new native turn starts with an empty readout; returning to the same saved Desk task restores its retained reports.
+
+## Proposed Plan output
+
+In Plan mode, **Proposed plan** reads native plan text as it streams. The final native item replaces the provisional text exactly; an interruption or failure retains the partial text with its actual task outcome. This output is separate from **Native task steps**, your unsent Work/Plan draft and prepared follow-ups.
+
+The final plan remains readable on return. **Read original conversation** supports Find and full-item copying for it; saved-content search and reviewed handoff evidence include its text too. Reading or reusing a plan does not switch to Work or send another task.
 
 ## Turn changes
 

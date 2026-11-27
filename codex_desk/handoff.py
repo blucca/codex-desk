@@ -7,6 +7,8 @@ def visible_text(item):
         return 'User\n' + '\n'.join(c.get('text', '') for c in item.get('content', []) if c.get('type') == 'text')
     if kind == 'agentMessage':
         return 'Codex\n' + item.get('text', '')
+    if kind == 'plan':
+        return 'Proposed plan\n' + item.get('text', '')
     if kind == 'commandExecution':
         output, exit_code = item.get('aggregatedOutput'), item.get('exitCode')
         return ('Command\n' + item.get('command', '')

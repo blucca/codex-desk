@@ -64,6 +64,13 @@ def _known_active(thread):
         isinstance(turn, dict) and turn.get('status') == 'inProgress' for turn in turns)
 
 
+def _terminal_item(item, turn):
+    status = item.get('status')
+    if isinstance(status, str) and status:
+        return status in ('completed', 'failed', 'interrupted', 'declined')
+    return turn.get('status') in ('completed', 'failed', 'interrupted')
+
+
 class NativeRecallIndex:
     """Copies only shared-sanitizer visible text; never creates a Desk session.
 
@@ -100,7 +107,14 @@ class NativeRecallIndex:
                 thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, item_id TEXT NOT NULL,
                 item_type TEXT NOT NULL, visible_text TEXT NOT NULL, normalized_text TEXT NOT NULL,
                 updated REAL NOT NULL, position INTEGER NOT NULL,
+                complete INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(thread_id,turn_id,item_id))''')
+            columns = {row[1] for row in self.store.db.execute('PRAGMA table_info(native_recall_items)')}
+            if 'complete' not in columns:
+                self.store.db.execute('ALTER TABLE native_recall_items ADD COLUMN complete INTEGER NOT NULL DEFAULT 0')
+                # Old cached text has no terminal-state information. Retain it,
+                # but let the next explicit scan acquire that information once.
+                self.store.db.execute('UPDATE native_recall_threads SET snapshot_updated=NULL')
             self.store.db.execute('CREATE INDEX IF NOT EXISTS native_recall_cwd ON native_recall_threads(cwd)')
             self.store.db.execute('''CREATE INDEX IF NOT EXISTS native_recall_recent
                 ON native_recall_items(updated DESC,thread_id,position)''')
@@ -143,8 +157,8 @@ class NativeRecallIndex:
                 rows, counts = self._readable_rows(thread_id, turns, metadata[3])
                 self.store.db.execute('DELETE FROM native_recall_items WHERE thread_id=?', (thread_id,))
                 self.store.db.executemany('''INSERT INTO native_recall_items
-                    (thread_id,turn_id,item_id,item_type,visible_text,normalized_text,updated,position)
-                    VALUES(?,?,?,?,?,?,?,?)''', rows)
+                    (thread_id,turn_id,item_id,item_type,visible_text,normalized_text,updated,position,complete)
+                    VALUES(?,?,?,?,?,?,?,?,?)''', rows)
                 assignments = ','.join(field + '=?' for field in _COUNT_FIELDS)
                 # Native timestamps are integer seconds: an unfinished
                 # read can grow/complete without its timestamp changing.
@@ -202,16 +216,17 @@ class NativeRecallIndex:
                 counts['item_limit_hits'] += int(at_item_limit)
                 counts['indexed_chars'] += len(text)
                 rows.append((thread_id, turn['id'], item['id'], item['type'], text,
-                             normalize(text), stamp, len(rows)))
+                             normalize(text), stamp, len(rows),
+                             int(_terminal_item(item, turn) and not shortened and not at_item_limit)))
         counts['indexed_items'] = len(rows)
         return rows, counts
 
     def catch_up_bindings(self, thread_id):
         """Copy missing cached identities to saved Desk bindings during a scan.
 
-        Existing local evidence wins, including complete or longer streaming
-        rows. The native cache has no turn-completion marker, so copied rows
-        remain incomplete until an ordinary bound snapshot/event supplies it.
+        Existing local rows are unchanged. Copied rows remain incomplete until
+        an ordinary bound snapshot/event supplies completion; final native
+        evidence can be selected by recall without rewriting live delta state.
         Standalone native indexes have no Desk tables and need no catch-up.
         """
         if not _identifier(thread_id):

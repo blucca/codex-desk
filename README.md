@@ -100,6 +100,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
+- **Read the proposed plan.** Plan-mode output appears as native Codex streams it; the final native plan remains readable in activity, original history, content recall and reviewed handoffs. It stays separate from your unsent Plan draft and native task checklist.
 - **Review this turn's changes.** The latest native cumulative diff appears in **Turn changes**. Read or copy its full patch without losing your position as output continues; actual completion, interruption or failure keeps the last reported diff until the next turn.
 - **Stop the task you selected.** **Stop current task** captures the active native thread and turn once. **Check stop receipt** recovers the same request after a lost reply or restart without sending it again; actual native completion reports when the task ended. Your draft and prepared follow-ups stay in place.
 - **Correct the task underway.** Use a separate **Instruction for current task** editor and **Send to current task** to steer the active native turn while keeping your unsent Plan and prepared follow-ups intact.

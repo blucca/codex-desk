@@ -252,6 +252,16 @@ const settle=async()=>{await Promise.resolve();await Promise.resolve();};
     const held=deferred();control.post=()=>held.promise;n('keep').focus();const saving=n('keep').click();await settle();
     assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');n('mode').focus();held.resolve(clone(world.b.draft));await saving;
     assert(document.activeElement===n('mode'),'Keyboard focus must reach the intended visible control');assert.equal(n('conflict').hidden,true);
+  }else if(testcase==='draft-return-view'){
+    await review('b');fill('B unsaved preparation repeated '.repeat(80),'plan');
+    n('text').setSelectionRange(190,240,'backward');n('text').scrollTop=145;
+    await review('a');n('text').setSelectionRange(5,8,'forward');n('text').scrollTop=0;
+    await review('b');assert.deepEqual([n('text').selectionStart,n('text').selectionEnd,n('text').selectionDirection],[190,240,'backward']);assert.equal(n('text').scrollTop,145);
+    n('text').setSelectionRange(310,345,'forward');n('text').scrollTop=195;
+    await n('refresh').click();assert.deepEqual([n('text').selectionStart,n('text').selectionEnd,n('text').selectionDirection],[310,345,'forward']);assert.equal(n('text').scrollTop,195);
+    await n('close').click();n('text').setSelectionRange(0,0);n('text').scrollTop=0;
+    await DeskPreparation.show();assert.deepEqual([n('text').selectionStart,n('text').selectionEnd,n('text').selectionDirection],[310,345,'forward']);assert.equal(n('text').scrollTop,195);
+    assert.equal(calls.filter(c=>c.data).length,0);
   }else throw Error('Unknown case '+testcase);
   assert.deepEqual(activeDraft,{session:'a',text:'ACTIVE UNSENT PLAN — do not alter',mode:'plan'});
   assert(!calls.some(c=>/^\/api\/(open|import|turn|sessions|followups)/.test(c.path)));
@@ -289,6 +299,7 @@ class PreparationControllerTests(unittest.TestCase):
     def test_delayed_review_focuses_editor_when_source_still_owns_focus(self): self.run_case('delayed-review-retains-source-intent')
     def test_queued_reuse_review_and_cancel_have_keyboard_destinations(self): self.run_case('queued-reuse-focus-and-cancel')
     def test_conflict_choices_move_focus_once_without_late_save_steal(self): self.run_case('conflict-choice-focus')
+    def test_draft_session_return_refresh_and_close_keep_latest_view_without_save(self): self.run_case('draft-return-view')
 
 
 if __name__ == '__main__':
