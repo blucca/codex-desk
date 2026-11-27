@@ -46,7 +46,8 @@ jobs:
           python examples/check_browser_preview_links.py --site temp/static-preview/demo --embedded-site temp/static-preview/embedded --evidence temp/evidence/browser-preview-links
           python examples/build_browser_preview.py --session-reading-fixture --out temp/static-preview/reading
           python examples/build_browser_preview.py --embedded --session-reading-fixture --out temp/static-preview/reading-embedded
-          python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading --embedded-site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-reading
+          python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-reading
+          python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-reading-embedded
       - name: Check installed daily workflows
         working-directory: temp
         run: |
