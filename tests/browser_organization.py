@@ -233,6 +233,40 @@ async def check():
                     await page.locator('#show-archived').uncheck()
                     result['passed'].append('keyboard Archive/Restore through held real HTTP keeps pending action focus, rejects repeated Enter, restores failed-action focus or nearest visible action, and preserves the active unsent Plan plus both paused queued modes')
 
+                    # Background native status completion must not strand keyboard focus.
+                    for identifier, archived, query, control in (
+                        ('session-10', False, '  Needle  ', '.session'),
+                        ('session-11', True, '', '.session-archive'),
+                    ):
+                        original = desk.store.get(identifier)
+                        desk.store.update(identifier, status='running')
+                        desk.store.archive(identifier, archived)
+                        await page.locator('#session-filter').fill(query)
+                        await page.evaluate('refresh()')
+                        rows = await page.locator('.session-row').evaluate_all('rs=>rs.map(r=>r.dataset.session)')
+                        index = rows.index(identifier)
+                        remaining = [row for row in rows if row != identifier]
+                        destination = remaining[min(index, len(remaining)-1)]
+                        await page.locator(f'.session-row[data-session="{identifier}"] {control}').focus()
+                        desk.store.update(identifier, status='completed')
+                        before_mutations = sum(method == 'POST' for method, path in http_calls)
+                        await page.evaluate('refresh()')
+                        assert identifier not in await visible()
+                        assert await page.evaluate("v=>document.activeElement.closest('.session-row')?.dataset.session===v.id && document.activeElement.matches(v.control)", {'id':destination,'control':control})
+                        assert await page.locator('#session-filter').input_value() == query
+                        assert not await page.locator('#show-archived').is_checked()
+                        assert await page.evaluate('selected') == 'session-03'
+                        assert await page.locator('#prompt').input_value() == text
+                        assert await page.locator('#turn-mode').input_value() == 'plan'
+                        assert load_draft(desk.store, 'session-03') == prepared
+                        assert followup_snapshot(desk.store, 'session-03') == queued
+                        assert sum(method == 'POST' for method, path in http_calls) == before_mutations
+                        desk.store.archive(identifier, original['archived'])
+                        desk.store.update(identifier, status=original['status'])
+                        await page.locator('#session-filter').fill('')
+                        await page.evaluate('refresh()')
+                    result['passed'].append('real HTTP Active completion under exact title/archive scope moves only keyboard focus to the nearest same control; selected Plan, two paused modes, scope and all task mutations stay unchanged')
+
                     before_archive = desk.store.get('session-03')
                     await page.locator('#archive-session').click()
                     await page.wait_for_function('state.sessions.find(s=>s.id==="session-03").archived && !archiving.has("session-03")')

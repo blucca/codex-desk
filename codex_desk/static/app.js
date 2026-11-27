@@ -112,6 +112,7 @@ function drawSidebar(){
   const focused=document.activeElement, focusedRow=list.contains(focused)?focused.closest('.session-row'):null;
   const focusedControl=focusedRow && (focused.classList.contains('session-archive')?'archive':focused.classList.contains('session')?'session':null);
   const focusedSession=focusedControl?focusedRow.dataset.session:null;let restoreFocus=null;
+  const focusedWasActive=focusedRow?.dataset.active==='true';
   const focusedIndex=focusedRow?[...list.querySelectorAll('.session-row')].indexOf(focusedRow):-1;
   list.replaceChildren();
   const query=$('session-filter').value.trim().normalize('NFC').toLocaleLowerCase(), showArchived=$('show-archived').checked;
@@ -132,7 +133,7 @@ function drawSidebar(){
       if(!rows.length)continue;
       section.append(make('h4',`${kind[0].toUpperCase()+kind.slice(1)} · ${rows.length}`,'session-category'));
       for(const s of rows){
-        const row=make('div','','session-row');row.dataset.session=s.id;
+        const row=make('div','','session-row');row.dataset.session=s.id;row.dataset.active=String(activeSession(s));
         const b=make('button','','session'+(s.id===selected?' selected':''));b.title=s.cwd;
         b.type='button';if(s.id===selected)b.setAttribute('aria-current','page');
         b.append(make('strong',s.name || group.name),make('small',`${profileLabel(s.profile)} · ${s.status}${s.archived?' · archived locally':''}`));
@@ -150,10 +151,12 @@ function drawSidebar(){
   if(!visible && state.sessions.length)list.append(make('p',query?'No saved titles or project folders match.':'No recent saved sessions. Open a project or show archived sessions.','muted'));
   $('session-count').textContent=`${visible} shown · ${state.sessions.length} saved${state.sessions.some(s=>activeSession(s))?' · active tasks stay visible':''}`;
   if(restoreFocus && !restoreFocus.disabled)restoreFocus.focus({preventScroll:true});
-  else if(focusedControl==='archive' && archiving.has(focusedSession)){
+  else if((focusedControl==='archive' && archiving.has(focusedSession)) ||
+          (focusedControl && focusedWasActive && current.has(focusedSession) && !activeSession(current.get(focusedSession)))){
+    // A formerly Active row can disappear under the unchanged title/archive scope.
     const remaining=[...list.querySelectorAll('.session-row')];
     const nearby=remaining[Math.min(focusedIndex,remaining.length-1)];
-    (nearby?.querySelector('.session-archive') || $('session-filter')).focus({preventScroll:true});
+    (nearby?.querySelector(focusedControl==='archive'?'.session-archive':'.session') || $('session-filter')).focus({preventScroll:true});
   }
   list.scrollLeft=left;list.scrollTop=top;
 }
