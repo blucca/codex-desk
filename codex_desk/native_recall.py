@@ -3,7 +3,7 @@ import time
 
 from .recall import (MAX_ITEM_CHARS, VISIBLE_TYPES, PAGE_ORDER, _desk_query,
                      _item_text, _search_result, _timestamp, _validate_page,
-                     canonical_cwd, normalize)
+                     _query_cwds, canonical_cwd, normalize)
 
 
 MAX_THREAD_CHARS = 2_000_000
@@ -318,7 +318,7 @@ class NativeRecallIndex:
         query, scoped, needle = self._search_options(query, cwd, limit, offset)
         if type(include_archived) is not bool:
             raise ValueError('Choose whether to include archived sessions')
-        with self.store.lock:
+        with self.store.lock, _query_cwds(self.store):
             desk_sql, desk_options, desk_total, coverage = _desk_query(
                 self.store, scoped, include_archived, needle)
             native_sql, native_options, native_total = self._search_query(

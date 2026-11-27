@@ -1,4 +1,5 @@
 """Literal local recall of opened Desk evidence and saved task preparation."""
+from contextlib import contextmanager
 import json
 import math
 import os
@@ -125,7 +126,14 @@ def record_event(store, session, event, seq, fallback=None):
 
 def initialize(store):
     store.db.create_function('recall_normalize', 1, normalize, deterministic=True)
-    store.db.create_function('recall_cwd', 1, canonical_cwd, deterministic=True)
+    def recall_cwd(value):
+        cache = getattr(store, '_recall_cwds', None)
+        if cache is None:
+            return canonical_cwd(value)
+        if value not in cache:
+            cache[value] = canonical_cwd(value)
+        return cache[value]
+    store.db.create_function('recall_cwd', 1, recall_cwd, deterministic=True)
     store.db.executescript('''CREATE TABLE IF NOT EXISTS recall_items(
         session_id TEXT NOT NULL, turn_id TEXT NOT NULL, item_id TEXT NOT NULL,
         item_type TEXT NOT NULL, visible_text TEXT NOT NULL, normalized_text TEXT NOT NULL,
@@ -226,6 +234,17 @@ def _validate_page(limit, offset):
         raise ValueError('Choose a recall offset of zero or more')
 
 
+@contextmanager
+def _query_cwds(store):
+    """Reuse each stored folder identity only until the locked page is read."""
+    previous = getattr(store, '_recall_cwds', None)
+    store._recall_cwds = {}
+    try:
+        yield
+    finally:
+        store._recall_cwds = previous
+
+
 def _desk_query(store, scoped, include_archived, needle):
     """The filtered Desk corpus, shared by standalone and mixed-source pages."""
     tables = {row[0] for row in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -310,7 +329,7 @@ def search(store, q, cwd=None, include_archived=False, limit=30, offset=0):
         raise ValueError('Choose a project folder')
     scoped = canonical_cwd(cwd) if cwd is not None else None
     needle = normalize(q)
-    with store.lock:
+    with store.lock, _query_cwds(store):
         sql, options, total, coverage = _desk_query(store, scoped, include_archived, needle)
         cursor = store.db.execute(sql + PAGE_ORDER, (*options, limit, offset))
         results = [_search_result(row, needle) for row in cursor]
