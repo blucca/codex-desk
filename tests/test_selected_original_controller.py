@@ -7,6 +7,7 @@ from test_navigation_controllers import APP, DOM, NODE
 
 SETUP = DOM[:DOM.index('const DeskHistoryReader=')] + r'''
 let generation=7,opening=false,nativeThreadId='native-parent',after=0;
+function turnRequest(){return null;}
 state={profiles:[],sessions:[{id:'active',thread_id:'native-parent',cwd:'/retained/project',status:'running'}]};
 const main=new Element('main');document.body.append(main);
 for(const id of ['read-original','prompt','turn-mode','activity','latest-output'])main.append($(id));

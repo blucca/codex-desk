@@ -83,7 +83,7 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 ## Bring your existing work
 
 1. **Your recent Codex work** appears on the first screen, including the project folder. Choose **Read original conversation** to inspect evidence without opening a task, including when its project folder is gone. Click **Resume conversation** when you want to continue work in an available folder. From an active or restored task, choose **Recent work** to review the same list. **Back to recent work** returns to the original row; **Return to selected task** closes the overview without reopening the task or changing its draft, mode, or prepared follow-ups. The selected task’s live status stays visible in the overview.
-2. Read the saved messages, command results and tool evidence. Write your next task and wait for **Draft saved locally**, or choose **Save as follow-up**. Send it when ready; Work and Plan modes use native Codex.
+2. Read the saved messages, command results and tool evidence. Write your next task and wait for **Draft saved locally**, or choose **Save as follow-up**. Choose **Run task** when ready; Work and Plan modes use native Codex. If its local reply is lost, **Check Run request** recovers the same admission instead of starting another task. Later edits stay unsent; prepared follow-ups stay paused.
 3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft. After stopping Desk with **Ctrl+C**, relaunch with the same command and any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to return.
 
 ![Recent CLI conversations ready to resume in Codex Desk](docs/recent-work.png)

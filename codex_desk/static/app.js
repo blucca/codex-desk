@@ -22,7 +22,7 @@ const drafts=new Map(), submitting=new Set();
 let projectVersion=0, projectCursor=null, projectQuery=null, projectScope=null, projectOpening=false;
 let latestUpdates=0, statePollAt=0;
 const draftWriter=crypto.randomUUID();
-const draftEdits=new Map(), draftRevisions=new Map(), draftModes=new Map(), draftSaved=new Map(), draftLoads=new Map(), draftSaves=new Map(), draftTimers=new Map(), draftConflicts=new Map(), draftMessages=new Map();
+const draftEdits=new Map(), draftRevisions=new Map(), draftModes=new Map(), draftSaved=new Map(), draftLoads=new Map(), draftSaves=new Map(), draftTimers=new Map(), draftConflicts=new Map(), draftMessages=new Map(), draftIdentities=new Map();
 function draftStatus(id=selected){
   if(id!==selected)return;
   $('draft-status').textContent=draftMessages.get(id) || 'Unsent task drafts stay private in your local Desk database.';
@@ -44,7 +44,7 @@ async function loadDraft(id,current=generation){
   await draftLoads.get(id);
   if(current===generation && selected===id){$('prompt').value=drafts.get(id) || '';if(draftModes.has(id)){$('turn-mode').value=draftModes.get(id);modeSelected=id;}draftStatus(id);}
 }
-function persistDraft(id){
+function persistDraft(id,{identify=false}={}){
   clearTimeout(draftTimers.get(id));draftTimers.delete(id);
   const previous=draftSaves.get(id) || Promise.resolve();
   const pending=previous.then(async()=>{
@@ -52,11 +52,12 @@ function persistDraft(id){
     if(draftConflicts.has(id))return false;
     if(!draftRevisions.has(id))return false;
     const text=drafts.get(id) || '', mode=draftModes.get(id) || 'native', saved=draftSaved.get(id);
-    if(saved && saved.text===text && saved.mode===mode){draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);return true;}
+    const sequence=draftEdits.get(id) || 0, identity=draftIdentities.get(id);
+    if(saved && saved.text===text && saved.mode===mode && (!identity || identity.sequence===sequence) && (!identify || (identity?.revision===saved.revision && identity.sequence===sequence))){draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);return true;}
     draftMessages.set(id,'Saving draft…');draftStatus(id);
     try{
-      const next=await api('/api/draft',{session:id,text,mode,revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0});
-      draftRevisions.set(id,next.revision);draftSaved.set(id,next);
+      const next=await api('/api/draft',{session:id,text,mode,revision:draftRevisions.get(id),writer:draftWriter,sequence});
+      draftRevisions.set(id,next.revision);draftSaved.set(id,next);draftIdentities.set(id,{revision:next.revision,sequence});
       draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);return true;
     }catch(e){
       if(e.status===409 && e.current){draftConflicts.set(id,e.current);draftMessages.set(id,'This session’s draft changed in another tab. Choose which preparation to keep.');}
@@ -78,6 +79,152 @@ window.addEventListener('pagehide',()=>{
   // A debounced save can already be waiting behind an in-flight response.
   for(const id of new Set([...draftTimers.keys(),...draftSaves.keys()])){clearTimeout(draftTimers.get(id));if(draftRevisions.has(id) && !draftConflicts.has(id))fetch('/api/draft',{method:'POST',headers:deskAccessHeaders({'Content-Type':'application/json'}),body:JSON.stringify({session:id,text:drafts.get(id) || '',mode:draftModes.get(id) || 'native',revision:draftRevisions.get(id),writer:draftWriter,sequence:draftEdits.get(id) || 0}),keepalive:true}).catch(()=>{});}
 });
+// Browser retention is opaque. Captured work stays in memory or the private receipt.
+const turnRequestKey='codex-desk-turn-requests', turnTokens=new Map(), turnRequests=new Map();
+try{
+  const retained=JSON.parse(sessionStorage.getItem(turnRequestKey) || '[]');
+  if(Array.isArray(retained))for(const entry of retained){
+    if(typeof entry?.session==='string' && entry.session && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.token))turnTokens.set(entry.session,entry.token);
+  }
+}catch(e){}
+function saveTurnTokens(){sessionStorage.setItem(turnRequestKey,JSON.stringify([...turnTokens].map(([session,token])=>({session,token}))));}
+function turnRequest(id=selected){
+  if(!turnRequests.has(id) && turnTokens.has(id))turnRequests.set(id,{session:id,token:turnTokens.get(id),body:null,capture:null,status:null,receiptVersion:0});
+  return turnRequests.get(id);
+}
+function turnRequestBlocked(id=selected){const request=turnRequest(id);return !!request && !['accepted','rejected'].includes(request.status);}
+function retireTurnRequest(request){
+  if(turnRequests.get(request.session)!==request)return false;
+  turnTokens.delete(request.session);
+  try{saveTurnTokens();}catch(e){turnTokens.set(request.session,request.token);request.error=e;return false;}
+  turnRequests.delete(request.session);return true;
+}
+function reconcileTurnDraft(request,saved){
+  const id=request.session,body=request.body,previous=draftSaved.get(id),revision=draftRevisions.get(id);
+  if(!body || !saved || !Number.isInteger(saved.revision) || (revision ?? -1)>saved.revision)return false;
+  const clean=previous && drafts.get(id)===previous.text && draftModes.get(id)===previous.mode && !draftTimers.has(id) && !draftSaves.has(id) && !draftConflicts.has(id);
+  const exact=drafts.get(id)===body.text && draftModes.get(id)===body.mode &&
+    (request.capture?(draftEdits.get(id) || 0)===request.capture.edit && revision===body.revision && (!request.capture.cold || request.capture.clean):
+      clean && revision===body.revision);
+  // Only the backend's exact conditional clear is proof to clear this editor.
+  const cleared=saved.text==='' && saved.mode===body.mode && saved.revision===body.revision+1;
+  if(exact && cleared){
+    clearTimeout(draftTimers.get(id));draftTimers.delete(id);
+    draftEdits.set(id,(draftEdits.get(id) || 0)+1);drafts.set(id,'');
+    if(selected===id && $('prompt').value===body.text && $('turn-mode').value===body.mode)$('prompt').value='';
+    draftMessages.set(id,'Task accepted. Draft cleared.');
+  }
+  // A different saved preparation still uses the existing explicit conflict UI.
+  if(!cleared && previous && saved.revision>(revision ?? -1) && (drafts.get(id)!==saved.text || draftModes.get(id)!==saved.mode)){
+    draftConflicts.set(id,saved);draftMessages.set(id,'Task accepted. The saved draft changed in another tab; your local preparation remains unsent.');draftStatus(id);return false;
+  }
+  // A receipt can advance the saved revision while newer local edits remain unsent.
+  draftRevisions.set(id,saved.revision);draftSaved.set(id,saved);
+  if(draftConflicts.get(id)?.revision<=saved.revision && exact && cleared)draftConflicts.delete(id);
+  if(!(exact && cleared) && drafts.get(id)!==saved.text)draftMessages.set(id,'Task accepted. Your newer draft remains unsent.');
+  draftStatus(id);
+  return (exact && cleared) || (clean && drafts.get(id)==='' && saved.text==='');
+}
+function applyTurnReceipt(request,result){
+  if(turnRequests.get(request.session)!==request)return;
+  if(result?.session!==request.session || result?.token!==request.token || !['pending','accepted','rejected','needs_review'].includes(result.request?.status))throw Error('The Run receipt did not match this request');
+  const receipt=result.request;
+  if(receipt.payload){
+    const body=receipt.payload;
+    if(body.session!==request.session || body.token!==request.token)throw Error('The captured Run request did not match its receipt');
+    if(!request.body)request.body=Object.freeze({...body});
+    else if(['session','token','text','mode','revision','writer','sequence'].some(key=>body[key]!==request.body[key]))request.conflict=true;
+  }
+  request.status=receipt.status;request.result=result;request.notFound=false;request.error=null;++request.receiptVersion;
+  if(receipt.status==='accepted' && !request.conflict && reconcileTurnDraft(request,receipt.draft))retireTurnRequest(request);
+}
+function drawTurnRequest(){
+  const request=turnRequest(),busy=opening || submitting.has(selected) || !!request?.reading || !!request?.writing;
+  $('turn-request').hidden=!request;
+  $('prompt').required=!request;
+  $('send').textContent=request?'Check Run request':'Run task';
+  if(request)$('send').disabled=busy;
+  $('turn-request-recover').disabled=busy;
+  $('turn-request-retry').hidden=request?.status!=='rejected' || request.conflict;
+  $('turn-request-retry').disabled=busy || !request?.body;
+  for(const name of ['accepted','rejected']){
+    $('turn-request-'+name).hidden=request?.status!=='needs_review';
+    $('turn-request-'+name).disabled=busy;
+  }
+  $('turn-request-new').hidden=!request || !['accepted','rejected'].includes(request.status);
+  $('turn-request-new').disabled=busy;
+  const failure=request?.error?.message || request?.result?.request?.error || '';
+  $('turn-request-error').hidden=!failure;
+  $('turn-request-error').textContent=failure;
+  if(!request)return;
+  let message=request.writing?'Sending the captured Run request…':request.reading?'Checking the retained Run request. Nothing is being sent.':
+    request.status==='accepted'?'Run accepted. Your current draft remains unsent. Prepare a new task before another Run.':
+    request.status==='rejected'?'Run rejected. Retry the original captured task, or prepare a new task.':
+    request.status==='needs_review'?'Run unconfirmed. Review this conversation’s activity, then record whether it started.':
+    request.status==='pending'?'Run receipt pending. Check this request before sending another task.':
+    request.notFound?'No retained receipt found yet. Check this request again; the visible draft will not be resent.':
+    'Run response unconfirmed. Check the retained request before another task.';
+  if(request.body && (drafts.get(selected)!==request.body.text || draftModes.get(selected)!==request.body.mode) && request.status!=='accepted')message+=' Your current draft has not been sent.';
+  if(request.conflict)message+=' This token belongs to different captured work; its original receipt is retained.';
+  $('turn-request-status').textContent=message;
+}
+async function readTurnRequest(request){
+  if(request.reading)return request.reading;
+  const receiptVersion=request.receiptVersion;
+  if(!request.capture && draftRevisions.has(request.session)){
+    const id=request.session,saved=draftSaved.get(id);
+    request.capture={edit:draftEdits.get(id) || 0,cold:true,clean:!!saved && drafts.get(id)===saved.text && draftModes.get(id)===saved.mode && !draftTimers.has(id) && !draftSaves.has(id) && !draftConflicts.has(id)};
+  }
+  const pending=(async()=>{
+    try{
+      const result=await api('/api/turn/request?session='+encodeURIComponent(request.session)+'&token='+encodeURIComponent(request.token));
+      if(receiptVersion===request.receiptVersion)applyTurnReceipt(request,result);
+    }catch(e){if(receiptVersion===request.receiptVersion){request.error=e;if(e.status===404)request.notFound=true;}}
+    finally{request.reading=null;if(selected===request.session)draw();}
+  })();
+  request.reading=pending;if(selected===request.session)draw();return pending;
+}
+function adoptTurnConflict(request,result){
+  if(result?.session!==request.session || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result?.token) || !result.request)return null;
+  if(result.token===request.token){applyTurnReceipt(request,result);return request;}
+  // The server rejected this fresh Run because earlier captured work still owns
+  // this session. Recover that identity, never replay the newer visible draft.
+  const retained={session:request.session,token:result.token,body:null,capture:null,status:null,receiptVersion:0};
+  turnTokens.set(request.session,retained.token);
+  try{saveTurnTokens();}catch(e){turnTokens.set(request.session,request.token);throw e;}
+  turnRequests.set(request.session,retained);applyTurnReceipt(retained,result);return retained;
+}
+async function sendTurnRequest(request,{retry=false}={}){
+  const id=request.session;
+  if(!request.body || request.writing || request.reading || (retry && (request.status!=='rejected' || request.conflict)))return;
+  request.writing=true;request.error=null;if(selected===id)draw();
+  try{
+    const result=await api('/api/turn',retry?{...request.body,retry:true}:request.body);
+    applyTurnReceipt(request,result);
+    if(selected===id)await refresh();
+  }catch(e){
+    request.error=e;
+    if(e.status===409){
+      try{const retained=adoptTurnConflict(request,e.current);if(retained && retained!==request)await readTurnRequest(retained);else if(retained)retained.error=e;}
+      catch(failure){request.error=failure;}
+    }
+  }finally{request.writing=false;if(selected===id)draw();}
+}
+$('turn-request-recover').onclick=()=>{const request=turnRequest();if(request && !opening)return readTurnRequest(request);};
+$('turn-request-retry').onclick=()=>{const request=turnRequest();if(request && !opening && !submitting.has(selected))return sendTurnRequest(request,{retry:true});};
+for(const outcome of ['accepted','rejected'])$('turn-request-'+outcome).onclick=async()=>{
+  const request=turnRequest();if(!request || opening || submitting.has(selected) || request.status!=='needs_review' || request.reading || request.writing)return;
+  request.writing=true;request.error=null;draw();
+  try{applyTurnReceipt(request,await api('/api/turn/resolve',{session:request.session,token:request.token,outcome}));if(selected===request.session)await refresh();}
+  catch(e){request.error=e;}
+  finally{request.writing=false;if(selected===request.session)draw();}
+};
+$('turn-request-new').onclick=()=>{
+  const request=turnRequest();if(!request || opening || request.reading || request.writing || submitting.has(selected) || !['accepted','rejected'].includes(request.status))return;
+  if(retireTurnRequest(request)){draftMessages.set(request.session,'New task prepared. Review the draft, then choose Run task.');draftStatus(request.session);}
+  draw();
+};
+
 function nearLatest(){return window.scrollY+window.innerHeight >= document.documentElement.scrollHeight-140;}
 function latestLabel(){
   $('latest-output').textContent=latestUpdates?`${latestUpdates} new update${latestUpdates===1?'':'s'} · Latest output ↓`:'Latest output ↓';
@@ -223,9 +370,10 @@ function draw() {
   $('binding').textContent=`${s.cwd}\n${profileLabel(s.profile)} → ${s.provider || 'loading'} / ${s.model || 'native default'}`;
   if(modeSelected!==selected){$('turn-mode').value=s.mode || 'native';modeSelected=selected;}
   const busy=opening || submitting.has(selected) || ['running','approval','starting'].includes(s.status);
-  DeskFollowups.status(selected,busy);$('prepare-followup').disabled=opening || submitting.has(selected);
+  DeskFollowups.status(selected,busy || turnRequestBlocked(selected));$('prepare-followup').disabled=opening || submitting.has(selected);
   $('turn-mode').disabled=opening;
   $('status').textContent=opening?'Opening session…':s.status; $('send').disabled=busy || DeskFollowups.blocked(selected);
+  drawTurnRequest();
   $('stop').disabled=opening || !['running','approval'].includes(s.status);
   $('rename').disabled=opening;$('handoff').disabled=opening;
   $('usage').textContent=DeskNativeState.usage(s.usage);
@@ -354,6 +502,19 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
   $('activity').replaceChildren();approvals();draw();draftStatus();
   const preparation=loadDraft(id,current);
   try {
+    const retained=turnRequest(id);
+    if(retained){
+      // Cold receipt recovery does not attach or resume a native runtime.
+      await preparation;await readTurnRequest(retained);if(current!==generation)return;
+      nativeThreadId=state.sessions.find(s=>s.id===id)?.thread_id || null;
+      const rows=await api('/api/events?session='+encodeURIComponent(id)+'&after=0');
+      if(current!==generation)return;
+      for(const row of rows){after=row.seq;consume(row.event);}
+      await refresh();if(current!==generation)return;
+      localStorage.setItem('codex-desk-session',id);
+      opening=false;$('welcome').hidden=true;$('task').hidden=false;$('handoff').hidden=false;draw();
+      return true;
+    }
     const opened=await api('/api/open',{session:id});
     if(current!==generation)return;
     localStorage.setItem('codex-desk-session',id);
@@ -460,7 +621,7 @@ $('project-more').onclick=()=>findProject(projectCursor);
 $('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
 $('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 $('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
-DeskFollowups.configure({api,make,selected:()=>selected,refresh});
+DeskFollowups.configure({api,make,selected:()=>selected,refresh,afterDraw:drawTurnRequest});
 DeskHistoryReader.configure({api});
 $('read-original').onclick=()=>readSelectedOriginal();
 document.addEventListener('keydown',event=>{
@@ -486,17 +647,23 @@ $('prepare-followup').onclick=async()=>{
   finally{submitting.delete(id);draw();}
 };
 $('task').onsubmit=async e=>{
-  e.preventDefault();if(!selected || opening || submitting.has(selected) || $('send').disabled)return;
-  const id=selected, current=generation, text=$('prompt').value, mode=$('turn-mode').value;
+  e.preventDefault();if(!selected || opening)return;
+  const retained=turnRequest();
+  if(retained){if(!retained.writing && !submitting.has(selected))return readTurnRequest(retained);return;}
+  if(submitting.has(selected) || $('send').disabled || !$('prompt').value.trim())return;
+  const id=selected,current=generation,text=$('prompt').value,mode=$('turn-mode').value;
   rememberDraft(id);const sentEdit=draftEdits.get(id) || 0;submitting.add(id);$('error').hidden=true;draw();
-  try {
-    if(!await persistDraft(id))return;
-    const sentRevision=draftRevisions.get(id);
-    await api('/api/turn',{session:id,text,mode});
-    if((draftEdits.get(id) || 0)===sentEdit && draftRevisions.get(id)===sentRevision && drafts.get(id)===text && draftModes.get(id)===mode){draftEdits.set(id,(draftEdits.get(id) || 0)+1);drafts.set(id,'');if(selected===id && $('prompt').value===text)$('prompt').value='';await persistDraft(id);}
-    if(current===generation)await refresh();
-  } catch(err) {if(current===generation)error(err);}
-  finally {submitting.delete(id);draw();}
+  try{
+    if(!await persistDraft(id,{identify:true}))return;
+    if((draftEdits.get(id) || 0)!==sentEdit || drafts.get(id)!==text || draftModes.get(id)!==mode){draftMessages.set(id,'Newer edits remain unsent. Review the draft, then Run again.');draftStatus(id);return;}
+    if(current!==generation)return;
+    const body=Object.freeze({session:id,token:crypto.randomUUID(),text,mode,revision:draftRevisions.get(id),writer:draftWriter,sequence:sentEdit});
+    turnTokens.set(id,body.token);
+    try{saveTurnTokens();}catch(e){turnTokens.delete(id);throw e;}
+    const request={session:id,token:body.token,body,capture:{edit:sentEdit},status:'pending',receiptVersion:0};
+    turnRequests.set(id,request);await sendTurnRequest(request);
+  }catch(err){if(current===generation)error(err);}
+  finally{submitting.delete(id);draw();}
 };
 $('stop').onclick=async()=>{if(opening)return;const session=selected,current=generation;try{await api('/api/stop',{session});if(current===generation){requests.clear();approvals();await refresh();}}catch(e){if(current===generation)error(e);}};
 let failures=0;
@@ -549,6 +716,8 @@ async function pollActivity(){
     }
     if(rows.length){await refresh();statePollAt=Date.now();}
   }
+  const retained=turnRequest();
+  if(selected && !opening && retained && !['accepted','rejected'].includes(retained.status) && !retained.writing && !retained.reading)await readTurnRequest(retained);
   // Other projects can finish or request approval while this conversation is quiet.
   if(Date.now()-statePollAt>=4000){await refresh();statePollAt=Date.now();}
 }

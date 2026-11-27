@@ -12,6 +12,7 @@ const DeskFollowups=(()=>{
     el('send').disabled=busy || !!data?.reservation;
     el('followup-send').disabled=busy || pending || !data?.entries.some(e=>e.state==='queued') || !!data?.reservation;
     el('followup-clear').disabled=pending || !data?.entries.some(e=>e.state==='queued');
+    options.afterDraw?.();
     el('followup-count').textContent=String(data?.entries.length || 0);
     el('followup-status').textContent=data?.reservation?(data.reservation.state==='unknown'?'Start unconfirmed. Review its activity before sending more.':'Start receipt pending. Review before sending more.'):(messages.get(session) || (data?.entries.length?'Prepared locally. Send next targets this conversation only.':'Write a task below, then choose Save as follow-up.'));
     const reservation=data?.reservation;

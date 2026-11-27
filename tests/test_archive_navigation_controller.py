@@ -9,6 +9,8 @@ from test_navigation_controllers import APP, DOM, NODE
 SETUP = DOM.replace("function setArchived(){throw Error('Rendering must not archive');}", '') + r'''
 let opening=false,modeSelected=selected,nativeFailureSignature='',generation=7,refreshVersion=0;
 const submitting=new Set();let requests=new Map();
+function turnRequestBlocked(){return false;}
+function drawTurnRequest(){}
 const draft={text:'Exact unsent Plan — 保留  ',mode:'plan'};
 const queue=[{id:'first',text:'Prepared Work',mode:'native'},
              {id:'second',text:'Prepared Plan',mode:'plan'}];

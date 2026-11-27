@@ -150,3 +150,5 @@ button[aria-disabled="true"]{opacity:.5;cursor:default}
 
 /* Keep long-original evidence readable beneath multiline source and Find controls. */
 #history-reader-body{flex-shrink:0;min-height:min(38dvh,320px)}
+
+.turn-request{padding:12px 14px;margin:12px 0;border:1px solid #405367;border-radius:8px}.turn-request h3{margin:0 0 8px}.turn-request p{overflow-wrap:anywhere}.turn-request .actions{flex-wrap:wrap}

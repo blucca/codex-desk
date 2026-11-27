@@ -91,3 +91,34 @@ def save_draft(store, session, text, mode, expected_revision, writer=None, seque
             writer=excluded.writer,edit_sequence=excluded.edit_sequence''',
             (session, saved['text'], saved['mode'], saved['revision'], writer, sequence))
         return saved
+
+
+def draft_snapshot(store, session):
+    """Read an admission's current draft without schema upgrades or writes."""
+    with store.lock:
+        initial_mode = _session_mode(store, session)
+        if store.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='drafts'").fetchone() is None:
+            return {'text': '', 'mode': initial_mode, 'revision': 0}
+        return _read(store, session, initial_mode)
+
+
+def clear_admitted_draft(store, session, payload):
+    """Clear only the captured saved edit; a later edit or writer survives.
+
+    Clearing does not use up a page edit sequence. The next genuine edit from
+    that page can save against the returned revision with its next sequence.
+    """
+    with store.lock, store.db:
+        store.db.execute('BEGIN IMMEDIATE')
+        initial_mode = _session_mode(store, session)
+        _ensure_table(store)
+        current = _read(store, session, initial_mode)
+        lineage = store.db.execute(
+            'SELECT writer,edit_sequence FROM drafts WHERE session_id=?', (session,)).fetchone()
+        if (current != {key: payload[key] for key in ('text', 'mode', 'revision')}
+                or lineage is None or tuple(lineage) != (payload['writer'], payload['sequence'])):
+            return current
+        saved = {'text': '', 'mode': current['mode'], 'revision': current['revision'] + 1}
+        store.db.execute('UPDATE drafts SET text=?,revision=? WHERE session_id=?',
+                         (saved['text'], saved['revision'], session))
+        return saved

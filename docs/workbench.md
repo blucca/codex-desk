@@ -10,6 +10,14 @@ Original reading uses the saved parent thread identity, independently of task ex
 
 **Refresh original** explicitly reads that same native conversation again. The last successful snapshot stays visible while it loads and if the refresh fails. The latest page, known native item, text window, disclosure and query remain owned by the reader. An unchanged submitted Find is recomputed; edited or canceled Find text is not submitted by Refresh. A removed item or occurrence is reported rather than silently substituted. Closing the reader ends that reading view; Refresh continuity is within the open view.
 
+## Run a prepared task and recover its receipt
+
+Choose **Run task** after saving your Work or Plan draft. Desk captures that exact saved revision and sends it to the selected conversation. An accepted request clears only its original draft; text you edit while it runs stays unsent. Ordered follow-ups remain paused.
+
+If the local reply is lost, **Check Run request** reads the private admission receipt instead of starting another task. The same request keeps its original conversation and Work/Plan intent after a page or server restart. A native started event can confirm admission even when the task has already completed.
+
+An unconfirmed request stays in the **Retained Run request** panel. Check its native conversation, then explicitly mark it accepted or rejected. A known rejection offers **Retry original captured task** for the captured task, or **Prepare a new task** without sending. New work, including the same words used again, gets a fresh request identity; later editor text is never the original request's retry body.
+
 ## Find a saved conversation by title
 
 In **Open a project**, enter part of a conversation title in **Search conversation titles**, then click **Find existing sessions** or press Enter. For conversations from other projects, open **Browse existing Codex sessions** in the sidebar, enter the title text and click **Search titles**.
