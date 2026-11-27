@@ -375,18 +375,22 @@
     return {key:elementKey(item),start:windowStart+start,end:windowStart+end,text:range.toString(),
       backward:selection.anchorNode===range.endContainer && selection.anchorOffset===range.endOffset};
   }
-  function textPoint(pre,offset){
+  function textPoint(pre,offset,right=false){
     if(offset<0)return null;
-    const walker=document.createTreeWalker(pre,NodeFilter.SHOW_TEXT);let node;
-    while((node=walker.nextNode())){if(offset<=node.data.length)return {node,offset};offset-=node.data.length;}
-    return null;
+    const walker=document.createTreeWalker(pre,NodeFilter.SHOW_TEXT);let node,last=null;
+    while((node=walker.nextNode())){
+      last=node;
+      if(offset<node.data.length || (!right && offset===node.data.length))return {node,offset};
+      offset-=node.data.length;
+    }
+    return offset===0 && last?{node:last,offset:last.data.length}:null;
   }
   function restoreSelectedText(saved){
     if(!saved)return;
     const row=rows.find(row=>rowKey(row)===saved.key),item=viewItems().find(item=>elementKey(item)===saved.key);
     const pre=item?.querySelector('.history-reader-text'),start=saved.start-(Number(item?.dataset.windowStart)||0);
     const end=saved.end-(Number(item?.dataset.windowStart)||0);
-    const first=pre?textPoint(pre,start):null,last=pre?textPoint(pre,end):null;
+    const first=pre?textPoint(pre,start,true):null,last=pre?textPoint(pre,end):null;
     if(!row || !first || !last || textFor(row.item).slice(saved.start,saved.end)!==saved.text){
       el('status').textContent='Original refreshed. The selected original text changed or is no longer at its original location; its selection was not moved to another source.';
       return;

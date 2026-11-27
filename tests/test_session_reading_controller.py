@@ -196,7 +196,7 @@ assert(!nodes.get('toolA').querySelector('.activity-tool').open);
     def test_new_manual_reading_intent_cancels_pending_same_owner_restore(self):
         self.check(r"""
 await open('A');flush();readA();await open('B');flush();await open('A');
-window.scrollTo({top:600,left:9});flush();assert.equal(selected,'A');assert.equal(window.scrollY,600);assert.equal(window.scrollX,9);
+inputListeners.wheel.forEach(fn=>fn());window.scrollTo({top:600,left:9});flush();assert.equal(selected,'A');assert.equal(window.scrollY,600);assert.equal(window.scrollX,9);
 assert(!nodes.get('toolA').querySelector('.activity-tool').open);assert(!DeskSessionReading.follow());
 await open('B');flush();await open('A');flush();assert.equal(window.scrollY,600);assert.equal(window.scrollX,9);
 await open('B');flush();await open('A');frames.shift()();inputListeners.wheel.forEach(fn=>fn());
@@ -204,6 +204,18 @@ window.scrollTo({top:750,left:11});flush();assert.equal(window.scrollY,750);asse
 await open('C');window.scrollTo({top:250,left:5});flush();assert.equal(selected,'C');assert.equal(window.scrollY,250);assert.equal(window.scrollX,5);assert(!DeskSessionReading.follow());
 await open('B');flush();window.scrollTo({top:170,left:8});state.sessions.find(row=>row.id==='A').thread_id='native-A-input';originals.A.id='native-A-input';
 await open('A');inputListeners.wheel.forEach(fn=>fn());flush();assert.equal(window.scrollY,170);assert.equal(window.scrollX,8);
+""")
+
+    def test_layout_clamp_before_first_restore_frame_preserves_saved_reading(self):
+        self.check(r"""
+await open('A');flush();readA();const saved=DeskSessionReading.capture();await open('B');flush();await open('A');
+assert(sessionReadingPending);assert(!sessionReadingRestoring);const epoch=sessionReadingEpoch;
+window.scrollTo({top:227});assert.equal(sessionReadingEpoch,epoch);assert(sessionReadingPending);
+flush();assert.equal(window.scrollY,350);assert(nodes.get('toolA').querySelector('.activity-tool').open);
+assert.deepEqual(DeskSessionReading.capture(),saved);
+await open('B');flush();await open('A');inputListeners.pointerdown.forEach(fn=>fn());
+window.scrollTo({top:500});flush();assert.equal(window.scrollY,500);assert(!sessionReadingPending);
+assert(!nodes.get('toolA').querySelector('.activity-tool').open);assert(!DeskSessionReading.follow());
 """)
 
     def test_pagehide_metadata_restores_from_fresh_native_source_after_cold_page(self):

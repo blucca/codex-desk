@@ -30,11 +30,21 @@ class OriginalSelectionTests(unittest.TestCase):
     def test_window_offsets_and_mark_text_nodes_restore_backward_selection(self):
         self.run_js("""
 restoreSelectedText(saved);assert.equal(calls.length,1);
-assert.strictEqual(calls[0][0],nodes[0]);assert.equal(calls[0][1],7);
+assert.strictEqual(calls[0][0],nodes[1]);assert.equal(calls[0][1],0);
 assert.strictEqual(calls[0][2],nodes[1]);assert.equal(calls[0][3],12);
 calls=[];restoreSelectedText({...saved,backward:true});
 assert.strictEqual(calls[0][0],nodes[1]);assert.equal(calls[0][1],12);
-assert.strictEqual(calls[0][2],nodes[0]);assert.equal(calls[0][3],7);
+assert.strictEqual(calls[0][2],nodes[1]);assert.equal(calls[0][3],0);
+""")
+
+    def test_boundary_bias_excludes_empty_neighbor_rects_and_keeps_full_text_end(self):
+        self.run_js("""
+assert.deepEqual(textPoint(pre,7,true),{node:nodes[1],offset:0});
+assert.deepEqual(textPoint(pre,19),{node:nodes[1],offset:12});
+assert.deepEqual(textPoint(pre,0,true),{node:nodes[0],offset:0});
+assert.deepEqual(textPoint(pre,25,true),{node:nodes[2],offset:6});
+assert.equal(textPoint(pre,26,true),null);assert.equal(textPoint(pre,-1,true),null);
+pre.nodes=[{data:''},...nodes,{data:''}];assert.deepEqual(textPoint(pre,0,true),{node:nodes[0],offset:0});
 """)
 
     def test_changed_text_or_native_item_never_selects_repeated_text_elsewhere(self):

@@ -459,8 +459,7 @@ globalThis.DeskSessionReading={capture:captureSessionReading,save:saveSessionRea
   notice:()=>sessionReadingNotice};
 window.addEventListener('pagehide',saveSessionReading);
 window.addEventListener('scroll',()=>{
-  if(opening || sessionReadingRestoring)return;
-  if(sessionReadingPending){++sessionReadingEpoch;sessionReadingPending=false;}
+  if(opening || sessionReadingRestoring || sessionReadingPending)return;
   if(!nearLatest())sessionReadingLatest=false;
 },{passive:true});
 function sessionReadingInput(){
