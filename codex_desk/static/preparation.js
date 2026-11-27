@@ -350,14 +350,15 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   function reviewRequest(row){
     remember();
     const origin={session:row.id,token:row.turn_request.token,scroll:el('').scrollTop};
-    return root.DeskPreparedRequest.show(row,()=>{
+    return root.DeskPreparedRequest.show(row,{origin:'prepared',valid:()=>el('').open,
+      onResolved:()=>{++saveVersion;return refresh();},onReturn:()=>{
       if(!el('').open)return;
       const source=[...el('list').querySelectorAll('button')].find(node=>node.dataset.session===origin.session &&
         node.dataset.control==='request' && node.dataset.token===origin.token);
       el('').scrollTop=origin.scroll;
       (source || el('refresh')).focus({preventScroll:true});
       if(!source)el('refresh').scrollIntoView({block:'nearest'});
-    });
+    }});
   }
   function restoreOrigin(){
     const origin=returnOrigin;returnOrigin=null;
@@ -380,7 +381,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   }
   function configure(value){
     options=value;el('mode').value='native';
-    root.DeskPreparedRequest.configure({api:options.api,onResolved:()=>{++saveVersion;return refresh();}});
+    root.DeskPreparedRequest.configure({api:options.api});
     el('refresh').onclick=refresh;el('close').onclick=()=>{el('').close();restoreOrigin();};
     el('project').onchange=el('archived').onchange=refresh;
     el('text').oninput=edit;el('mode').onchange=edit;
@@ -392,7 +393,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     el('save-open').onclick=saveAndOpen;
     el('').addEventListener('close',()=>{
       if(el('').open)return;
-      remember();++listVersion;++selectionVersion;reading=false;root.DeskPreparedRequest.close();
+      remember();++listVersion;++selectionVersion;reading=false;root.DeskPreparedRequest.close('prepared');
       // Native dialog refocus can reset a textarea's range. Restore only the
       // unchanged origin, after close, never an editor loaded by Open.
       restoreOrigin();
@@ -402,14 +403,14 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   root.DeskPreparation={configure,show};
 })(typeof globalThis==='undefined'?this:globalThis);
 
-/* Ordinary Prepared request review owns no selected-task or draft state. */
+/* Independent UUID request review; its activation belongs to Prepared or recall. */
 (function(root){
   const el=id=>document.getElementById('preparation-request'+(id?'-'+id:''));
   const states=new Map(),statuses=['pending','needs_review','accepted','rejected'];
   let options,active=null,generation=0,capturedView=null,originalReader=null;
   function validIdentity(session,token){return typeof session==='string' && !!session &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);}
-  const valid=ticket=>active===ticket && ticket.generation===generation && el('').open && document.getElementById('preparation').open;
+  const valid=ticket=>active===ticket && ticket.generation===generation && el('').open && ticket.owner.valid();
   function binding(value,session){return value?.session===session && ['native_home','cwd','profile'].every(key=>typeof value[key]==='string') &&
     (value.thread_id===null || typeof value.thread_id==='string');}
   function apply(request,result){
@@ -431,6 +432,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     if(!active || !valid(active))return;
     const request=active.request,receipt=request.result?.request,busy=request.reading || request.writing || request.originalReading,mismatch=mismatched(request);
     el('title').textContent='Task request in '+active.name;
+    el('return').textContent=active.owner.backLabel || 'Return to Prepared work';
     el('identity').textContent='Request ID: '+request.token;
     const capture=root.DeskTurnReview.captured(request),disclosure=el('captured');disclosure.hidden=!capture;
     if(capture && (capturedView?.session!==capture.session || capturedView.token!==capture.token || capturedView.text!==capture.text || capturedView.mode!==capture.mode)){
@@ -533,10 +535,10 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
       const result=await options.api('/api/turn/resolve',{session:request.session,token:request.token,outcome});
       if(!valid(ticket) || writeVersion!==request.writeVersion)return false;
       apply(request,result);
-      if(options.onResolved){
-        const refreshed=await options.onResolved({session:request.session,token:request.token});
+      if(ticket.owner.onResolved){
+        const refreshed=await ticket.owner.onResolved({session:request.session,token:request.token});
         if(!valid(ticket) || writeVersion!==request.writeVersion)return false;
-        if(refreshed===false)request.message='Review recorded. Refresh saved work after Return to update the list.';
+        if(refreshed===false)request.message=ticket.owner.refreshMessage || 'Review recorded. Refresh saved work after Return to update the list.';
       }
       return true;
     }catch(e){
@@ -551,25 +553,27 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     const previous=active;if(!previous)return;
     active=null;++generation;stopOriginal();++previous.request.readVersion;++previous.request.writeVersion;
     previous.request.reading=previous.request.writing=previous.request.originalReading=false;
-    return previous.onReturn;
+    return previous.owner.valid()?previous.owner.onReturn:null;
   }
-  function close(){
-    const onReturn=finish();if(el('').open)el('').close();onReturn?.();
+  function close(origin=null){
+    if(origin && active?.owner.origin!==origin)return false;
+    const onReturn=finish();if(el('').open)el('').close();onReturn?.();return true;
   }
-  function show(row,onReturn){
+  function show(row,owner){
     if(!options || !validIdentity(row.id,row.turn_request?.token))throw Error('The task request identity is unavailable. Choose Refresh saved work.');
+    if(!owner || typeof owner.valid!=='function' || !owner.valid())return false;
     // A re-open creates a new activation even for the same UUID; a late GET or
     // resolve from a closed viewer is never allowed to repaint the new one.
     if(active)finish();
     const token=row.turn_request.token,key=JSON.stringify([row.id,token]);
     let request=states.get(key);
     if(!request){request={session:row.id,token,body:null,result:null,status:null,revision:0,readVersion:0,writeVersion:0,reading:false,writing:false};states.set(key,request);}
-    active={request,generation:++generation,name:row.name || row.cwd || row.id,onReturn};
+    active={request,generation:++generation,name:row.name || row.cwd || row.id,owner};
     if(!el('').open)el('').showModal();draw();el('title').focus({preventScroll:true});return read(active);
   }
   function configure(value){
     options=value;
-    el('refresh').onclick=()=>read();el('return').onclick=close;el('read-original').onclick=readOriginal;
+    el('refresh').onclick=()=>read();el('return').onclick=()=>close();el('read-original').onclick=readOriginal;
     for(const outcome of ['accepted','rejected'])el(outcome).onclick=()=>resolve(outcome);
     el('').addEventListener('close',()=>{if(!el('').open)finish()?.();});
   }

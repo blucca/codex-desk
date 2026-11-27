@@ -44,3 +44,42 @@ def unresolved_requests(store, include_archived=False, cwd=None):
                               'mode': intent['payload']['mode'],
                               'binding': dict(intent['binding'])}
     return result
+
+
+def unresolved_request_query(scoped, include_archived):
+    """SQL corpus for the same current gate as unresolved_requests.
+
+    UUID discovery follows first intent insertion order; a later attachment
+    updates that UUID's captured binding/body without making it a new request.
+    Methods are selected inside SQLite before any native activity is returned.
+    """
+    sql = """WITH request_events AS (
+        SELECT e.session_id,e.seq,e.payload,json_extract(e.payload,'$.method') method,
+            json_extract(e.payload,'$.params.token') token
+        FROM events e JOIN sessions s ON s.id=e.session_id
+        WHERE s.id<>'native-catalog' AND (? OR s.archived=0)
+        AND (? IS NULL OR recall_cwd(s.cwd)=?)
+        AND json_extract(e.payload,'$.method') IN (?,?)
+    ), intents AS (
+        SELECT session_id,token,min(seq) first_seq,max(seq) seq
+        FROM request_events WHERE method=? GROUP BY session_id,token
+    ), receipts AS (
+        SELECT session_id,token,max(seq) seq
+        FROM request_events WHERE method=? GROUP BY session_id,token
+    ), retained AS (
+        SELECT i.session_id,i.token,i.first_seq,e.payload,
+            CASE WHEN json_type(r.payload,'$.params.status') IS NULL THEN 'pending'
+                ELSE json_extract(r.payload,'$.params.status') END status
+        FROM intents i JOIN request_events e ON e.seq=i.seq
+        LEFT JOIN receipts latest ON latest.session_id=i.session_id AND latest.token=i.token
+        LEFT JOIN request_events r ON r.seq=latest.seq
+    ), unresolved AS (
+        SELECT * FROM retained WHERE status IN ('pending','needs_review')
+    )
+    SELECT u.session_id,u.token,u.status,json_extract(u.payload,'$.params.payload.mode') mode,
+        json_extract(u.payload,'$.params.payload.text') text
+    FROM unresolved u WHERE NOT EXISTS (
+        SELECT 1 FROM unresolved later WHERE later.session_id=u.session_id
+        AND later.first_seq>u.first_seq)
+    """
+    return sql, (int(include_archived), scoped, scoped, INTENT, RECEIPT, INTENT, RECEIPT)

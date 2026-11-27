@@ -137,3 +137,9 @@ python3 -m codex_desk.inspect_running --sock /path/to/app-server-control.sock
 ```
 
 This reports loaded thread IDs/status, providers and working directories through `thread/loaded/list` and metadata-only `thread/read`. It performs no start/resume/interrupt operation. The native **Unix control socket uses WebSocket framing**. `codex app-server proxy` forwards raw bytes; it does not turn plain newline JSON into a WebSocket connection. The inspector performs that handshake using the optional `websockets` dependency. The ordinary workbench uses native stdio and needs no WebSocket package.
+
+## Find an unconfirmed captured task by its words
+
+**Search saved content** also searches the current unconfirmed captured Work/Plan request, including after you clear its saved draft or queued instructions. Results show a bounded snippet and **Review captured request**. Open it to read the exact captured text and request ID, then **Read original conversation** to inspect its captured native conversation without changing your selected task.
+
+**Return to results** keeps your submitted query, scope, page and result position. Your main draft and any separate Prepared editor stay in place. After recording whether the request started, choose **Search** to update that same page; the resolved request drops from this unconfirmed-request corpus. Completed and known-rejected request history is not included.

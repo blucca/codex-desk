@@ -3,7 +3,7 @@ import time
 
 from .recall import (MAX_ITEM_CHARS, VISIBLE_TYPES, PAGE_ORDER, _desk_query,
                      _item_text, _search_result, _timestamp, _validate_page,
-                     _query_cwds, canonical_cwd, normalize)
+                     _query_cwds, _read_snapshot, canonical_cwd, normalize)
 
 
 MAX_THREAD_CHARS = 2_000_000
@@ -294,7 +294,7 @@ class NativeRecallIndex:
             0 archived,'native-activity' kind,t.thread_id thread_id,i.turn_id turn_id,
             i.item_id item_id,NULL followup_id,i.visible_text text,i.updated updated,
             i.item_type item_type,t.provider provider,1 source,t.thread_id sort_id,
-            i.position position ''' + joined
+            i.position position,NULL token,NULL request_status,NULL request_mode ''' + joined
         return sql, options, total
 
     def search(self, query, cwd=None, limit=30, offset=0, *, exclude_thread_ids=()):
@@ -304,7 +304,7 @@ class NativeRecallIndex:
         excluded = tuple(dict.fromkeys(exclude_thread_ids))
         if any(not isinstance(v, str) or not 0 < len(v) <= 200 for v in excluded):
             raise ValueError('Choose original thread identifiers to exclude')
-        with self.store.lock:
+        with _read_snapshot(self.store):
             sql, options, total = self._search_query(scoped, needle, excluded)
             cursor = self.store.db.execute(sql + PAGE_ORDER, (*options, limit, offset))
             results = [_search_result(row, needle) for row in cursor]
@@ -318,7 +318,7 @@ class NativeRecallIndex:
         query, scoped, needle = self._search_options(query, cwd, limit, offset)
         if type(include_archived) is not bool:
             raise ValueError('Choose whether to include archived sessions')
-        with self.store.lock, _query_cwds(self.store):
+        with _read_snapshot(self.store), _query_cwds(self.store):
             desk_sql, desk_options, desk_total, coverage = _desk_query(
                 self.store, scoped, include_archived, needle)
             native_sql, native_options, native_total = self._search_query(

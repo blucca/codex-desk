@@ -111,3 +111,9 @@ uvx --refresh --prerelease allow codex-desk@latest
 在侧栏选择 **Prepared work**，再选择 **Review task request**。这里显示原始捕获的 Work/Plan 指令、原目标、当前目标和请求状态；不会打开原生任务，也不会改动当前任务或其他未保存草稿。
 
 核实原任务是否启动后，选择 **It started — record accepted** 或 **It did not start — record rejected**，只记录该原始请求。**Refresh request** 重新读取同一个请求，**Return to Prepared work** 返回原审阅入口。原生目录或会话绑定改变时，恢复原绑定后才能记录结果。
+
+### 找回未确认任务的原始指令
+
+在 **Search saved content** 输入记得的原句，也能找到当前未确认的 Work/Plan 任务请求；即使已清空原草稿和队列，捕获的指令仍可检索。选择 **Review captured request** 查看精确原文和请求 ID，使用 **Read original conversation** 检查它所捕获的原会话。
+
+**Return to results** 保留查询、项目范围、结果页和位置，不切换当前任务或覆盖独立的 Prepared 编辑器。明确记录是否已开始后，选择 **Search** 更新同一结果页；已解决请求不再列入未确认请求的检索。

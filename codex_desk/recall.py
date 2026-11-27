@@ -9,6 +9,7 @@ import time
 import unicodedata
 
 from .handoff import visible_text
+from .turn_records import unresolved_request_query
 
 
 MAX_ITEM_CHARS = 200_000
@@ -245,11 +246,22 @@ def _query_cwds(store):
         store._recall_cwds = previous
 
 
+@contextmanager
+def _read_snapshot(store):
+    """Keep recall counts, page and coverage on one caller-safe read snapshot."""
+    with store.lock:
+        store.db.execute('SAVEPOINT recall_read_snapshot')
+        try:
+            yield
+        finally:
+            store.db.execute('RELEASE SAVEPOINT recall_read_snapshot')
+
+
 def _desk_query(store, scoped, include_archived, needle):
     """The filtered Desk corpus, shared by standalone and mixed-source pages."""
     tables = {row[0] for row in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     activity = """SELECT session_id,'activity' kind,turn_id,item_id,NULL followup_id,
-        visible_text text,normalized_text folded,updated FROM recall_items"""
+        visible_text text,normalized_text folded,updated,NULL token,NULL status,NULL mode FROM recall_items"""
     if 'native_recall_items' in tables:
         # A scan can finish a reply previously copied while it was streaming.
         # Overlay only strict growth of an incomplete bound reply. Keep its
@@ -257,7 +269,7 @@ def _desk_query(store, scoped, include_archived, needle):
         activity = """SELECT i.session_id,'activity' kind,i.turn_id,i.item_id,NULL followup_id,
             coalesce(n.visible_text,i.visible_text) text,
             coalesce(n.normalized_text,i.normalized_text) folded,
-            coalesce(max(n.updated,i.updated),i.updated) updated
+            coalesce(max(n.updated,i.updated),i.updated) updated,NULL token,NULL status,NULL mode
             FROM recall_items i JOIN sessions b ON b.id=i.session_id
             LEFT JOIN native_recall_items n ON n.thread_id=b.thread_id
             AND n.turn_id=i.turn_id AND n.item_id=i.item_id AND n.item_type=i.item_type
@@ -265,29 +277,39 @@ def _desk_query(store, scoped, include_archived, needle):
             AND n.visible_text<>i.visible_text AND instr(n.visible_text,i.visible_text)=1"""
     parts = [activity]
     if 'drafts' in tables:
-        parts.append("""SELECT session_id,'draft',NULL,NULL,NULL,text,recall_normalize(text),NULL
+        parts.append("""SELECT session_id,'draft',NULL,NULL,NULL,text,recall_normalize(text),NULL,NULL,NULL,NULL
             FROM drafts WHERE revision>0 AND trim(text)<>''""")
     if 'followups' in tables:
-        parts.append("""SELECT session_id,'followup',NULL,NULL,id,text,recall_normalize(text),NULL
+        parts.append("""SELECT session_id,'followup',NULL,NULL,id,text,recall_normalize(text),NULL,NULL,NULL,NULL
             FROM followups""")
+    corpus_options = ()
+    if 'events' in tables:
+        requests, corpus_options = unresolved_request_query(scoped, include_archived)
+        parts.append("""SELECT session_id,'turn_request',NULL,NULL,NULL,text,
+            recall_normalize(text),NULL,token,status,mode FROM (""" + requests + ')')
     scope = "s.id<>'native-catalog' AND (? OR s.archived=0) AND (? IS NULL OR recall_cwd(s.cwd)=?)"
-    options = (int(include_archived), scoped, scoped)
+    scope_options = (int(include_archived), scoped, scoped)
+    options = (*corpus_options, *scope_options)
     corpus = ' UNION ALL '.join(parts)
     joined = f'''FROM ({corpus}) r JOIN sessions s ON s.id=r.session_id WHERE {scope}'''
     counts = {kind: count for kind, count in store.db.execute(
         'SELECT kind,count(*) ' + joined + ' GROUP BY kind', options)}
-    sessions = store.db.execute('SELECT count(*) FROM sessions s WHERE ' + scope, options).fetchone()[0]
+    sessions = store.db.execute('SELECT count(*) FROM sessions s WHERE ' + scope, scope_options).fetchone()[0]
     total = store.db.execute('SELECT count(*) ' + joined + ' AND instr(r.folded,?)>0',
                              (*options, needle)).fetchone()[0]
     sql = '''SELECT s.id session_id,s.name name,recall_cwd(s.cwd) cwd,s.profile profile,
         s.archived archived,r.kind kind,s.thread_id thread_id,r.turn_id turn_id,
         r.item_id item_id,r.followup_id followup_id,r.text text,
         coalesce(r.updated,s.updated,0) updated,NULL item_type,NULL provider,
-        0 source,s.id sort_id,0 position ''' + joined + ' AND instr(r.folded,?)>0'
+        0 source,s.id sort_id,0 position,r.token token,r.status request_status,r.mode request_mode ''' + joined + ' AND instr(r.folded,?)>0'
     coverage = {'text': 'Cached evidence from imported/opened Desk sessions and saved drafts/follow-ups; '
                 'not whole native history. Visible activity is cached up to 200,000 characters per item.',
         'sessions': sessions, 'activity_items': counts.get('activity', 0),
         'drafts': counts.get('draft', 0), 'followups': counts.get('followup', 0)}
+    if counts.get('turn_request'):
+        coverage['turn_requests'] = counts['turn_request']
+        coverage['text'] = coverage['text'].replace('saved drafts/follow-ups;',
+            'saved drafts/follow-ups and unresolved captured task requests;')
     return sql, (*options, needle), total, coverage
 
 
@@ -304,6 +326,12 @@ def _search_result(row, needle, *, combined=False):
                   'item_type': item_type, 'snippet': snippet, 'match_text': match, 'updated': updated}
         if combined:
             result.update(name=name, profile='default', archived=False)
+    elif kind == 'turn_request':
+        token, status, mode = _[-3:]
+        result = {'session_id': session, 'session_name': name, 'cwd': project,
+                  'profile': profile, 'archived': bool(archived), 'kind': kind,
+                  'token': token, 'status': status, 'mode': mode, 'snippet': snippet,
+                  'match_text': match, 'updated': updated}
     else:
         result = {'session_id': session, 'session_name': name, 'cwd': project,
                   'profile': profile, 'archived': bool(archived), 'kind': kind, 'turn_id': turn,
@@ -329,7 +357,7 @@ def search(store, q, cwd=None, include_archived=False, limit=30, offset=0):
         raise ValueError('Choose a project folder')
     scoped = canonical_cwd(cwd) if cwd is not None else None
     needle = normalize(q)
-    with store.lock, _query_cwds(store):
+    with _read_snapshot(store), _query_cwds(store):
         sql, options, total, coverage = _desk_query(store, scoped, include_archived, needle)
         cursor = store.db.execute(sql + PAGE_ORDER, (*options, limit, offset))
         results = [_search_result(row, needle) for row in cursor]
