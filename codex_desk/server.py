@@ -424,12 +424,11 @@ def handler(desk, access_token=None):
                     if params.get('cursor'):
                         options['cursor'] = params['cursor'][0]
                     result = desk.catalog().request('thread/list', options)
-                    if scope is not None or params.get('recent') == ['1']:
-                        # Availability is presentation metadata; keep native cwd,
-                        # title, order, cursor and catalog objects unchanged.
-                        result = dict(result, data=[dict(row, cwdExists=Path(row['cwd']).expanduser().is_dir())
-                            if isinstance(row, dict) and isinstance(row.get('cwd'), str) else row
-                            for row in result.get('data', [])])
+                    # All title surfaces share folder guidance, including global
+                    # search. Availability does not alter original native metadata.
+                    result = dict(result, data=[dict(row, cwdExists=Path(row['cwd']).expanduser().is_dir())
+                        if isinstance(row, dict) and isinstance(row.get('cwd'), str) else row
+                        for row in result.get('data', [])])
                     if scope is not None:
                         result = dict(result, projectScope=scope)
                     return self.reply(result)

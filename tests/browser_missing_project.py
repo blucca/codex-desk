@@ -189,13 +189,30 @@ async def check(width, browser, root, evidence):
             assert [r for r in http if r['method'] == 'POST'] == post_before
             assert [r['path'] for r in post_before] == ['/api/open']
             assert not any(r['path'] in ('/api/import', '/api/turn', '/api/followups/send', '/api/sessions') for r in http)
-            assert len([c for c in native if c['method'] == 'thread/read']) == 1
+            # Global title browsing has the same read-only folder guidance.
+            await page.locator('#browse').click()
+            await page.wait_for_function("!$('history-search-submit').disabled && $('native-list').children.length===30")
+            await page.locator('#history-search').fill(title)
+            await page.locator('#history-search-submit').click()
+            await page.wait_for_function("!$('history-search-submit').disabled && $('native-list').children.length===30")
+            assert await page.locator('#native-list').get_by_role('button',name='Resume with current settings',exact=True).count()==0
+            await page.locator('#more').click()
+            await page.wait_for_function("!$('more').disabled && $('native-list').children.length===34")
+            original_row=page.locator('#native-list .native-row').nth(31)
+            await original_row.locator('.native-read').click()
+            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            assert 'ORIGINAL DECISION 32' in await page.locator('#history-reader-body').inner_text()
+            await page.locator('#history-reader-back').click()
+            await page.locator('#history-close').click()
+            await unchanged(before)
+            assert [r for r in http if r['method']=='POST']==post_before
+            assert len([c for c in native if c['method'] == 'thread/read']) == 2
             assert threads == originals and (home / 'config.toml').read_bytes() == settings
             assert not removed.exists() and desk.runtimes == {}
             assert not errors and not external
             data = {'width': width, 'passed': True, 'exact_scoped_title_pages': 32,
                 'same_query_row_back': True, 'active_plan_queue_unchanged': True,
-                'live_progress_while_reading': True, 'missing_empty_file_blank_restore_checked': True,
+                'live_progress_while_reading': True, 'missing_empty_file_blank_restore_checked': True, 'global_title_folder_guidance': True,
                 'imports': 0, 'native_resumes': 0, 'model_turns': 0,
                 'native': native, 'http': http, 'errors': errors, 'external': external}
             (evidence / f'acceptance-{width}.json').write_text(json.dumps(data, indent=2) + '\n')

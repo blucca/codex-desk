@@ -45,7 +45,7 @@ jobs:
       - name: Check installed daily workflows
         working-directory: temp
         run: |
-          cp ../tests/browser_recent_reader_scroll.py ../tests/browser_history_older.py ../tests/browser_recent_work.py ../tests/browser_preparation.py ../tests/browser_home.py ../tests/browser_home_read_guidance.py ../tests/browser_startup.py ../tests/browser_drafts.py ../tests/browser_followups.py ../tests/browser_organization.py ../tests/browser_collaboration.py ../tests/browser_recall.py ../tests/browser_native_recall.py ../tests/browser_recall_index_return.py ../tests/browser_bound_recall.py ../tests/browser_history_reader.py ../tests/browser_handoff.py installed-fixtures/tests/
+          cp ../tests/browser_missing_project.py ../tests/browser_recent_reader_scroll.py ../tests/browser_history_older.py ../tests/browser_recent_work.py ../tests/browser_preparation.py ../tests/browser_home.py ../tests/browser_home_read_guidance.py ../tests/browser_startup.py ../tests/browser_drafts.py ../tests/browser_followups.py ../tests/browser_organization.py ../tests/browser_collaboration.py ../tests/browser_recall.py ../tests/browser_native_recall.py ../tests/browser_recall_index_return.py ../tests/browser_bound_recall.py ../tests/browser_history_reader.py ../tests/browser_handoff.py installed-fixtures/tests/
           python - <<'PY'
           from pathlib import Path
           import codex_desk
@@ -54,7 +54,7 @@ jobs:
           assert not installed.is_relative_to(source), installed
           print('Installed package:', installed)
           PY
-          for fixture in recent_reader_scroll history_older recent_work preparation home home_read_guidance startup drafts followups organization collaboration recall native_recall recall_index_return bound_recall history_reader handoff; do
+          for fixture in missing_project recent_reader_scroll history_older recent_work preparation home home_read_guidance startup drafts followups organization collaboration recall native_recall recall_index_return bound_recall history_reader handoff; do
             DESK_USE_INSTALLED=1 DESK_TEST_EVIDENCE="$PWD/evidence/$fixture" DESK_COLLABORATION_RECEIPT="$PWD/evidence/$fixture" python "installed-fixtures/tests/browser_$fixture.py"
           done
       - name: Retain daily-workflow receipts

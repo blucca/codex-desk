@@ -80,7 +80,7 @@ class HistorySearchTests(unittest.TestCase):
         self.project.rmdir()
         status, body = self.get({'recent': '1'})
         self.assertFalse(body['data'][0]['cwdExists'])
-        self.assertEqual(self.get()[1], self.metadata)
+        self.assertEqual(self.get()[1], {**self.metadata, 'data': [dict(row, cwdExists=False) for row in self.metadata['data']]})
         self.catalog.request.assert_called_with('thread/list', self.base_options())
 
     def test_title_search_preserves_canonical_project_and_all_providers(self):
@@ -102,7 +102,7 @@ class HistorySearchTests(unittest.TestCase):
                 query = None if search is None else {'search': search}
                 status, body = self.get(query)
                 self.assertEqual(status, 200)
-                self.assertEqual(body, self.metadata)
+                self.assertEqual(body, {**self.metadata, 'data': [dict(row, cwdExists=True) for row in self.metadata['data']]})
                 self.catalog.request.assert_called_once_with('thread/list', self.base_options())
 
     def test_unicode_title_and_opaque_cursor_are_forwarded_with_project(self):
@@ -119,7 +119,7 @@ class HistorySearchTests(unittest.TestCase):
     def test_global_title_search_does_not_add_project_filter(self):
         status, body = self.get({'search': ' saved title ', 'cursor': 'older'})
         self.assertEqual(status, 200)
-        self.assertEqual(body, self.metadata)
+        self.assertEqual(body, {**self.metadata, 'data': [dict(row, cwdExists=True) for row in self.metadata['data']]})
         self.catalog.request.assert_called_once_with('thread/list', {
             **self.base_options(), 'searchTerm': 'saved title', 'cursor': 'older',
         })
