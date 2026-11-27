@@ -338,6 +338,10 @@ async def check(width, playwright, evidence):
                 assert await page.locator('#history-reader-next').is_disabled()
                 assert await page.locator('#history-reader-body').evaluate('(body)=>body===document.activeElement')
                 await page.keyboard.press('Tab')
+                assert await page.locator('#history-reader-body .history-reader-turn-task').first.evaluate(
+                    '(button,action)=>button===document.activeElement && button.tagName==="BUTTON" && button.textContent==="Read task context" && button.dataset.taskAction===action',
+                    'turn:'+original['turns'][2]['id'])
+                await page.keyboard.press('Tab')
                 assert await page.locator('#history-reader-body').evaluate('(body)=>body.contains(document.activeElement) && document.activeElement.tagName==="SUMMARY"')
                 assert 'Original neighbouring context 94' in await page.locator('#history-reader-body').text_content()
                 await bounded(); await unchanged()

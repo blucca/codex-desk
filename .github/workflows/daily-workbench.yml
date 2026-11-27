@@ -44,6 +44,9 @@ jobs:
           python examples/build_browser_preview.py --embedded --out temp/static-preview/embedded
           python examples/check_browser_preview.py --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-embedded
           python examples/check_browser_preview_links.py --site temp/static-preview/demo --embedded-site temp/static-preview/embedded --evidence temp/evidence/browser-preview-links
+          python examples/build_browser_preview.py --session-reading-fixture --out temp/static-preview/reading
+          python examples/build_browser_preview.py --embedded --session-reading-fixture --out temp/static-preview/reading-embedded
+          python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading --embedded-site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-reading
       - name: Check installed daily workflows
         working-directory: temp
         run: |
@@ -65,11 +68,13 @@ jobs:
           DESK_USE_INSTALLED: '1'
         run: |
           mkdir -p installed-fixtures/examples
-          cp ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py ../examples/check_preparation_find.py ../examples/check_native_task_context.py installed-fixtures/examples/
+          cp ../examples/check_native_session_reading.py ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py ../examples/check_preparation_find.py ../examples/check_native_task_context.py installed-fixtures/examples/
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-response" python installed-fixtures/examples/check_native_task_response.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/evidence-preparation" python installed-fixtures/examples/check_native_evidence_preparation.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/preparation-find" python installed-fixtures/examples/check_preparation_find.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-context" python installed-fixtures/examples/check_native_task_context.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/session-reading" python installed-fixtures/examples/check_native_session_reading.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/session-reading-cold" python installed-fixtures/examples/check_native_session_reading.py --cold
       - name: Retain daily-workflow receipts
         if: always()
         uses: actions/upload-artifact@v4

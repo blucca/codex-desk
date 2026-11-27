@@ -197,3 +197,11 @@ If the local reply is lost, choose **Check stop receipt**. This reads the origin
 Command approvals display the reported command, native working directory and reason together. Expand **Original request context** to identify its native request, original thread, turn and item alongside the selected parent thread. **Read related native activity** opens that exact original conversation and item, including a related child thread; **Return to native request** keeps the selected task, pending answers and preparation in place. **Allow once**, **Decline** and **Send answers** remain the existing explicit one-time responses.
 
 Prepared work retains the latest unsaved draft and queue-editor position after Close or Escape and a later return. Long project paths wrap within the reader. Historical retry cards record the retry report; **Last native task outcome** supplies the latest reported status independently of task-admission readiness.
+
+## Return to an activity reading place
+
+While reading a saved task, open a command or MCP result, scroll its evidence, or expand collaboration, native task steps and turn changes. Select another saved task in the sidebar and return. Desk restores the activity reading place belonging to the same native thread, including open disclosures and their inner scroll positions; each task retains its own unsent draft, mode and prepared follow-ups.
+
+Reloading the same browser page restores that place after a fresh native read. Reading metadata contains only the home namespace, native source IDs and view coordinates. It keeps the most recent 100 task owners, up to 40 item and 40 turn views per owner, within a 1 MiB UTF-16 budget. Content, draft text and pending answers remain in their existing locations.
+
+**Latest output ↓** deliberately follows the end instead. A direct original, response, search or preparation destination takes precedence over remembered activity. If the exact original item is gone or its native turn identity changed, **Previous reading place unavailable** appears; choose Latest or another original destination. Changing the native home or thread opens that source’s own view.

@@ -32,6 +32,32 @@ Use `--chromium /path/to/chromium` to reuse an installed browser. The checker ex
 
 `browser-preview/preview-api.js` contains only sample behavior. `build_browser_preview.py` copies maintained assets and applies the preview label, route-relative assets, install actions and a preview-specific selection key. Production runtime files are unchanged.
 
+## Check session reading returns
+
+The opt-in acceptance fixture keeps the three original sample identities and adds
+long command/MCP results, collaboration, reported native steps/changes and an unsent
+sample input request. The normal public build keeps its existing short histories.
+
+```sh
+python3 examples/build_browser_preview.py --session-reading-fixture --out temp/browser-preview/reading
+python3 examples/build_browser_preview.py --session-reading-fixture --embedded --out temp/browser-preview/reading-embedded
+python3 examples/check_browser_preview_links.py --session-reading --site temp/browser-preview/reading --embedded-site temp/browser-preview/reading-embedded --evidence temp/browser-preview/reading-checks
+```
+
+This checks ordinary and actual-iframe hosting at 1250/390: A→B→A restores the
+exact source, disclosures, pre-scroll and viewport while keeping Plan drafts,
+ordered queues and B's unsent answers; new sample output waits for explicit
+**Latest output**. A real reload reads fresh source text and restores only bounded
+reading metadata. Delayed namespace/selection and explicit source/Latest intents
+keep their own task; a moved item ID cannot substitute for the captured turn.
+**Reset sample** clears sample reading metadata and preparation, retaining the
+installed workbench's keys. Reading metadata uses a preview-specific storage key.
+
+To rerun only reading transitions, use
+`check_browser_preview_session_reading.py --site OUTPUT --evidence EVIDENCE`,
+adding `--embedded` for the iframe build. The JSON receipts and screenshots retain
+each exact-source comparison; the fixture traps every native task/response path.
+
 For iframe hosting, add `--embedded` when building. Installer links then open separately while the sample preparation stays in the original frame. Check both hosting modes with:
 
 ```sh

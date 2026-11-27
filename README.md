@@ -84,7 +84,7 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 1. **Your recent Codex work** appears on the first screen, including the project folder. Choose **Read original conversation** to inspect evidence without opening a task, including when its project folder is gone. Click **Resume conversation** when you want to continue work in an available folder. From an active or restored task, choose **Recent work** to review the same list. **Back to recent work** returns to the original row; **Return to selected task** closes the overview without reopening the task or changing its draft, mode, or prepared follow-ups. The selected task’s live status stays visible in the overview.
 2. Read the saved messages, command results and tool evidence. Write your next task and wait for **Draft saved locally**, or choose **Save as follow-up**. Choose **Run task** when ready; Work and Plan modes use native Codex. If its local reply is lost, **Check Run request** recovers the same admission instead of starting another task. Later edits stay unsent; prepared follow-ups stay paused.
-3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft. After stopping Desk with **Ctrl+C**, relaunch with the same command and any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to return.
+3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft and remembered activity reading place. After stopping Desk with **Ctrl+C**, relaunch with the same command and any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to return.
 
 ![Recent CLI conversations ready to resume in Codex Desk](docs/recent-work.png)
 
@@ -99,6 +99,7 @@ Know the title? **Browse all conversations** searches native conversation titles
 Choose Desk when you want to inspect existing Codex evidence and prepare the next task in the same local workbench. [Choose a history workflow](docs/choose-history-workflow.md) covers native terminal resume, multi-agent history browsers and agent-memory tools.
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
+- **Return to what you were reading.** Switch from saved task A to B and back: the same original activity, tool disclosures and scroll positions return. In the same browser, they also return after reload. Choose **Latest output ↓** to follow the end instead.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
 - **Read the proposed plan.** Plan-mode output appears as native Codex streams it; the final native plan remains readable in activity, original history, content recall and reviewed handoffs. It stays separate from your unsent Plan draft and native task checklist.
 - **Review this turn's changes.** The latest native cumulative diff appears in **Turn changes**. Read or copy its full patch without losing your position as output continues; actual completion, interruption or failure keeps the last reported diff until the next turn.
@@ -117,7 +118,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 Desk runs on loopback and uses your installed Codex app-server. The printed URL carries a per-launch browser access fragment; the browser keeps it in this tab’s session storage and uses it for private API requests. After a server restart, open the newly printed complete URL. Existing sign-in, model/provider, MCP, trust and sandbox settings come from your Codex configuration. A new Desk account or API key is unnecessary.
 
-Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing and the original-conversation reader use native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
+Reading-place metadata stays in this browser’s local storage: native home namespace and source IDs, disclosure states and scroll positions. Desk reads the native content afresh on return. Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing and the original-conversation reader use native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
 
 Closing the browser leaves Desk running; **Ctrl+C** stops Desk and its owned native tasks. It runs its own app-server rather than attaching to an already-running Desktop backend.
 

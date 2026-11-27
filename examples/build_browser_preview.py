@@ -8,6 +8,7 @@ import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = 'https://blucca.github.io/codex-desk/demo/'
+READING_KEY = 'codex-desk-browser-preview-reading-checkpoints-v1'
 
 
 def sample_threads():
@@ -28,7 +29,44 @@ def sample_threads():
     return result
 
 
-def build(output, embedded=False):
+def reading_fixture():
+    """Synthetic source-only inputs for the maintained session-reading checker."""
+    threads = sample_threads()
+    prior = threads[0]['turns'][0]
+    prior['items'][2]['aggregatedOutput'] = '\n'.join(
+        f'Sample command line {n:04d} — café 项目 🌱 retains its original result.' for n in range(950))
+    prior['items'].extend([
+        {'id': 'sample-checkout-mcp', 'type': 'mcpToolCall', 'server': 'sample',
+         'tool': 'read_saved_result', 'status': 'completed', 'arguments': {'project': 'checkout'},
+         'result': {'content': [{'type': 'text', 'text': '\n'.join(
+             f'Sample MCP line {n:04d} — original retained result.' for n in range(650))}]}},
+        {'id': 'sample-checkout-collaboration', 'type': 'collabAgentToolCall', 'tool': 'spawnAgent',
+         'status': 'completed', 'senderThreadId': threads[0]['id'], 'receiverThreadIds': ['sample-child-thread'],
+         'prompt': 'Inspect the sample result only.',
+         'agentsStates': {'sample-child-thread': {'status': 'completed', 'message': 'Sample child result retained.'}}},
+    ])
+    live = 'sample-checkout-live-turn'
+    threads[0]['turns'].append({'id': live, 'status': 'inProgress', 'items': [
+        {'id': 'sample-checkout-live-output', 'type': 'agentMessage', 'text': '\n'.join(
+            f'Current sample output paragraph {n}' for n in range(60))}]})
+    a, b = 'desk-' + threads[0]['id'], 'desk-' + threads[1]['id']
+    pending = {'id': 801, 'method': 'item/tool/requestUserInput', 'params': {
+        'threadId': threads[1]['id'], 'turnId': threads[1]['turns'][0]['id'], 'itemId': 'sample-docs-question',
+        'questions': [
+            {'id': 'sample-answer', 'header': 'Sample B answer', 'question': 'What check should remain?', 'isOther': True},
+            {'id': 'sample-choice', 'header': 'Sample B choice', 'question': 'Which scope?', 'isOther': False,
+             'options': [{'label': 'Keep existing scope', 'description': 'Retain the check'},
+                         {'label': 'Different scope', 'description': 'Separate next work'}]}]}}
+    events = [{'method': 'turn/started', 'params': {'threadId': threads[0]['id'], 'turn': {'id': live, 'status': 'inProgress'}}},
+        {'method': 'turn/plan/updated', 'params': {'threadId': threads[0]['id'], 'turnId': live,
+            'explanation': 'Reported sample steps remain separate from the unsent Plan.',
+            'plan': [{'step': f'Sample verification step {n}', 'status': 'inProgress' if n == 3 else 'pending'} for n in range(55)]}},
+        {'method': 'turn/diff/updated', 'params': {'threadId': threads[0]['id'], 'turnId': live,
+            'diff': '\n'.join(f'+ Retained sample patch line {n}' for n in range(150))}}]
+    return threads, {'pending': {b: [pending]}, 'events': {a: [{'seq': n + 1, 'event': event} for n, event in enumerate(events)]}}
+
+
+def build(output, embedded=False, session_reading_fixture=False):
     output.mkdir(parents=True, exist_ok=True)
     assets = ROOT / 'codex_desk/static'
     for source in assets.iterdir():
@@ -53,10 +91,20 @@ def build(output, embedded=False):
     # Namespace only the preview selection; remaining app behavior is maintained source.
     app = (output / 'app.js').read_text().replace("'codex-desk-session'", "'codex-desk-browser-preview-session-v1'")
     (output / 'app.js').write_text(app)
+    checkpoint = output / 'reading_checkpoint.js'
+    if checkpoint.exists():
+        checkpoint.write_text(checkpoint.read_text().replace("'codex-desk-reading-checkpoints-v1'", repr(READING_KEY)))
     for name in ('preview-api.js', 'preview.css'):
         shutil.copyfile(ROOT / 'examples/browser-preview' / name, output / name)
     casefold = {chr(n): chr(n).casefold() for n in range(0x110000) if chr(n).casefold() != chr(n).lower()}
-    (output / 'sample-data.js').write_text('window.DeskPreviewThreads = '+json.dumps(sample_threads(), ensure_ascii=False)+';\nwindow.DeskPreviewCasefold = '+json.dumps(casefold, ensure_ascii=False)+';\n')
+    threads, fixture = reading_fixture() if session_reading_fixture else (sample_threads(), None)
+    data = 'window.DeskPreviewThreads = '+json.dumps(threads, ensure_ascii=False)+';\nwindow.DeskPreviewCasefold = '+json.dumps(casefold, ensure_ascii=False)+';\n'
+    if fixture:
+        data += 'window.DeskPreviewReadingFixture = '+json.dumps(fixture, ensure_ascii=False)+';\n'
+        shutil.copyfile(ROOT / 'examples/browser-preview/session-reading-fixture.js', output / 'session-reading-fixture.js')
+        html = html.replace('<script src="./preview-api.js">', '<script src="./session-reading-fixture.js"></script><script src="./preview-api.js">')
+        (output / 'index.html').write_text(html)
+    (output / 'sample-data.js').write_text(data)
     (output / 'preview-source.json').write_text(json.dumps({'source': 'blucca/codex-desk', 'runtime_version': re.search(r'__version__\s*=\s*[\"\']([^\"\']+)', (ROOT / 'codex_desk/__init__.py').read_text())[1], 'sample': True, 'assets': sorted(x.name for x in assets.iterdir() if x.is_file()), 'build': 'python3 examples/build_browser_preview.py --out OUTPUT'}, indent=2)+'\n')
     return output
 
@@ -65,5 +113,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT.parents[1] / 'temp/round122-preview/site/demo')
     parser.add_argument('--embedded', action='store_true', help='Open installer links separately when hosted in an iframe')
+    parser.add_argument('--session-reading-fixture', action='store_true', help='Build synthetic long sources and pending input for session-reading acceptance')
     args = parser.parse_args()
-    print(build(args.out.resolve(), embedded=args.embedded))
+    print(build(args.out.resolve(), embedded=args.embedded, session_reading_fixture=args.session_reading_fixture))

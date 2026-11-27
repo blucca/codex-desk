@@ -8,10 +8,14 @@
     if(document.documentElement.dataset.previewEmbedded==='true')openExternal(url,'_blank','noopener');
     else location.assign(url);
   };
-  const storageKey='codex-desk-browser-preview-v1',sessionKey='codex-desk-browser-preview-session-v1';
+  const storageKey='codex-desk-browser-preview-v1',sessionKey='codex-desk-browser-preview-session-v1',readingKey='codex-desk-browser-preview-reading-checkpoints-v1',resetKey='codex-desk-browser-preview-reset-v1';
+  const readingFixture=window.DeskPreviewReadingFixture || null;
   const threads=window.DeskPreviewThreads, copy=v=>JSON.parse(JSON.stringify(v));
   const blank=()=>({sessions:[],indexed:false,drafts:{},followups:{},nextId:1});
   let state=blank(),resetting=false;
+  // The ordinary app's pagehide save can run after Reset removes the old keys.
+  // Consume the reset marker before this new document loads any preparation.
+  try{if(localStorage.getItem(resetKey)==='1')for(const key of [storageKey,sessionKey,readingKey,resetKey])localStorage.removeItem(key);}catch(_){}
   try{const saved=JSON.parse(localStorage.getItem(storageKey));if(saved && Array.isArray(saved.sessions) && saved.drafts && saved.followups)state=saved;}catch(_){}
   const requests=[];
   const notice=text=>{const el=document.getElementById('preview-notice');if(el)el.textContent=text;};
@@ -106,7 +110,7 @@
     }
     if(['/api/native','/api/native/thread','/api/history/index','/api/recall','/api/import','/api/open'].includes(path) && !Array.isArray(threads))
       throw new Error('Sample histories did not load. Reload this page to try again.');
-    if(path==='/api/state')return {sessions:state.sessions,native_outcomes:Object.fromEntries(state.sessions.flatMap(s=>{const t=Array.isArray(threads)?threads.find(t=>t.id===s.thread_id):null,last=t?.turns?.at(-1);return last?[[s.id,{thread_id:t.id,turn_id:last.id,status:last.status,error:last.error ?? null,source:'native history read'}]]:[];})),profiles:[{id:'default',name:'Sample settings',provider:'sample',model:'preparation-only'}],pending:{},projects:[]};
+    if(path==='/api/state')return {sessions:state.sessions,native_outcomes:Object.fromEntries(state.sessions.flatMap(s=>{const t=Array.isArray(threads)?threads.find(t=>t.id===s.thread_id):null,last=t?.turns?.at(-1);return last?[[s.id,{thread_id:t.id,turn_id:last.id,status:last.status,error:last.error ?? null,source:'native history read'}]]:[];})),profiles:[{id:'default',name:'Sample settings',provider:'sample',model:'preparation-only'}],pending:readingFixture?.pending || {},projects:[]};
     if(path==='/api/native'){
       let rows=threads.map(({turns,...metadata})=>metadata);const term=params.get('search'),cwd=params.get('cwd');
       if(term)rows=rows.filter(t=>fold(t.name).includes(fold(term)));if(cwd)rows=rows.filter(t=>t.cwd===cwd);return {data:rows,nextCursor:null};
@@ -145,7 +149,7 @@
       save();return {id};
     }
     if(path==='/api/open' && post)return {thread:thread(lookup(data.session).thread_id)};
-    if(path==='/api/events')return [];
+    if(path==='/api/events')return (readingFixture?.events?.[params.get('session')] || []).filter(event=>event.seq>Number(params.get('after') || 0));
     if((path==='/api/stop' || path==='/api/steer/request') && !post){
       lookup(params.get('session'));
       const error=new Error('No saved native task-control request in this browser sample.');error.status=404;throw error;
@@ -207,10 +211,11 @@
     if(resetting)return new Response(JSON.stringify({error:'Sample reset in progress.'}),{status:410,headers:{'Content-Type':'application/json'}});
     const method=(options.method || 'GET').toUpperCase();let data={};
     try{data=options.body?JSON.parse(options.body):{};requests.push({path:address.pathname+address.search,method,data:copy(data)});
+      if(readingFixture)await readingFixture.controls.before(address.pathname);
       const result=copy(handle(address.pathname,method,data,address.searchParams));return new Response(JSON.stringify(result),{status:200,headers:{'Content-Type':'application/json'}});
     }catch(error){return new Response(JSON.stringify({error:error.message,...(error.current?{current:error.current}:{})}),{status:error.status || 400,headers:{'Content-Type':'application/json'}});}
   };
-  window.DeskBrowserPreview={storageKey,sessionKey,requests,snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.removeItem(storageKey);localStorage.removeItem(sessionKey);location.reload();}};
+  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,requests,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');localStorage.removeItem(storageKey);localStorage.removeItem(sessionKey);localStorage.removeItem(readingKey);location.reload();}};
   document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('preview-start').onclick=()=>{
       const home=document.getElementById('welcome');
