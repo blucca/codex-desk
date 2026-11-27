@@ -276,8 +276,12 @@ class NativeRecallIndex:
 
     def _search_query(self, scoped, needle, excluded=(), *, exclude_bound=False):
         joined = '''FROM native_recall_items i JOIN native_recall_threads t ON t.thread_id=i.thread_id
-            WHERE (? IS NULL OR t.cwd=?) AND instr(i.normalized_text,?)>0'''
-        options = (scoped, scoped, needle)
+            WHERE '''
+        # A submitted exact folder can use the retained cwd index before
+        # reading item bodies; an optional-OR predicate scans every project.
+        joined += 't.cwd=? AND ' if scoped is not None else ''
+        joined += 'instr(i.normalized_text,?)>0'
+        options = (scoped, needle) if scoped is not None else (needle,)
         if excluded:
             joined += ' AND t.thread_id NOT IN (' + ','.join('?' for _ in excluded) + ')'
             options += excluded
