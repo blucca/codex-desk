@@ -99,3 +99,9 @@ uvx --refresh --prerelease allow codex-desk@latest
 | 返回后没有草稿 | 先等 Draft saved locally → 关闭／重启 → 选择同一会话；注明浏览器、state directory 和启动参数是否改变 |
 
 [完整工作流：profile、审批、交接、归档和后续任务](workbench.md)（英文） · [英文答案查找指南与缓存范围](find-past-answer.md)
+
+## 直接审阅当前会话的原文
+
+在已选任务的顶部点击 **Read original conversation**，或从任务活动区域按 F3。原文从最新一页打开；Find 能检索全部可读原文，包括其他页和长工具输出。原文内 F3／Shift+F3 跳到下一处／上一处命中。任务输入框里的 F3 不触发这个入口。
+
+**Refresh original** 只重新读取同一个原生会话，不运行任务。加载和失败时保留上次成功读取的内容；当前查询、已知条目和文本窗口保持原位。修改或取消过的 Find 不会被自动重新提交。返回任务保留未发送的 Work／Plan 草稿和排队指令；项目目录缺失或续接失败时，有保存的原生会话标识仍可读取原文。关闭原文后本次阅读视图结束。

@@ -2,6 +2,14 @@
 
 [Install and first use](../README.md#install-the-preview) · [中文指南](first-project.zh-CN.md)
 
+## Read the selected task's original
+
+Use **Read original conversation** in the selected-task header, or F3 from its activity. The reader starts at the latest native page; Find searches the complete readable original across all pages and long text windows. F3/Shift+F3 inside the reader moves between matches. F3 in a task textarea keeps its normal editing behavior.
+
+Original reading uses the saved parent thread identity, independently of task execution. A retained original remains readable after a failed resume or a missing project folder. **Return to selected task** restores the current keyboard origin without reopening the task or changing its unsent Work/Plan draft and prepared follow-ups.
+
+**Refresh original** explicitly reads that same native conversation again. The last successful snapshot stays visible while it loads and if the refresh fails. The latest page, known native item, text window, disclosure and query remain owned by the reader. An unchanged submitted Find is recomputed; edited or canceled Find text is not submitted by Refresh. A removed item or occurrence is reported rather than silently substituted. Closing the reader ends that reading view; Refresh continuity is within the open view.
+
 ## Find a saved conversation by title
 
 In **Open a project**, enter part of a conversation title in **Search conversation titles**, then click **Find existing sessions** or press Enter. For conversations from other projects, open **Browse existing Codex sessions** in the sidebar, enter the title text and click **Search titles**.
