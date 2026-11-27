@@ -1,14 +1,17 @@
 """Staged one-target Handoff uses existing prepared-task admission receipts."""
-import copy,json,tempfile,threading,unittest,uuid
+import copy,json,os,tempfile,threading,unittest,uuid
 from pathlib import Path
 from types import SimpleNamespace
 from codex_desk.server import Desk
 from codex_desk.runtime import NativeRequestUnknown,NativeRequestRejected
 from codex_desk.handoff_dispatch import start_handoff,handoff_status,HandoffConflict
 
+ROOT=Path(os.environ.get('DESK_TEST_TEMP', str(Path.cwd()/'temp')))
+ROOT.mkdir(parents=True,exist_ok=True)
+
 class HandoffDispatchTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/'temp');self.root=Path(self.tmp.name);self.project=self.root/'project';self.project.mkdir()
+        self.tmp=tempfile.TemporaryDirectory(dir=ROOT);self.root=Path(self.tmp.name);self.project=self.root/'project';self.project.mkdir()
         self.home=self.root/'home';self.state=self.root/'state';self.desk=Desk('not-called',self.home,self.state)
         self.calls=[];self.mode='accepted';self.gate=None;self.entered=threading.Event()
         self.data={'token':str(uuid.uuid4()),'source':'native-original','cwd':str(self.project),'profile':'default','goal':'Verify the remaining check','text':'Exact reviewed original evidence'}
