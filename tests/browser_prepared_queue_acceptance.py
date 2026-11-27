@@ -159,12 +159,14 @@ async def conflicts_reserved(page, f, result):
     assert await queue_view(box) == view
     assert await box.locator('[data-control="queue-save"]').is_disabled()
     assert await box.locator('pre').last.text_content() == remote['text']
-    boundary = len(f.http)
+    # The selected task's background state/event GETs can finish during
+    # this local conflict choice; neither Load nor Keep may write.
+    boundary = sum(request['method'] == 'POST' for request in f.http)
     await box.locator('[data-control="queue-load"]').click()
     assert await box.locator('textarea').input_value() == remote['text']
     assert await box.locator('select').input_value() == remote['mode']
     assert not await box.locator('[data-control="queue-keep"]').count()
-    assert len(f.http) == boundary
+    assert sum(request['method'] == 'POST' for request in f.http) == boundary
     await intact(page, f, main, draft)
     checked(result, 'real HTTP 409 preserves unsent queue edit; Load current adopts exact saved text/mode/revision with no write')
 
@@ -178,10 +180,10 @@ async def conflicts_reserved(page, f, result):
         await box.locator('[data-control="queue-save"]').click()
     assert (await conflict.value).status == 409
     await box.locator('[data-control="queue-keep"]').wait_for()
-    boundary = len(f.http)
+    boundary = sum(request['method'] == 'POST' for request in f.http)
     await box.locator('[data-control="queue-keep"]').click()
     assert await queue_view(box) == view
-    assert len(f.http) == boundary
+    assert sum(request['method'] == 'POST' for request in f.http) == boundary
     assert c.followup_snapshot(f.desk.store, f.original)['entries'][0] == remote2
     await box.locator('[data-control="queue-save"]').click()
     await page.wait_for_function("!document.querySelector('[data-control=queue-save]').disabled")
