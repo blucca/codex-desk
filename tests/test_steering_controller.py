@@ -202,7 +202,9 @@ const probe=deferred();DeskSteering.opened=async()=>probe.promise;
 const nativeOpened=[];transport=async(path,body)=>{if(path==='/api/open'){nativeOpened.push(body.session);return {thread:{id:body.session+'-native',turns:[]}};}if(path.startsWith('/api/events?'))return [];throw Error('unexpected '+path);};
 """
         source=(ROOT/'codex_desk/static/app.js').read_text()
-        opening=source[source.index('async function open('):source.index('function profileInfo()')]
+        # Include open()'s shipped source-reader teardown and its lexical binding.
+        opening=source[source.index('let ordinaryTurnSource='):source.index('function drawOrdinaryRequestSources(')]
+        opening += source[source.index('async function open('):source.index('function profileInfo()')]
         body=r"""
 const losing=open('old-startup',{steerReceiptOnly:true});await Promise.resolve();await Promise.resolve();
 await open('chosen-session');probe.resolve(false);await losing;

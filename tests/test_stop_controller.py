@@ -239,7 +239,9 @@ $('stop-request-captured').open=false; assert(!DeskStopTask.reading()); $('stop-
 
     def app_open_check(self, setup, body, prefix=''):
         source = (ROOT/'codex_desk/static/app.js').read_text()
-        opening = source[source.index('async function open('):source.index('function profileInfo()')]
+        # Include open()'s shipped source-reader teardown and its lexical binding.
+        opening = source[source.index('let ordinaryTurnSource='):source.index('function drawOrdinaryRequestSources(')]
+        opening += source[source.index('async function open('):source.index('function profileInfo()')]
         evidence = (ROOT/'codex_desk/static/evidence-preparation.js').read_text() + '\nconst draftRevisions=new Map();\n'
         evidence += source[source.index('function taskEvidenceDestination('):source.index('async function saveReviewedEvidence(')]
         evidence += source[source.index('function syncDraftEvidence('):source.index('DeskEvidencePreparation.configure(')]

@@ -59,15 +59,16 @@ jobs:
           for fixture in approval_context native_outcome_reading preparation_close_continuity pending_return read_prepared_continuity pending_interactions proposed_plan bound_recall_completion stop_task steering turn_changes native_steps prepared_queue_acceptance captured_recall prepared_request_original prepared_live_output followup_editor prepared_request turn_recovery turn_request missing_project recent_reader_scroll history_older recent_work preparation home home_read_guidance startup drafts followups organization collaboration recall native_recall recall_index_return bound_recall history_reader handoff handoff_navigation handoff_request selected_original; do
             DESK_USE_INSTALLED=1 DESK_TEST_EVIDENCE="$PWD/evidence/$fixture" DESK_COLLABORATION_RECEIPT="$PWD/evidence/$fixture" python "installed-fixtures/tests/browser_$fixture.py"
           done
-      - name: Check installed exact response and evidence preparation
+      - name: Check installed exact response, evidence preparation and saved lookup
         working-directory: temp
         env:
           DESK_USE_INSTALLED: '1'
         run: |
           mkdir -p installed-fixtures/examples
-          cp ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py installed-fixtures/examples/
+          cp ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py ../examples/check_preparation_find.py installed-fixtures/examples/
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-response" python installed-fixtures/examples/check_native_task_response.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/evidence-preparation" python installed-fixtures/examples/check_native_evidence_preparation.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/preparation-find" python installed-fixtures/examples/check_preparation_find.py
       - name: Retain daily-workflow receipts
         if: always()
         uses: actions/upload-artifact@v4

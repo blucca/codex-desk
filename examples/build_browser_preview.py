@@ -52,7 +52,8 @@ def build(output, embedded=False):
     (output / 'app.js').write_text(app)
     for name in ('preview-api.js', 'preview.css'):
         shutil.copyfile(ROOT / 'examples/browser-preview' / name, output / name)
-    (output / 'sample-data.js').write_text('window.DeskPreviewThreads = '+json.dumps(sample_threads(), ensure_ascii=False)+';\n')
+    casefold = {chr(n): chr(n).casefold() for n in range(0x110000) if chr(n).casefold() != chr(n).lower()}
+    (output / 'sample-data.js').write_text('window.DeskPreviewThreads = '+json.dumps(sample_threads(), ensure_ascii=False)+';\nwindow.DeskPreviewCasefold = '+json.dumps(casefold, ensure_ascii=False)+';\n')
     (output / 'preview-source.json').write_text(json.dumps({'source': 'blucca/codex-desk', 'runtime_version': re.search(r'__version__\s*=\s*[\"\']([^\"\']+)', (ROOT / 'codex_desk/__init__.py').read_text())[1], 'sample': True, 'assets': sorted(x.name for x in assets.iterdir() if x.is_file()), 'build': 'python3 examples/build_browser_preview.py --out OUTPUT'}, indent=2)+'\n')
     return output
 

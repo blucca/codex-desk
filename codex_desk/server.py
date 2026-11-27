@@ -28,6 +28,7 @@ from .turn_dispatch import (start_turn, turn_status, resolve_turn, block_unresol
 from .steer_dispatch import start_steer, steer_status, SteerConflict
 from .stop_dispatch import stop_current, stop_status, StopConflict
 from .preparation import preparation_snapshot
+from .preparation_find import lookup_snapshot
 from .native_outcome import outcomes
 from .task_response import identifier as response_identifier, select_task_response
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
@@ -460,15 +461,27 @@ def handler(desk, access_token=None):
                         archived in ('true', '1'), int(params.get('limit', ['30'])[0]),
                         int(params.get('offset', ['0'])[0])))
                 if url.path == '/api/preparation':
-                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=4)
-                    if any(key not in ('cwd', 'archived') or len(values) != 1
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=5, strict_parsing=True, errors='strict')
+                    if any(key not in ('cwd', 'archived', 'q', 'limit', 'offset') or len(values) != 1
                            for key, values in params.items()):
                         raise ValueError('Use each preparation query option once')
                     archived = params.get('archived', ['false'])[0].lower()
                     if archived not in ('true', 'false', '0', '1'):
                         raise ValueError('Choose whether to include archived preparation')
-                    return self.reply(preparation_snapshot(desk.store, archived in ('true', '1'),
-                                                          params.get('cwd', [None])[0]))
+                    if 'q' not in params:
+                        if 'limit' in params or 'offset' in params:
+                            raise ValueError('Use lookup paging with a submitted preparation phrase')
+                        return self.reply(preparation_snapshot(desk.store, archived in ('true', '1'),
+                                                              params.get('cwd', [None])[0]))
+                    paging = {}
+                    for key, fallback in (('limit', '30'), ('offset', '0')):
+                        value = params.get(key, [fallback])[0]
+                        if not value.isascii() or not value.isdigit():
+                            raise ValueError('Use nonnegative preparation lookup page numbers')
+                        paging[key] = int(value)
+                    return self.reply(lookup_snapshot(desk.store, params['q'][0],
+                                      include_archived=archived in ('true', '1'),
+                                      cwd=params.get('cwd', [None])[0], **paging))
                 if url.path == '/api/handoff/request':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2)
                     if set(params) != {'token'} or len(params['token']) != 1:
@@ -568,12 +581,12 @@ def handler(desk, access_token=None):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence-preparation.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/stop-task.js', '/recall.js', '/home.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence-preparation.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/preparation-find.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/stop-task.js', '/recall.js', '/home.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence-preparation.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'stop-task.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence-preparation.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'preparation-find.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'stop-task.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()

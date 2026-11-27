@@ -72,6 +72,20 @@ Keep the embedded block and readable quote together. Editing or removing part of
 the block makes it ordinary draft text; re-review A to create a fresh actionable
 reference. Surrounding task text and a separate next-step note remain editable.
 
+## Locate saved evidence later
+
+Open **Prepared work**, keep the project and archive scope you need, and enter
+at least two characters in **Find a phrase in saved preparation**. Choose **Search** or press
+Enter. Literal, Unicode-normalized matches identify the original saved owner and
+whether the words belong to its draft, saved follow-up, captured instruction or
+unconfirmed Run request. **Next matches** and **Previous matches** page results.
+
+Choose the result to review that exact saved control. Your current task and any
+unsaved preparation stay in place. Expand its referenced originals, read the
+retained excerpt in A, then return to the same editor or captured instruction.
+The ordinary **Prepared follow-ups** and **Check Run request** controls also expose
+these references directly beside their saved instruction.
+
 ## Runnable examples
 
 The [deterministic lifecycle example](../examples/evidence_preparation.py) uses a

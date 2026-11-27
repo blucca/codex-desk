@@ -45,7 +45,7 @@ const fixture=JSON.parse(process.argv[2]),stored=new Map();let external=0;
 global.localStorage={getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value),removeItem:key=>stored.delete(key)};
 global.location={href:'http://127.0.0.1/demo/',origin:'http://127.0.0.1',assign:()=>{throw Error('Unexpected installer navigation');}};
 global.document={getElementById:()=>null,addEventListener:()=>{}};
-global.window={DeskPreviewThreads:fixture.threads,open:()=>{throw Error('Unexpected installer popup');},fetch:()=>{++external;throw Error('Unexpected HTTP request');}};
+global.window={DeskPreviewThreads:fixture.threads,DeskPreviewCasefold:fixture.casefold,open:()=>{throw Error('Unexpected installer popup');},fetch:()=>{++external;throw Error('Unexpected HTTP request');}};
 const source=fs.readFileSync(process.argv[1],'utf8');
 function load(){vm.runInThisContext(source);}
 async function request(path,data){const response=await window.fetch(path,data?{method:'POST',body:JSON.stringify(data)}:{});return {status:response.status,body:await response.json()};}
@@ -96,14 +96,40 @@ async function request(path,data){const response=await window.fetch(path,data?{m
  load();assert.deepEqual(window.DeskBrowserPreview.snapshot(),preserved);
  const restored=(await request('/api/preparation?archived=false')).body.sessions[0];
  assert.deepEqual(restored.draft,latest.body);assert.deepEqual(restored.followups,before.followups[id]);
+ // The sample uses the same normalized, literal lookup contract as installed Desk.
+ await request('/api/draft',{session:id,text:'Checkout '+fixture.literal,mode:'plan',revision:latest.body.revision});
+ const docs=(await request('/api/import',{thread:fixture.threads[1].id})).body.id;
+ const mobile=(await request('/api/import',{thread:fixture.threads[2].id})).body.id;
+ await request('/api/draft',{session:docs,text:'Documentation '+fixture.literal,mode:'plan',revision:0});
+ await request('/api/draft',{session:mobile,text:'Independent mobile preparation',mode:'plan',revision:0});
+ const lookupBaseline=window.DeskBrowserPreview.snapshot();
+ const phrase=encodeURIComponent(fixture.query),found=await request('/api/preparation?q='+phrase+'&limit=30&offset=0');
+ assert.equal(found.status,200);assert.equal(found.body.lookup.total,2);assert.equal(found.body.sessions.length,3);
+ assert.deepEqual(new Set(found.body.lookup.results.map(x=>x.session_id)),new Set([id,docs]));
+ assert(found.body.lookup.results.every(x=>x.match_text===fixture.literal && x.kind==='draft' && x.control==='draft'));
+ assert.equal((await request('/api/preparation?q='+phrase+'&cwd='+encodeURIComponent(fixture.threads[1].cwd))).body.lookup.total,1);
+ assert.equal((await request('/api/preparation?q='+encodeURIComponent('.*[missing]'))).body.lookup.total,0);
+ assert.deepEqual(window.DeskBrowserPreview.snapshot(),lookupBaseline,'Literal or scoped lookup wrote storage');
+ for(const bad of ['q=x','q='+('x'.repeat(201)),'q='+phrase+'&q='+phrase,'q='+phrase+'&limit=0',
+   'q='+phrase+'&limit=51','q='+phrase+'&offset=01','q='+phrase+'&other=1','limit=30','q='+phrase+'&cwd=a&cwd=b'])
+   assert.equal((await request('/api/preparation?'+bad)).status,400,bad);
+ assert.equal((await request('/api/preparation?q=+')).body.lookup.total,0);
+ await request('/api/archive',{session:id,archived:true});
+ assert.equal((await request('/api/preparation?q='+phrase)).body.lookup.total,1);
+ assert.equal((await request('/api/preparation?q='+phrase+'&archived=true')).body.lookup.total,2);
+ await request('/api/archive',{session:id,archived:false});
+ assert.deepEqual(window.DeskBrowserPreview.snapshot(),lookupBaseline);
  assert(!requests.some(r=>/\/api\/(turn|followups\/send)$/.test(r.path)));assert.equal(external,0);
  console.log(JSON.stringify({passed:true,sample_histories:3,overview_sessions:1,prepared_followups:2,
-   overview_read_only:true,exact_project_scope:true,archive_scope:true,source_queue_unchanged:true,
+   overview_read_only:true,exact_project_scope:true,archive_scope:true,literal_unicode_lookup:true,lookup_owners:3,duplicate_phrase_owners:2,lookup_read_only:true,source_queue_unchanged:true,
    reload_preserved:true,conflict_status:409,same_page_sequence_recovery:true,native_model_calls:0,external_http_requests:external}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
 '''
     fixture = {'threads': build.sample_threads(), 'thread': THREAD,
-               'draft': DRAFT, 'first': FIRST, 'second': SECOND}
+               'draft': DRAFT, 'first': FIRST, 'second': SECOND,
+               'literal': 'Straße café🙂 ＦＩＸ .*[retry]', 'query': 'strasse café🙂 fix .*[retry]',
+               'casefold': {chr(n): chr(n).casefold() for n in range(0x110000)
+                            if chr(n).casefold() != chr(n).lower()}}
     result = subprocess.run([node, '-e', script, str(root / 'examples/browser-preview/preview-api.js'),
                              json.dumps(fixture)], capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -501,9 +527,16 @@ async def main(args):
     site, evidence = args.site.resolve(), args.evidence.resolve()
     assert (site / "index.html").is_file(), f"Build the preview first: {site}"
     evidence.mkdir(parents=True, exist_ok=True)
+    from check_browser_preview_lookup import check as check_lookup
+    lookup_evidence = evidence / "prepared-lookup"
+    lookup_evidence.mkdir(parents=True, exist_ok=True)
+    embedded = 'data-preview-embedded="true"' in (site / "index.html").read_text()
     async with async_playwright() as playwright:
         results = [await check(playwright, site, evidence, int(width), args.chromium, args.url) for width in args.widths.split(",")]
-    (evidence / "acceptance.json").write_text(json.dumps({"passed": True, "viewports": results}, indent=2) + "\n")
+        lookup_results = [await check_lookup(playwright, site, lookup_evidence, int(width), args.chromium, embedded, args.url)
+                          for width in args.widths.split(",")]
+    (evidence / "acceptance.json").write_text(json.dumps({"passed": True, "viewports": results,
+        "prepared_lookup": lookup_results}, indent=2) + "\n")
 
 
 if __name__ == "__main__":
