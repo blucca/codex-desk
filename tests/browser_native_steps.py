@@ -60,7 +60,17 @@ async def one(browser,width):
   body=await page.locator('#native-steps-list').inner_text();plan('turn-one',[{'step':'LATE OLD TURN MUST NOT APPEAR','status':'completed'}]);plan('turn-one',[{'step':'CHILD MUST NOT APPEAR','status':'inProgress'}],thread='native-child')
   await page.wait_for_timeout(850);assert await page.locator('#native-steps-list').inner_text()==body
   r['checks'].append('terminal interruption retains last actually reported step statuses; retired/child plan cannot overwrite them')
-  start('turn-two');await page.wait_for_function("$('native-steps').hidden");plan('turn-two',[{'step':'Second real verification','status':'inProgress'}]);await page.wait_for_function("$('native-steps-current').textContent.includes('Second real verification')")
+  start('turn-two');await page.wait_for_function("$('native-steps').hidden")
+  assert await page.locator('#native-steps').evaluate('n=>n.open&&n.hidden')
+  seq=f.desk.store.events(original)[-1]['seq'];await page.wait_for_function('(seq)=>after>=seq',arg=seq)
+  await page.locator('#latest-output').click();assert await page.evaluate('nearLatest()')
+  event('item/completed',{'threadId':'native-original','turnId':'turn-two','item':{'id':'quiet-new-turn-output','type':'agentMessage','text':'\n\n'.join('Ordinary quiet-turn output '+str(i) for i in range(40))}})
+  seq=f.desk.store.events(original)[-1]['seq'];await page.wait_for_function('(seq)=>after>=seq',arg=seq)
+  await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+  assert await page.evaluate('latestUpdates')==0 and await page.evaluate('nearLatest()')
+  assert await page.evaluate('Math.abs(scrollY-(document.documentElement.scrollHeight-innerHeight))')<=1
+  r['checks'].append('hidden-open native checklist after a new turn no longer blocks near-latest ordinary output following')
+  plan('turn-two',[{'step':'Second real verification','status':'inProgress'}]);await page.wait_for_function("$('native-steps-current').textContent.includes('Second real verification')")
   await page.locator(f'.session-row[data-session="{other}"] .session').click();await page.wait_for_function('(s)=>selected===s&&!opening',arg=other);assert await page.locator('#native-steps').is_hidden()
   plan('turn-two',[{'step':'Original continues while another Plan selected','status':'inProgress'}]);await page.wait_for_timeout(650);assert await page.locator('#native-steps').is_hidden()
   await page.locator(f'.session-row[data-session="{original}"] .session').click();await page.wait_for_function("$('native-steps-current').textContent.includes('Original continues')")

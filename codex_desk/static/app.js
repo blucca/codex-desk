@@ -584,7 +584,7 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
-    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && !$('native-steps').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
+    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && ($('native-steps').hidden || !$('native-steps').open) && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
     return true;
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
@@ -760,7 +760,7 @@ async function pollActivity(){
   if(selected && !opening){
     const rows=await api(`/api/events?session=${selected}&after=${after}`);
     if(current!==generation)return;
-    const follow=nearLatest() && !$('native-steps').open && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
+    const follow=nearLatest() && ($('native-steps').hidden || !$('native-steps').open) && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
     for(const r of rows){
       after=r.seq;const progressChanged=consume(r.event);
       if(progressChanged || ['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
@@ -768,7 +768,7 @@ async function pollActivity(){
     if(changed){
       if(follow)requestAnimationFrame(()=>{
         if(current!==generation)return;
-        if(!$('native-steps').open && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
+        if(($('native-steps').hidden || !$('native-steps').open) && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
         else{latestUpdates+=changed;latestLabel();}
       });
       else{latestUpdates+=changed;latestLabel();}
