@@ -22,6 +22,9 @@
   function button(label,action,disabled=false){
     const node=make('button',label);node.type='button';node.disabled=disabled;node.onclick=action;return node;
   }
+  function focusEditor(){
+    if(el('').open)el(editors.get(selected)?.ready?'text':'editor-title').focus({preventScroll:true});
+  }
   function remember(){
     const editor=editors.get(selected);if(!editor?.ready)return;
     const text=el('text').value,mode=el('mode').value;
@@ -106,13 +109,22 @@
     }finally{if(visible(id))controls();}
   }
   function drawFollowups(editor){
-    const container=el('followups');container.replaceChildren();
+    const container=el('followups'),focus=document.activeElement;
+    const owned=container.contains(focus) && focus?.dataset?.session===editor.row.id;
+    let restore=null;
+    function action(label,callback,control,entry=null,disabled=false){
+      const node=button(label,callback,disabled);node.dataset.session=editor.row.id;node.dataset.control=control;
+      if(entry)node.dataset.followup=entry.id;
+      if(owned && focus.dataset.control===control && focus.dataset.followup===node.dataset.followup)restore=node;
+      return node;
+    }
+    container.replaceChildren();
     const reservation=editor.row.followups?.reservation;
     if(reservation){
       const box=make('section','','preparation-reservation');
       box.append(make('h4',reservation.state==='unknown'?'Start unconfirmed':'Start receipt pending'),
         make('p','Captured instruction. Open this conversation to review its activity and start receipt.','muted'),make('pre',reservation.text));
-      box.append(button('Copy captured instruction',()=>copy(editor.row.id,reservation.text,'Captured instruction')));container.append(box);
+      box.append(action('Copy captured instruction',()=>copy(editor.row.id,reservation.text,'Captured instruction'),'copy-captured'));container.append(box);
     }
     const entries=editor.row.followups?.entries || [];
     for(const entry of entries){
@@ -120,19 +132,25 @@
       const state={queued:'Prepared',reserved:'Awaiting start receipt',needs_review:'Needs start review'}[entry.state] || 'State unreported';
       box.append(make('h4',entry.order+'. '+modeLabel(entry.mode)+' · '+state),make('pre',entry.text));
       const actions=make('div','','actions');
-      actions.append(button('Copy instruction',()=>copy(editor.row.id,entry.text,'Instruction')));
-      if(entry.state==='queued')actions.append(button('Use in this session draft',()=>{
+      actions.append(action('Copy instruction',()=>copy(editor.row.id,entry.text,'Instruction'),'copy-followup',entry));
+      if(entry.state==='queued')actions.append(action('Use in this session draft',()=>{
         if(!visible(editor.row.id))return;
         remember();editor.reuse={id:entry.id,revision:entry.revision,text:entry.text,mode:entry.mode};
         editor.message='Review this destination draft, then choose Append or Replace. The follow-up stays prepared.';controls();
         el('reuse').scrollIntoView({block:'nearest'});
-      },!editor.ready));
+        el('reuse-text').focus({preventScroll:true});
+      },'reuse-followup',entry,!editor.ready));
       box.append(actions);container.append(box);
     }
     if(!entries.length && !reservation)container.append(make('p','No prepared follow-ups for this conversation.','muted'));
+    // Refresh and a save receipt replace these controls. Restore the exact
+    // session/instruction/action, never another row with the same text or ID.
+    if(owned && el('').open){if(restore && !restore.disabled)restore.focus({preventScroll:true});else focusEditor();}
   }
   function drawEditor(){
-    const editor=editors.get(selected);controls();if(!editor)return;
+    const editor=editors.get(selected);
+    const reuseEnded=!editor?.reuse && ['reuse-text','append','replace','reuse-cancel'].some(id=>document.activeElement===el(id));
+    controls();if(!editor)return;
     const row=editor.row;
     el('editor-title').textContent='Preparation in '+name(row);
     el('editor-binding').textContent=row.cwd+'\n'+options.profileLabel(row.profile)+
@@ -140,6 +158,7 @@
     if(el('text').value!==editor.text)el('text').value=editor.text;
     if(el('mode').value!==editor.mode)el('mode').value=editor.mode;
     drawFollowups(editor);
+    if(reuseEnded)focusEditor();
   }
   async function loadEditor(editor){
     if(editor.loading)return editor.loading;
@@ -165,8 +184,9 @@
       editors.set(id,editor);
     }else updateRow(row);
     drawList();drawEditor();
+    const focus=document.activeElement;
     if(!editor.ready)await loadEditor(editor);
-    if(ticket===selectionVersion && visible(id) && editor.ready)el('text').focus({preventScroll:true});
+    if(ticket===selectionVersion && visible(id) && editor.ready && document.activeElement===focus)focusEditor();
     return editor.ready;
   }
   async function refresh(){
@@ -238,12 +258,25 @@
   }
   function keepMine(){
     remember();const editor=editors.get(selected);if(!editor?.conflict || editor.saving)return;
-    editor.saved=editor.conflict;editor.revision=editor.conflict.revision;editor.conflict=null;++editor.sequence;return save();
+    const returnFocus=document.activeElement===el('keep');
+    editor.saved=editor.conflict;editor.revision=editor.conflict.revision;editor.conflict=null;++editor.sequence;
+    if(returnFocus)focusEditor();return save();
   }
   function loadSaved(){
     const editor=editors.get(selected);if(!editor?.conflict || editor.saving)return;
+    const returnFocus=document.activeElement===el('load');
     const current=editor.conflict;Object.assign(editor,current,{saved:current,conflict:null});++editor.sequence;
     editor.message='Saved draft loaded by your choice. Nothing has been sent.';drawEditor();
+    if(returnFocus)focusEditor();
+  }
+  function cancelReuse(){
+    const editor=editors.get(selected);if(!editor)return;
+    const reuse=editor.reuse,returnFocus=document.activeElement===el('reuse-cancel');editor.reuse=null;controls();
+    if(returnFocus){
+      const source=[...el('followups').querySelectorAll('button')].find(node=>node.dataset.session===editor.row.id &&
+        node.dataset.followup===reuse?.id && node.dataset.control==='reuse-followup' && !node.disabled);
+      if(source)source.focus({preventScroll:true});else focusEditor();
+    }
   }
   async function openConversation(){
     remember();const editor=editors.get(selected);if(!editor || editor.opening || !options.openConversation)return;
@@ -267,7 +300,7 @@
     el('save').onclick=save;el('copy').onclick=()=>{remember();const editor=editors.get(selected);if(editor?.ready)return copy(selected,editor.text,'Draft text');};
     el('keep').onclick=keepMine;el('load').onclick=loadSaved;
     el('append').onclick=()=>reuse(false);el('replace').onclick=()=>reuse(true);
-    el('reuse-cancel').onclick=()=>{const editor=editors.get(selected);if(editor){editor.reuse=null;controls();}};
+    el('reuse-cancel').onclick=cancelReuse;
     el('open').onclick=openConversation;
     el('').addEventListener('close',()=>{remember();++listVersion;++selectionVersion;reading=false;});
     controls();

@@ -14,12 +14,13 @@ const ids=['preparation','preparation-title','preparation-project','preparation-
   'preparation-refresh','preparation-close','preparation-status','preparation-error','preparation-list',
   'preparation-editor','preparation-editor-title','preparation-editor-binding','preparation-text',
   'preparation-mode','preparation-draft-status','preparation-conflict','preparation-keep','preparation-load',
-  'preparation-save','preparation-copy','preparation-open','preparation-followups','preparation-reuse',
+  'preparation-save','preparation-save-open','preparation-copy','preparation-open','preparation-followups','preparation-reuse',
   'preparation-reuse-text','preparation-append','preparation-replace','preparation-reuse-cancel'];
 class Element{
   constructor(tag,id=''){this.tagName=tag.toUpperCase();this.id=id;this.value='';this.checked=false;this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.children=[];this.listeners={};this.attributes={};this.text='';}
   append(...nodes){for(const n of nodes){n.parentElement=this;this.children.push(n);}}
-  replaceChildren(...nodes){for(const n of this.children)n.parentElement=null;this.children=[];this.append(...nodes);}
+  contains(node){for(let current=node;current;current=current.parentElement)if(current===this)return true;return false;}
+  replaceChildren(...nodes){if(this.children.some(child=>child.contains(global.document?.activeElement)))document.activeElement=document.body;for(const n of this.children)n.parentElement=null;this.children=[];this.append(...nodes);}
   set textContent(v){this.text=String(v);this.replaceChildren();}
   get textContent(){return this.text+this.children.map(c=>c.textContent).join('');}
   setAttribute(key,v){this.attributes[key]=String(v);}
@@ -27,12 +28,14 @@ class Element{
   dispatch(type){for(const fn of this.listeners[type]||[])fn();}
   showModal(){this.open=true;}
   close(){this.open=false;this.dispatch('close');}
-  focus(){document.activeElement=this;}
+  focus(options){if(this.disabled)return;document.activeElement=this;this.focusOptions=options;}
+  querySelectorAll(selector){return this.children.flatMap(child=>[...(selector==='button'&&child.tagName==='BUTTON'?[child]:[]),...child.querySelectorAll(selector)]);}
   scrollIntoView(){}
   click(){if(this.disabled)return;return this.onclick?.({preventDefault(){}});}
 }
 const nodes=Object.fromEntries(ids.map(id=>[id,new Element(id==='preparation'?'dialog':id.endsWith('text')?'textarea':'div',id)]));
 global.document={getElementById:id=>{assert(nodes[id],'Missing ID '+id);return nodes[id];},activeElement:null};
+document.body=new Element('body');document.body.append(...Object.values(nodes));document.activeElement=document.body;
 Object.defineProperty(global,'crypto',{value:{randomUUID:()=> 'preparation-private-writer'},configurable:true});
 const clipboard={values:[],fail:false};
 Object.defineProperty(global,'navigator',{value:{clipboard:{async writeText(value){if(clipboard.fail)throw Error('denied');clipboard.values.push(value);}}},configurable:true});
@@ -74,9 +77,9 @@ async function api(path,data){
 DeskPreparation.configure({api,make:(tag,text,cls)=>{const e=new Element(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;},profileLabel:id=>'Profile '+id,
   onSaved:async(id,draft)=>saved.push({id,draft:clone(draft)}),openConversation:async id=>{opened.push(id);return true;}});
 const sessions=()=>all(n('list')).filter(e=>e.className==='preparation-session').map(e=>e.dataset.session);
-const review=id=>all(n('list')).find(e=>e.dataset.session===id&&e.dataset.control==='review').click();
+const review=id=>{const source=all(n('list')).find(e=>e.dataset.session===id&&e.dataset.control==='review');source.focus();return source.click();};
 function fill(text,mode){n('text').value=text;n('text').oninput();if(mode){n('mode').value=mode;n('mode').onchange();}}
-const followup=id=>all(n('followups')).find(e=>e.dataset.followup===id);
+const followup=id=>all(n('followups')).find(e=>e.tagName==='ARTICLE'&&e.dataset.followup===id);
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 const settle=async()=>{await Promise.resolve();await Promise.resolve();};
 (async()=>{
@@ -195,6 +198,55 @@ const settle=async()=>{await Promise.resolve();await Promise.resolve();};
     held.resolve({text:'',mode:'native',revision:0});await reading;
     assert.equal(n('text').value,'B latest own edit');assert.equal(n('mode').value,'plan');assert.equal(n('conflict').hidden,true);
     await n('save').click();assert.equal(world.b.draft.text,'B latest own edit');assert.equal(world.b.draft.revision,2);
+  }else if(testcase==='followup-focus-refresh-and-save'){
+    const odd='instruction \" ] +/';world.b.followups.entries[0].id=odd;
+    world.a.followups.entries=[{...clone(world.b.followups.entries[0]),text:'Other session instruction'}];
+    await n('refresh').click();await review('b');const old=button(followup(odd),'Copy instruction');old.focus();
+    world.b.followups.entries.reverse();await n('refresh').click();
+    const replacement=button(followup(odd),'Copy instruction');assert.notEqual(replacement,old);
+    assert(document.activeElement===replacement,'Keyboard focus must reach the intended visible control');assert.deepEqual(replacement.focusOptions,{preventScroll:true});
+    assert.equal(replacement.dataset.session,'b');assert.equal(replacement.dataset.followup,odd);
+    fill('B explicit saved draft','plan');replacement.focus();await n('save').click();
+    assert(document.activeElement===button(followup(odd),'Copy instruction'),'Keyboard focus must reach the intended visible control');
+    n('mode').focus();await n('refresh').click();assert(document.activeElement===n('mode'),'Keyboard focus must reach the intended visible control');
+    const use=button(followup(odd),'Use in this session draft');use.focus();
+    world.b.followups.entries.find(e=>e.id===odd).state='needs_review';await n('refresh').click();
+    assert(!button(followup(odd),'Use in this session draft'));assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');
+    assert.equal(n('text').value,'B explicit saved draft');assert.equal(calls.filter(c=>c.data).length,1);
+  }else if(testcase==='captured-instruction-focus'){
+    await review('d');const copy=button(n('followups'),'Copy captured instruction');copy.focus();await n('refresh').click();
+    assert(document.activeElement===button(n('followups'),'Copy captured instruction'),'Keyboard focus must reach the intended visible control');assert.notEqual(document.activeElement,copy);
+    world.d.followups.reservation=null;await n('refresh').click();assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');
+    assert.equal(calls.filter(c=>c.data).length,0);
+  }else if(testcase==='delayed-review-does-not-steal-focus'){
+    const held=deferred();control.draft=()=>held.promise;const loading=review('b');await settle();
+    n('project').focus();held.resolve(clone(world.b.draft));await loading;
+    assert(document.activeElement===n('project'),'Keyboard focus must reach the intended visible control');assert.equal(n('text').disabled,false);
+    assert.equal(n('text').value,'');assert.equal(calls.filter(c=>c.data).length,0);
+  }else if(testcase==='delayed-review-retains-source-intent'){
+    const held=deferred();control.draft=()=>held.promise;const loading=review('b');await settle();
+    assert.equal(document.activeElement.dataset.session,'b');assert.equal(document.activeElement.dataset.control,'review');
+    held.resolve(clone(world.b.draft));await loading;assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');
+    assert.deepEqual(n('text').focusOptions,{preventScroll:true});
+  }else if(testcase==='queued-reuse-focus-and-cancel'){
+    const original=clone(world.b.followups);await review('b');fill('B reviewed unsaved draft','plan');
+    const use=button(followup('b-two'),'Use in this session draft');use.focus();await use.click();
+    assert(document.activeElement===n('reuse-text'),'Keyboard focus must reach the intended visible control');assert.equal(n('text').value,'B reviewed unsaved draft');
+    n('reuse-cancel').focus();await n('reuse-cancel').click();
+    assert(document.activeElement===use,'Keyboard focus must reach the intended visible control');assert.equal(n('reuse').hidden,true);
+    use.focus();await use.click();n('append').focus();await n('append').click();
+    assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');assert.equal(n('reuse').hidden,true);
+    assert.equal(n('text').value,'B reviewed unsaved draft\n\nClarify the next acceptance');
+    assert.deepEqual(world.b.followups,original);assert.equal(calls.filter(c=>c.data).length,0);
+    await use.click();n('reuse-cancel').focus();world.b.followups.entries=world.b.followups.entries.filter(e=>e.id!=='b-two');
+    await n('refresh').click();assert.equal(n('reuse').hidden,true);assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');
+  }else if(testcase==='conflict-choice-focus'){
+    await review('b');fill('B kept draft','plan');world.b.draft={text:'B changed saved',mode:'native',revision:1};await n('save').click();
+    n('load').focus();await n('load').click();assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');assert.equal(n('conflict').hidden,true);
+    fill('B keep mine','plan');world.b.draft={text:'B changed again',mode:'native',revision:2};await n('save').click();
+    const held=deferred();control.post=()=>held.promise;n('keep').focus();const saving=n('keep').click();await settle();
+    assert(document.activeElement===n('text'),'Keyboard focus must reach the intended visible control');n('mode').focus();held.resolve(clone(world.b.draft));await saving;
+    assert(document.activeElement===n('mode'),'Keyboard focus must reach the intended visible control');assert.equal(n('conflict').hidden,true);
   }else throw Error('Unknown case '+testcase);
   assert.deepEqual(activeDraft,{session:'a',text:'ACTIVE UNSENT PLAN — do not alter',mode:'plan'});
   assert(!calls.some(c=>/^\/api\/(open|import|turn|sessions|followups)/.test(c.path)));
@@ -225,6 +277,13 @@ class PreparationControllerTests(unittest.TestCase):
     def test_filtered_retained_editor_is_not_mistaken_for_a_cleared_draft(self): self.run_case('filtered-draft-is-not-cleared')
     def test_old_overview_cannot_reintroduce_conflict_after_save(self): self.run_case('old-overview-after-save')
     def test_initial_draft_read_cannot_overwrite_newer_overview_or_edits(self): self.run_case('old-draft-read-after-initializing-refresh')
+
+    def test_followup_refresh_and_save_preserve_exact_action_focus(self): self.run_case('followup-focus-refresh-and-save')
+    def test_captured_instruction_refresh_preserves_action_focus(self): self.run_case('captured-instruction-focus')
+    def test_delayed_review_does_not_steal_newer_navigation_focus(self): self.run_case('delayed-review-does-not-steal-focus')
+    def test_delayed_review_focuses_editor_when_source_still_owns_focus(self): self.run_case('delayed-review-retains-source-intent')
+    def test_queued_reuse_review_and_cancel_have_keyboard_destinations(self): self.run_case('queued-reuse-focus-and-cancel')
+    def test_conflict_choices_move_focus_once_without_late_save_steal(self): self.run_case('conflict-choice-focus')
 
 
 if __name__ == '__main__':

@@ -34,6 +34,8 @@ If another tab changes the same draft, choose **Keep this tab draft** or **Load 
 
 ### Review preparation without opening native work
 
+Keyboard navigation stays with the preparation you are reviewing. Refresh and save receipts retain the focused instruction action. **Use in this session draft** moves focus to the instruction review; **Cancel reuse** returns to its source action, while Append, Replace and draft-conflict choices return to the draft editor. A delayed draft read keeps focus on any control you moved to while waiting.
+
 Choose **Prepared work** in the sidebar to see nonempty saved drafts, queued instructions and pending-start reviews across projects. Filter by folder or include locally archived sessions. **Review draft** opens its local Work/Plan editor even when that project folder is missing; the active conversation and its draft stay selected. **Save draft locally** is explicit. A revision conflict keeps your editor and offers **Keep mine and save** or **Load saved draft**.
 
 Queued text is read-only in this overview. **Use in draft** offers **Append to draft** or **Replace draft text**; the queue remains unchanged and reuse is unsaved until you choose Save. **Copy draft text** copies the current reviewed text. **Open conversation** is separate and needs an available native project; it runs no task until you use the normal task controls. Pending starts remain captured review entries, not a new send opportunity.
