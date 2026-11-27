@@ -407,6 +407,17 @@ async def check():
                     assert {s['id']: {k: s[k] for k in bindings[s['id']]} for s in desk.store.sessions()} == bindings
                     for row in desk.store.sessions():
                         events = desk.store.events(row['id'])
+                        if row['id'] == 'session-04':
+                            # Explicit native-history import retains one compact outcome snapshot.
+                            # All original message evidence stays byte-for-byte and no task is admitted.
+                            original = prior_events[row['id']]
+                            assert events[:len(original)] == original
+                            assert [r['event'] for r in events[len(original):]] == [{
+                                'method': 'desk/nativeTaskSnapshot', 'params': {
+                                    'threadId': 'native-04', 'turn': {
+                                        'id': 'prior-turn', 'status': 'unreported', 'error': None},
+                                    'turnIds': ['prior-turn']}}]
+                            continue
                         if row['id'] != 'session-01':
                             assert events == prior_events[row['id']]
                             continue
