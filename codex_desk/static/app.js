@@ -665,6 +665,28 @@ $('provider-form').onsubmit=async e=>{
   finally{if(version===providerVersion){$('provider-key').value='';for(const id of ['provider-name','provider-endpoint','provider-model','provider-key','provider-save'])$(id).disabled=false;}}
 };
 
-$('rename').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(!s)return;$('rename-name').value=s.name || '';$('rename-error').hidden=true;$('rename-dialog').showModal();$('rename-name').focus();$('rename-name').select();};
+let renameSession=null,renameVersion=0;
+const renaming=new Set();
+function renameControls(){$('rename-save').disabled=renaming.has(renameSession);}
+$('rename').onclick=()=>{
+  const s=state.sessions.find(s=>s.id===selected);if(!s)return;
+  ++renameVersion;renameSession=s.id;$('rename-name').value=s.name || '';$('rename-error').hidden=true;
+  renameControls();$('rename-dialog').showModal();$('rename-name').focus();$('rename-name').select();
+};
 $('rename-cancel').onclick=()=>$('rename-dialog').close();
-$('rename-form').onsubmit=async e=>{e.preventDefault();const b=$('rename-save');b.disabled=true;try{await api('/api/rename',{session:selected,name:$('rename-name').value});$('rename-dialog').close();await refresh();}catch(e){$('rename-error').textContent=e.message;$('rename-error').hidden=false;await refresh();}finally{b.disabled=false;}};
+$('rename-dialog').addEventListener('close',()=>{if(!$('rename-dialog').open)++renameVersion;});
+$('rename-form').onsubmit=async e=>{
+  e.preventDefault();const id=renameSession,version=renameVersion,name=$('rename-name').value;
+  if(!id || renaming.has(id))return;
+  renaming.add(id);renameControls();$('rename-error').hidden=true;
+  const current=()=>version===renameVersion && renameSession===id && $('rename-dialog').open;
+  try{
+    await api('/api/rename',{session:id,name});
+    // Only the submitted editor may close; later edits remain available to save.
+    if(current() && $('rename-name').value===name)$('rename-dialog').close();
+    await refresh();
+  }catch(e){
+    if(current()){$('rename-error').textContent=e.message;$('rename-error').hidden=false;}
+    await refresh();
+  }finally{renaming.delete(id);renameControls();}
+};

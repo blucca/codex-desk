@@ -190,6 +190,45 @@ async def check():
                     add_followup(desk.store,'session-03','Prepared Plan remains paused.','plan')
                     queued=followup_snapshot(desk.store,'session-03')
 
+                    original_name=desk.store.get('session-03')['name']
+                    async def held_rename(reopen=False, fail=False):
+                        entered,release=threading.Event(),threading.Event()
+                        def controlled(identifier,name):
+                            assert identifier=='session-03'
+                            entered.set();assert release.wait(30),'Held Rename was not released'
+                            if fail:raise OSError('Naming temporarily unavailable')
+                            desk.store.update(identifier,name=name)
+                            return {'name':name,'namePending':False}
+                        await page.locator('#rename').click()
+                        await page.locator('#rename-name').fill('Submitted name')
+                        try:
+                            with patch.object(desk,'rename',side_effect=controlled):
+                                await page.locator('#rename-save').click()
+                                assert await asyncio.to_thread(entered.wait,10)
+                                if reopen:
+                                    await page.locator('#rename-cancel').click()
+                                    await page.locator('#rename').click()
+                                await page.locator('#rename-name').fill('Newer retained title')
+                                assert await page.locator('#rename-save').is_disabled()
+                                release.set()
+                                await page.wait_for_function('!document.querySelector("#rename-save").disabled')
+                                assert await page.locator('#rename-dialog').evaluate('n=>n.open')
+                                assert await page.locator('#rename-name').input_value()=='Newer retained title'
+                                if reopen:assert await page.locator('#rename-error').is_hidden()
+                                elif fail:assert await page.locator('#rename-error').inner_text()=='Naming temporarily unavailable'
+                                assert await page.evaluate('selected')=='session-03'
+                                assert await page.locator('#prompt').input_value()==text
+                                assert await page.locator('#turn-mode').input_value()=='plan'
+                                assert load_draft(desk.store,'session-03')==prepared
+                                assert followup_snapshot(desk.store,'session-03')==queued
+                        finally:release.set()
+                        await page.locator('#rename-cancel').click()
+                        desk.store.update('session-03',name=original_name)
+                        await page.evaluate('refresh()')
+                    await held_rename()
+                    await held_rename(reopen=True,fail=True)
+                    result['passed'].append('held real Rename HTTP retains text typed after Submit and cancel/reopened edits, isolates old failures, preserves selected Plan and queues, and re-enables the exact current editor')
+
                     async def held_archive(archived, fail=False):
                         id='session-08';entered,release=threading.Event(),threading.Event()
                         original=desk.store.archive
