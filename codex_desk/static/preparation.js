@@ -32,7 +32,7 @@
   }
   function edit(){
     remember();const editor=editors.get(selected);if(!editor)return;
-    editor.message='Unsaved edits kept for this page. Choose Save draft.';controls();
+    editor.message='Unsaved edits kept for this page. Choose Save draft or Save draft and open.';controls();
   }
   function controls(){
     el('refresh').disabled=false;el('list').setAttribute('aria-busy',String(reading));
@@ -42,7 +42,10 @@
     el('save').disabled=!ready || editor.saving || !!editor.conflict;
     el('copy').disabled=!ready || !editor.text;
     el('open').hidden=!options?.openConversation;
-    el('open').disabled=!editor || !!editor.opening;
+    el('open').disabled=!editor || editor.saving || !!editor.opening;
+    el('open').textContent=ready && changed(editor)?'Open without these edits':'Open conversation';
+    el('save-open').hidden=!options?.openConversation;
+    el('save-open').disabled=!ready || editor.saving || !!editor.conflict || !!editor.opening;
     el('conflict').hidden=!editor?.conflict;
     el('keep').disabled=el('load').disabled=!editor?.conflict || editor.saving;
     el('draft-status').textContent=editor?.conflict?'This draft changed elsewhere. Your edits are kept; choose Keep mine or Load saved.':
@@ -224,7 +227,7 @@
     remember();const editor=editors.get(selected);if(!editor?.ready || editor.saving || editor.conflict)return false;
     const id=editor.row.id,captured={text:editor.text,mode:editor.mode,revision:editor.revision,sequence:editor.sequence};
     if(captured.text.length>200000){editor.message='Draft exceeds 200,000 characters. Shorten it before saving.';controls();return false;}
-    editor.saving=true;editor.message='Saving draft…';el('error').hidden=true;controls();
+    editor.saving=true;editor.openReady=true;editor.message='Saving draft…';el('error').hidden=true;controls();
     try{
       const next=draft(await options.api('/api/draft',{session:id,...captured,writer}));
       ++saveVersion;
@@ -232,7 +235,14 @@
       if(!editor.conflict || editor.conflict.revision<=next.revision)editor.conflict=null;
       editor.message=changed(editor)?'Saved the reviewed draft. Newer edits are kept; choose Save draft again.':'Draft saved locally. Nothing has been sent.';
       editor.row={...editor.row,draft:next.text?next:null};if(rows.has(id))rows.set(id,editor.row);
-      if(options.onSaved){try{await options.onSaved(id,next);}catch(e){editor.message='Draft saved locally. Workbench refresh failed: '+e.message;}}
+      if(options.onSaved){
+        try{
+          if(await options.onSaved(id,next)===false){
+            editor.openReady=false;
+            editor.message='Draft saved locally. The conversation has other unsaved edits; open it to review the draft conflict.';
+          }
+        }catch(e){editor.openReady=false;editor.message='Draft saved locally. Workbench refresh failed: '+e.message;}
+      }
       if(visible(id))drawList();return true;
     }catch(e){
       if(e.status===409 && e.current){try{editor.conflict=draft(e.current);editor.message='Draft changed elsewhere. Your edits are kept.';}catch(invalid){editor.message=invalid.message;}}
@@ -279,7 +289,7 @@
     }
   }
   async function openConversation(){
-    remember();const editor=editors.get(selected);if(!editor || editor.opening || !options.openConversation)return;
+    remember();const editor=editors.get(selected);if(!editor || editor.saving || editor.opening || !options.openConversation)return;
     const id=editor.row.id;editor.opening=true;controls();
     try{
       const result=await options.openConversation(id);
@@ -287,6 +297,20 @@
       if(visible(id))el('').close();
     }catch(e){error(e.message,id);}
     finally{editor.opening=false;if(visible(id))controls();}
+  }
+  async function saveAndOpen(){
+    remember();const editor=editors.get(selected);
+    if(!editor?.ready || editor.saving || editor.opening || editor.conflict || !options.openConversation)return false;
+    const id=editor.row.id,sequence=editor.sequence,reviewVersion=selectionVersion;
+    if(!await save() || !editor.openReady)return false;
+    // Saving is local; a late reply is never permission to leave another
+    // review or to open a draft that has gained newer edits in the meantime.
+    if(!visible(id) || selectionVersion!==reviewVersion || editor.sequence!==sequence || editor.conflict || changed(editor)){
+      if(editor.sequence===sequence && !editor.conflict && !changed(editor))
+        editor.message='Draft saved locally. Return to this preparation to open it when ready.';
+      if(visible(id))controls();return false;
+    }
+    return openConversation();
   }
   function show(){
     if(!options)throw new Error('Prepared work is not configured.');
@@ -302,6 +326,7 @@
     el('append').onclick=()=>reuse(false);el('replace').onclick=()=>reuse(true);
     el('reuse-cancel').onclick=cancelReuse;
     el('open').onclick=openConversation;
+    el('save-open').onclick=saveAndOpen;
     el('').addEventListener('close',()=>{remember();++listVersion;++selectionVersion;reading=false;});
     controls();
   }

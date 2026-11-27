@@ -505,11 +505,12 @@ function preparationSaved(id,saved){
   const previous=draftSaved.get(id);
   const dirty=draftTimers.has(id) || draftSaves.has(id) ||
     (drafts.has(id) && (!previous || drafts.get(id)!==previous.text || (draftModes.get(id)||'native')!==previous.mode));
-  if(dirty){draftConflicts.set(id,saved);draftMessages.set(id,'Saved preparation changed in Prepared work. Choose which draft to keep.');draftStatus(id);return;}
+  if(dirty){draftConflicts.set(id,saved);draftMessages.set(id,'Saved preparation changed in Prepared work. Choose which draft to keep.');draftStatus(id);return false;}
   draftRevisions.set(id,saved.revision);draftSaved.set(id,saved);
   drafts.set(id,saved.text);draftModes.set(id,saved.mode);
   draftMessages.set(id,'Draft saved locally. Nothing has been sent.');
   if(selected===id){$('prompt').value=saved.text;$('turn-mode').value=saved.mode;modeSelected=id;draftStatus(id);}
+  return true;
 }
 DeskPreparation.configure({api,make,profileLabel,onSaved:preparationSaved,
   openConversation:async id=>{await open(id);return selected===id && !opening && !$('task').hidden;}});

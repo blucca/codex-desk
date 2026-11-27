@@ -21,9 +21,9 @@ from playwright.async_api import async_playwright
 async def check(width, browser, root, evidence):
     with tempfile.TemporaryDirectory(dir=root, prefix='preparation-') as tmp:
         folder=Path(tmp);home=folder/'home';home.mkdir();(home/'config.toml').write_text('model="fixture"\n')
-        a=folder/'active';a.mkdir();b=folder/'removed';b.mkdir()
+        a=folder/'active';a.mkdir();b=folder/'removed';b.mkdir();d=folder/'daily';d.mkdir()
         desk=Desk('not-executed',home,folder/'state')
-        for id,cwd in [('a',a),('b',b),('c',b)]:
+        for id,cwd in [('a',a),('b',b),('c',b),('d',d)]:
             desk.store.create(str(cwd),'default',identifier=id,name='Project '+id.upper())
             desk.store.update(id,thread_id='native-'+id,status='saved',thread_saved=1,name_pending=0)
         save_draft(desk.store,'a','Active Plan remains exactly unchanged.','plan',0)
@@ -32,21 +32,31 @@ async def check(width, browser, root, evidence):
         first=add_followup(desk.store,'b','Check the retained command output.','native')
         add_followup(desk.store,'b','Inspect the second queued decision.','plan')
         queue=followup_snapshot(desk.store,'b');b.rmdir()
+        daily_work=add_followup(desk.store,'d','Verify the retained acceptance using native tools.','native')
+        daily_plan=add_followup(desk.store,'d','Clarify the next saved decision before editing.','plan')
+        daily_queue=followup_snapshot(desk.store,'d')
         native=[];http=[];errors=[]
         class Catalog:
             def request(self,method,params):
                 native.append(method);assert method=='thread/list';return {'data':[],'nextCursor':None}
-        desk.catalog=lambda:Catalog()
+        open_control={'fail':False}
         def open_saved(id):
-            native.append('explicit-open:'+id);assert id=='a'
+            native.append('explicit-open:'+id);assert id in ('a','d')
+            if id=='d' and open_control['fail']:raise OSError('Daily project temporarily unavailable')
             desk.store.update(id,status='ready',provider='fixture',model='fixture')
-            return {'thread':{'id':'native-a','cwd':str(a),'name':'Active Plan','turns':[]},'model':'fixture','modelProvider':'fixture'}
-        desk.open=open_saved
-        base=handler(desk)
-        class Handler(base):
-            def do_GET(self):http.append(('GET',urlsplit(self.path).path));return super().do_GET()
-            def do_POST(self):http.append(('POST',urlsplit(self.path).path));return super().do_POST()
-        server=ThreadingHTTPServer(('127.0.0.1',0),Handler);worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
+            return {'thread':{'id':'native-'+id,'cwd':str(a if id=='a' else d),'name':'Project '+id.upper(),'turns':[]},'model':'fixture','modelProvider':'fixture'}
+        def start_server(port=0):
+            desk.catalog=lambda:Catalog();desk.open=open_saved
+            base=handler(desk)
+            class Handler(base):
+                def do_GET(self):http.append(('GET',urlsplit(self.path).path));return super().do_GET()
+                def do_POST(self):http.append(('POST',urlsplit(self.path).path));return super().do_POST()
+            server=ThreadingHTTPServer(('127.0.0.1',port),Handler)
+            worker=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.01},daemon=True);worker.start()
+            return server,worker
+        def stop_server():
+            server.shutdown();server.server_close();worker.join(timeout=5);desk.close();desk.store.db.close()
+        server,worker=start_server()
         context=await browser.new_context(viewport={'width':width,'height':900 if width>390 else 844})
         page=await context.new_page();page.set_default_timeout(10000);page.on('pageerror',lambda e:errors.append(str(e)))
         await context.grant_permissions(['clipboard-read','clipboard-write'])
@@ -217,9 +227,116 @@ async def check(width, browser, root, evidence):
             assert native==native_before and followup_snapshot(desk.store,'b')==queue
             checks.append('actual workbench clear and explicit Refresh retain unsaved preparation until Load saved; exact empty revision is read without a save/native call')
             assert not any(method=='POST' and path not in ('/api/open','/api/draft') for method,path in http)
+            # Ordinary first-task reuse: append preserves the destination Plan;
+            # Save and open never hands off an older capture after newer typing.
+            daily_native_before=list(native)
+            await page.get_by_role('button',name='Review preparation in Project D',exact=True).click()
+            await page.wait_for_function("!$('preparation-save-open').disabled")
+            await page.locator('#preparation-text').fill('Reviewed destination before the acceptance.')
+            await page.locator('#preparation-mode').select_option('plan')
+            await page.locator(f'.preparation-followup[data-followup="{daily_work["id"]}"]').get_by_role('button',name='Use in this session draft',exact=True).click()
+            await page.locator('#preparation-append').click()
+            captured='Reviewed destination before the acceptance.\n\n'+daily_work['text']
+            assert await page.locator('#preparation-text').input_value()==captured
+            assert await page.locator('#preparation-mode').input_value()=='plan'
+            assert load_draft(desk.store,'d')['text']==''
+            assert await page.locator('#preparation-open').inner_text()=='Open without these edits'
+            entered,release=threading.Event(),threading.Event()
+            def hold_reviewed_reply(store,session,text,mode,revision,writer=None,sequence=None):
+                result=save_draft(store,session,text,mode,revision,writer,sequence)
+                if session=='d' and text==captured:
+                    entered.set();assert release.wait(30),'Reviewed save reply was not released'
+                return result
+            try:
+                with patch.object(desk_server,'save_draft',side_effect=hold_reviewed_reply):
+                    await page.locator('#preparation-save-open').click()
+                    assert await asyncio.to_thread(entered.wait,10),'Reviewed save never entered'
+                    assert await page.locator('#preparation-open').is_disabled()
+                    newer='Newer unsent Work acceptance after the reviewed capture.'
+                    await page.locator('#preparation-text').fill(newer)
+                    await page.locator('#preparation-mode').select_option('native')
+                    release.set()
+                    await page.wait_for_function("!$('preparation-save-open').disabled")
+                    assert await page.locator('#preparation').is_visible()
+                    assert await page.locator('#preparation-text').input_value()==newer
+                    assert load_draft(desk.store,'d')['text']==captured
+                    assert native==daily_native_before
+                    assert await page.evaluate("selected==='a'")
+            finally:release.set()
+            await page.locator('#preparation-save-open').click()
+            await page.wait_for_function("!$('preparation').open && selected==='d' && !opening && !$('task').hidden")
+            assert await page.locator('#prompt').input_value()==newer
+            assert await page.locator('#turn-mode').input_value()=='native'
+            assert load_draft(desk.store,'d')['text']==newer
+            assert followup_snapshot(desk.store,'d')==daily_queue
+            assert native==daily_native_before+['explicit-open:d']
+            checks.append('queued Work append preserves destination Plan; a late save keeps newer Work edits local until a second explicit Save and open shows the exact unsent task')
+
+            # Replace explicitly adopts the queued Plan mode. Real save errors,
+            # another writer's revision, and an unavailable open each keep it.
+            await page.locator('#show-preparation').click()
+            await page.wait_for_function("$('preparation-list').getAttribute('aria-busy')==='false'")
+            await page.get_by_role('button',name='Review preparation in Project D',exact=True).click()
+            await page.locator(f'.preparation-followup[data-followup="{daily_plan["id"]}"]').get_by_role('button',name='Use in this session draft',exact=True).click()
+            await page.locator('#preparation-replace').click()
+            assert await page.locator('#preparation-text').input_value()==daily_plan['text']
+            assert await page.locator('#preparation-mode').input_value()=='plan'
+            opens_before=list(native)
+            with patch.object(desk_server,'save_draft',side_effect=OSError('Daily save temporarily unavailable')):
+                await page.locator('#preparation-save-open').click()
+                await page.wait_for_function("!$('preparation-save-open').disabled && $('preparation-draft-status').textContent.includes('not saved')")
+            assert native==opens_before and await page.locator('#preparation').is_visible()
+            assert load_draft(desk.store,'d')['text']==newer
+            current=load_draft(desk.store,'d')
+            save_draft(desk.store,'d','Other tab saved daily Work.','native',current['revision'])
+            await page.locator('#preparation-save-open').click()
+            await page.locator('#preparation-conflict').wait_for()
+            assert await page.locator('#preparation-text').input_value()==daily_plan['text']
+            assert await page.locator('#preparation-save-open').is_disabled() and native==opens_before
+            await page.locator('#preparation-keep').click()
+            await page.wait_for_function("$('preparation-conflict').hidden && !$('preparation-save-open').disabled")
+            assert await page.locator('#prompt').input_value()==daily_plan['text']
+            assert await page.locator('#turn-mode').input_value()=='plan'
+            open_control['fail']=True
+            await page.locator('#preparation-save-open').click()
+            await page.wait_for_function("!$('preparation-save-open').disabled && !$('preparation-error').hidden")
+            assert await page.locator('#preparation').is_visible()
+            assert await page.locator('#preparation-text').input_value()==daily_plan['text']
+            assert load_draft(desk.store,'d')['text']==daily_plan['text']
+            posts_before=sum(method=='POST' and path=='/api/draft' for method,path in http)
+            open_control['fail']=False;await page.locator('#preparation-open').click()
+            await page.wait_for_function("!$('preparation').open && selected==='d' && !opening && !$('task').hidden")
+            assert await page.locator('#prompt').input_value()==daily_plan['text']
+            assert await page.locator('#turn-mode').input_value()=='plan'
+            assert sum(method=='POST' and path=='/api/draft' for method,path in http)==posts_before
+            assert followup_snapshot(desk.store,'d')==daily_queue
+            checks.append('queued Plan replacement survives a failed real save and external revision conflict; explicit keep/save and native open retry show the exact unsent Plan without changing its queue')
+
+            # Cold same-state return uses a new Desk/Store and the same browser
+            # origin, recovering the saved binding, mode and queued originals.
+            await page.wait_for_function("!draftTimers.size && !draftSaves.size")
+            port=server.server_port
+            await asyncio.to_thread(stop_server)
+            desk=Desk('not-executed',home,folder/'state');server,worker=start_server(port)
+            await page.reload()
+            await page.wait_for_function("selected==='d' && !opening && !$('task').hidden")
+            assert await page.locator('#prompt').input_value()==daily_plan['text']
+            assert await page.locator('#turn-mode').input_value()=='plan'
+            assert await page.evaluate("nativeThreadId==='native-d'")
+            assert followup_snapshot(desk.store,'d')==daily_queue
+            assert followup_snapshot(desk.store,'b')==queue
+            assert load_draft(desk.store,'a')['text']==''
+            await page.locator('#show-preparation').click()
+            await page.wait_for_function("$('preparation-list').getAttribute('aria-busy')==='false'")
+            await page.get_by_role('button',name='Review preparation in Project D',exact=True).click()
+            assert await page.locator('#preparation-text').input_value()==daily_plan['text']
+            assert await page.locator('#preparation-mode').input_value()=='plan'
+            assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            assert not any(method=='POST' and path not in ('/api/open','/api/draft') for method,path in http)
+            checks.append('cold same-state Desk/Store restart restores the exact unsent Plan, native binding and both original prepared queues; review remains local at this width')
             await page.screenshot(path=str(evidence/f'preparation-{width}.png'))
             assert not errors
-            receipt={'width':width,'checks':checks,'javascript_errors':errors,'controlled_model_turns':0,'preparation_native_calls':0,
+            receipt={'width':width,'checks':checks,'javascript_errors':errors,'controlled_model_turns':0,'explicit_preparation_opens':native[len(daily_native_before):],'cold_restart_same_state':True,
                      'same_session_clean_update':True,'pending_root_revision_conflict':root_conflicts,'draft_response_codes':draft_response_codes}
             (evidence/f'acceptance-{width}.json').write_text(json.dumps(receipt,indent=2)+'\n')
             return len(checks)
@@ -227,7 +344,7 @@ async def check(width, browser, root, evidence):
             await page.screenshot(path=str(evidence/f'failure-{width}.png'),full_page=True)
             raise
         finally:
-            await context.close();server.shutdown();server.server_close();worker.join(timeout=5);desk.close();desk.store.db.close()
+            await context.close();stop_server()
 
 
 async def main():
