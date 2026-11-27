@@ -415,6 +415,11 @@
     button.hidden=!source;button.disabled=refreshing || loading;
     button.textContent=refreshing?'Refreshing original…':'Refresh original';
   }
+  function preserveChrome(change,ticket){
+    const view=source && rows.length?captureView():null;
+    change();
+    if(view && current(ticket))restoreView(view,ticket);
+  }
   async function refreshFind(query,anchor,ticket){
     const search=++findVersion,valid=()=>search===findVersion && current(ticket);
     finding=true;findGroups=[];findTotal=0;findCursor=-1;findControls();
@@ -441,8 +446,10 @@
   }
   async function refresh(){
     if(!source || loading || refreshing || !available())return false;
-    const ticket=version,request=++refreshVersion;refreshing=true;refreshControls();el('error').hidden=true;
-    el('status').textContent='Refreshing original native conversation. The current snapshot stays readable.';
+    const ticket=version,request=++refreshVersion;
+    preserveChrome(()=>{refreshing=true;refreshControls();el('error').hidden=true;
+      el('status').textContent='Refreshing original native conversation. The current snapshot stays readable.';
+    },ticket);
     try{
       const savedReference=options?.savedReference;
       const result=savedReference?await api('/api/native/evidence-source?home='+encodeURIComponent(savedReference.native_home)+'&thread='+encodeURIComponent(requested.thread_id)):
@@ -481,13 +488,15 @@
       return true;
     }catch(error){
       if(request===refreshVersion && current(ticket)){
-        const outer=el('').scrollTop;
-        el('status').textContent='Refresh failed. The last successfully read original stays available.';
-        el('error').textContent=error.message;el('error').hidden=false;el('retry').hidden=false;
-        el('').scrollTop=outer;
+        preserveChrome(()=>{
+          const outer=el('').scrollTop;
+          el('status').textContent='Refresh failed. The last successfully read original stays available.';
+          el('error').textContent=error.message;el('error').hidden=false;el('retry').hidden=false;
+          el('').scrollTop=outer;
+        },ticket);
       }
       return false;
-    }finally{if(request===refreshVersion){refreshing=false;el('retry').disabled=false;refreshControls();}}
+    }finally{if(request===refreshVersion)preserveChrome(()=>{refreshing=false;el('retry').disabled=false;refreshControls();},ticket);}
   }
   async function read() {
     const preloaded=options?.preloadedThread || null;

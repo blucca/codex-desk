@@ -20,7 +20,7 @@ const PAGE_ENTRIES=40;const str=x=>typeof x==='string'?x:'';let version=1,refres
 let options=null;let source={id:'original',name:'First original'},requested={thread_id:'original'},rows=[{turn:{id:'turn'},item:{id:'old',type:'agentMessage',text:'exact old evidence'}}],page=0,targetIndex=-1;
 let live=true,view={items:new Map(),anchor:null,first:JSON.stringify(['turn','old']),page:0,scroll:17},renders=[],findMessages=[],apiCalls=[];
 function current(ticket){return live && ticket===version;}function available(){return current(version);}
-function captureView(){return view;}function render(scroll,v){renders.push({scroll,view:v,source:source.id,rows:rows.map(x=>x.item.id)});}
+function restoreView(){}function captureView(){return view;}function render(scroll,v){renders.push({scroll,view:v,source:source.id,rows:rows.map(x=>x.item.id)});}
 function flatten(thread){return thread.turns.flatMap(turn=>turn.items.map(item=>({turn,item})));}
 function textFor(item){return item.text;}const visibleTypes=new Set(['agentMessage']);
 function findControls(message){findMessages.push(message);}function findMatch(){if(findCursor<0)return null;const group=findGroups.findLast(g=>g.first<=findCursor);return {index:group.index,...group.spans.at(findCursor-group.first)};}

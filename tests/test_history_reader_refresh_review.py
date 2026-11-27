@@ -52,6 +52,30 @@ assert.equal(el('body').scrollTop,105);assert.equal(pre.scrollTop,97);
 assert.equal(apiCalls.length,1);
 ''')
 
+    def test_transient_refresh_chrome_preserves_text_before_latest_reply_capture(self):
+        view_handlers=VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
+            '  function restoreView(view,ticket){', 'restoreView=function(view,ticket){')
+        self.run_js(r'''
+const document={activeElement:null},pre={scrollTop:80};let headerShift=0;
+const item={dataset:{turnId:'turn',itemId:'old',windowStart:'40000'},open:true,
+  getBoundingClientRect:()=>({top:400+headerShift-el('').scrollTop-el('body').scrollTop,bottom:500+headerShift-el('').scrollTop-el('body').scrollTop}),
+  contains:()=>false,querySelector:()=>pre,querySelectorAll:()=>[]};
+const viewItems=()=>[item],elementKey=item=>JSON.stringify([item.dataset.turnId,item.dataset.itemId]);
+const selectedText=()=>null,restoreSelectedText=()=>{};
+el('body').getBoundingClientRect=()=>({top:200+headerShift-el('').scrollTop,bottom:500+headerShift-el('').scrollTop});
+el('body').scrollTop=100;el('').scrollTop=40;
+'''+view_handlers+r'''
+let status='';Object.defineProperty(el('status'),'textContent',{get:()=>status,set:value=>{status=value;headerShift=value.startsWith('Refreshing')?-22:value.startsWith('Refresh failed')?18:0;}});
+const originalTop=item.getBoundingClientRect().top;
+response=thread([['old','exact old evidence']]);const pending=refresh();
+assert.equal(item.getBoundingClientRect().top,originalTop,'Transient status wrapping must not move the loaded text before reply capture');
+el('body').scrollTop+=13;const latestTop=item.getBoundingClientRect().top;
+render=(scroll,snapshot)=>restoreView(snapshot,version);
+release();assert(await pending);assert.equal(item.getBoundingClientRect().top,latestTop,'Reply commits the latest manual reading view, not the pre-click view');
+response=Error('Failed native read');const failed=refresh();const beforeFailure=item.getBoundingClientRect().top;release();assert.equal(await failed,false);
+assert.equal(item.getBoundingClientRect().top,beforeFailure,'Error and retry controls preserve the same latest text viewport');
+''')
+
     def test_edited_then_restored_query_is_unsent_until_explicit_find(self):
         self.run_js(HANDLERS+"""
 findQuery='evidence';findSubmitted=true;el('find-query').value='evidence';
