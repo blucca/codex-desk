@@ -202,3 +202,11 @@ html:has(#preparation[open]), html:has(#preparation-request[open]), html:has(#na
 #steering-captured-text{max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#101821}
 html:has(#steering-input:focus),html:has(#steering-captured[open]:not([hidden])){overflow-anchor:none}
 @media(max-width:500px){.steering .actions button{flex:1 1 100%;white-space:normal}}
+
+.stop-request{margin:16px 0;padding:14px 16px;border:1px solid #344356;border-radius:9px;background:#151e29;min-width:0}
+.stop-request[hidden],.stop-request [hidden]{display:none}.stop-request h3{font-size:15px;margin:0 0 8px}
+.stop-request p{overflow-wrap:anywhere;white-space:pre-wrap}.stop-request summary{cursor:pointer}
+.stop-request pre{max-height:230px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#101821;padding:10px}
+.stop-previous-item{padding:8px 0;border-top:1px solid #344356}.stop-request .actions{flex-wrap:wrap}
+html:has(#stop-request-captured[open]:not([hidden])),html:has(#stop-request-previous[open]:not([hidden])){overflow-anchor:none}
+@media(max-width:500px){.stop-request .actions button,.stop-previous-item button{width:100%;white-space:normal}}

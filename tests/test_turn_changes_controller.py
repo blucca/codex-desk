@@ -71,6 +71,8 @@ global.fetch = () => { throw new Error('Diff review must not send a request'); }
 APP_SETUP = r"""
 function make(tag, text = '', cls = '') { return new Element(tag, text, cls); }
 const DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};
+const DeskStopTask={select(){},consume(){},restoreThread(){},sync(){},snapshot:()=>null,opened:async()=>false,reading:()=>false};
+let stopStateSnapshot=null;
 DeskNativeSteps.configure({$, make}); DeskNativeSteps.select(ctx);
 DeskTurnChanges.configure({$, writeText: text => clipboard(text)}); DeskTurnChanges.select(ctx);
 let selected = ctx.session, nativeThreadId = ctx.thread, generation = ctx.generation;

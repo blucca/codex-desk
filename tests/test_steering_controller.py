@@ -191,6 +191,7 @@ const drafts=new Map(),items=new Map(),nodes=new Map(),itemTurns=new Map(),colla
 const state={sessions:[{id:'old-startup',thread_id:'native-old'},{id:'chosen-session',thread_id:'native-chosen'}]};
 const DeskHome={selectionChanged(){}},DeskRecall={selectionChanged(){}},DeskFollowups={select(){}};
 const DeskNativeSteps={select(){},restoreThread(){}},DeskTurnChanges={select(){},restoreThread(){}};
+const DeskStopTask={select(){},restoreThread(){},opened:async()=>false,reading:()=>false};
 function rememberDraft(){}function persistDraft(){}function latestLabel(){}function approvals(){}function draw(){}function draftStatus(){}
 function loadDraft(){return Promise.resolve();}function turnRequest(){return null;}async function discoverTurnRequest(){return null;}
 async function refresh(){}function consume(){}function renderItem(){}function error(e){throw e;}

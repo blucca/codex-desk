@@ -695,16 +695,28 @@ class Runtime:
             raise NativeRequestUnknown('Native Codex did not confirm this same-turn instruction')
         return result
 
-    def interrupt(self):
-        events = self.store.events(self.id)
-        thread_id = self.store.get(self.id)['thread_id']
-        turn_id = next((r['event']['params']['turn']['id'] for r in reversed(events)
-            if r['event'].get('method') == 'turn/started'
-            and (not _thread_scope(r['event'].get('params'))
-                 or _thread_scope(r['event'].get('params')) == thread_id)), None)
-        if not turn_id:
-            raise ValueError("No running turn")
-        return self.request('turn/interrupt', {'threadId': thread_id, 'turnId': turn_id})
+    def interrupt(self, thread_id=None, expected_turn_id=None):
+        if (thread_id is None) != (expected_turn_id is None):
+            raise ValueError('Use both the captured native thread and task')
+        with self.lifecycle_lock:
+            if self.closing or self.process.poll() is not None:
+                raise ValueError('The selected native task is no longer connected')
+            if thread_id is None:
+                row = self.store.get(self.id)
+                if row is None:
+                    raise ValueError('Session not found')
+                thread_id = row['thread_id']
+                expected_turn_id = active_turn_id(self.store, self.id, thread_id)
+            if (not isinstance(thread_id, str) or not thread_id.strip()
+                    or not isinstance(expected_turn_id, str) or not expected_turn_id.strip()
+                    or active_turn_id(self.store, self.id, thread_id) != expected_turn_id):
+                raise ValueError('The captured native task is no longer active')
+        # The reader must deliver the RPC reply and native terminal events.
+        # Passing the captured turnId leaves the later boundary check native.
+        result = self.request('turn/interrupt', {'threadId': thread_id, 'turnId': expected_turn_id})
+        if not isinstance(result, dict):
+            raise NativeRequestUnknown('Native Codex did not confirm this Stop request')
+        return {}
     def close(self):
         with self.lifecycle_lock:
             if self.closing:

@@ -7,7 +7,8 @@ from test_navigation_controllers import APP, DOM, NODE
 
 
 SETUP = DOM.replace("function setArchived(){throw Error('Rendering must not archive');}", '') + r'''
-let nativeThreadId=null;
+let nativeThreadId=null,stopStateSnapshot=null;
+const DeskStopTask={select(){},consume(){},restoreThread(){},sync(){},snapshot:()=>null,opened:async()=>false,reading:()=>false};
 let opening=false,modeSelected=selected,nativeFailureSignature='',generation=7,refreshVersion=0;
 const submitting=new Set();let requests=new Map();
 function turnRequestBlocked(){return false;}

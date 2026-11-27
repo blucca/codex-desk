@@ -262,6 +262,10 @@ class RuntimeCollaborationTests(unittest.TestCase):
         self.assertEqual(self.store.events(self.identifier), events)
 
     def test_stop_uses_parent_turn_even_with_existing_cached_child_turn_events(self):
+        self.runtime.process = Mock()
+        self.runtime.process.poll.return_value = None
+        self.runtime.closing = False
+        self.store.update(self.identifier, status='running')
         self.store.event(self.identifier, turn_event())
         self.store.event(self.identifier, turn_event(CHILD))
         self.runtime.interrupt()

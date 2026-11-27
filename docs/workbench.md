@@ -165,3 +165,9 @@ This reports loaded thread IDs/status, providers and working directories through
 **Search saved content** also searches the current unconfirmed captured Work/Plan request, including after you clear its saved draft or queued instructions. Results show a bounded snippet and **Review captured request**. Open it to read the exact captured text and request ID, then **Read original conversation** to inspect its captured native conversation without changing your selected task.
 
 **Return to results** keeps your submitted query, scope, page and result position. Your main draft and any separate Prepared editor stay in place. After recording whether the request started, choose **Search** to update that same page; the resolved request drops from this unconfirmed-request corpus. Completed and known-rejected request history is not included.
+
+## Stop the current task
+
+Choose **Stop current task** to interrupt the established native task shown next to the control. Desk retains its exact thread and turn with the request. An accepted Stop receipt means the interruption was requested; the matching native terminal report shows whether that task completed, failed or was interrupted.
+
+If the local reply is lost, choose **Check stop receipt**. This reads the original request without resending or opening another task, including after a restart. A later task requires a new explicit Stop. Your unsent draft, prepared follow-ups and newer task approvals remain in place.

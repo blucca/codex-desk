@@ -77,10 +77,11 @@ class CurrentBaselineContracts(SteerFixture):
  def test_native_schema_is_same_turn_not_start_response(self):
   schema=json.loads((S/'tests/fixtures/native-turn-steer-params-0.171.json').read_text());self.assertEqual(set(schema['required']),{'threadId','expectedTurnId','input'})
   reply=json.loads((S/'tests/fixtures/native-turn-steer-response-0.171.json').read_text());self.assertEqual(reply['required'],['turnId'])
- def test_current_stop_resolver_is_not_a_steer_active_turn_precondition(self):
+ def test_stop_rejects_a_completed_parent_without_native_request(self):
   self.emit('turn/completed',{'threadId':THREAD,'turn':{'id':TURN,'status':'completed','items':[]}})
   calls=[];self.runtime.request=lambda m,p:calls.append((m,p))
-  self.runtime.interrupt();self.assertEqual(calls,[('turn/interrupt',{'threadId':THREAD,'turnId':TURN})])
+  with self.assertRaises(ValueError):self.runtime.interrupt()
+  self.assertEqual(calls,[])
  def test_turn_projection_does_not_read_steer_events(self):
   body=self.payload();self.desk.store.event(self.identifier,{'method':'desk/steerIntent','params':{'token':body['token'],'payload':body,'binding':{}}})
   self.desk.store.event(self.identifier,{'method':'desk/steerReceipt','params':{'token':body['token'],'status':'accepted','result':{'turnId':TURN}}})

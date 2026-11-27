@@ -81,6 +81,10 @@
     }
     if(path==='/api/open' && post)return {thread:thread(lookup(data.session).thread_id)};
     if(path==='/api/events')return [];
+    if((path==='/api/stop' || path==='/api/steer/request') && !post){
+      lookup(params.get('session'));
+      const error=new Error('No saved native task-control request in this browser sample.');error.status=404;throw error;
+    }
     if(path==='/api/turn/request' && !post){
       lookup(params.get('session'));
       const error=new Error('No saved ordinary task request in this preparation-only sample.');error.status=404;throw error;

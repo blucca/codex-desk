@@ -34,6 +34,7 @@ function accept(data){
 async function api(path,data){
   calls.push({path,data:data===undefined?null:clone(data)});
   if(path==='/api/state')return {sessions:clone(sessions),profiles:[]};
+  if(path.startsWith('/api/stop?'))throw Object.assign(Error('No saved Stop request'),{status:404});
   if(path.startsWith('/api/events?'))return control.events || [];
   if(path.startsWith('/api/draft?'))return clone(world.draft);
   if(path==='/api/draft'){
@@ -81,7 +82,7 @@ class TurnRequestControllerTests(unittest.TestCase):
                            ('function draw()', 'function itemText('),
                            ('function consume(m)', 'async function refresh()'),
                            ('async function refresh()', 'function profileInfo()'),
-                           ("$('task').onsubmit=", "$('stop').onclick="),
+                           ("$('task').onsubmit=", "let failures=0;"),
                            ('async function pollActivity()', 'async function tick()')]:
             fragments.append(source[source.index(begin):source.index(end)])
         setup = SETUP.replace('COLD', json.dumps(cold))
@@ -95,6 +96,8 @@ class TurnRequestControllerTests(unittest.TestCase):
         presenter = (APP.parent / 'preparation.js').read_text().split('/* Local preparation review;')[0]
         native_readouts = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
         native_readouts += (APP.parent / 'turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
+        native_readouts += (APP.parent / 'stop-task.js').read_text() + '\n'
+        configuration += next(line for line in source.splitlines() if line.startswith('DeskStopTask.configure(')) + '\n'
         code = setup + '\n' + native_readouts + presenter + '\n' + '\n'.join(fragments) + '\n' + configuration + r'''
 (async()=>{
 state={sessions:clone(sessions),profiles:[]};
