@@ -308,7 +308,14 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             assert any(r["path"] == "/api/preparation" and r["method"] == "GET" for r in review_requests)
             assert not any(r["method"] == "POST" and r["path"] in {"/api/import", "/api/open", "/api/turn", "/api/followups", "/api/followups/send"} for r in review_requests)
             copied = await page.evaluate("window.__deskSampleCopies")
-            await page.locator("#preparation-close").click()
+            before_open = len(await log())
+            await page.locator("#preparation-save-open").click()
+            await page.wait_for_function("!document.querySelector('#preparation').open && !document.querySelector('#task').hidden")
+            assert await page.locator("#prompt").input_value() == REUSED_DRAFT
+            assert await page.locator("#turn-mode").input_value() == "plan"
+            assert (await snapshot())["followups"][SESSION] == saved["followups"][SESSION]
+            opens = [r for r in (await log())[before_open:] if r["path"] == "/api/open"]
+            assert len(opens) == 1 and opens[0]["data"]["session"] == SESSION
             saved = await snapshot()
             await checkpoint("prepared-work-reuse")
             captured.extend(await log())
@@ -360,7 +367,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
                 "unrelated_storage_preserved": True}
             receipt['prepared_work'] = {'query_free_entry': 'show-preparation', 'reviewed_session': SESSION,
                 'copied_texts': copied, 'explicit_append': True, 'saved_mode': 'plan', 'source_queue_unchanged': True,
-                'overview_after_reload': True, 'no_native_open_on_review': True}
+                'overview_after_reload': True, 'no_native_open_on_review': True, 'explicit_save_and_open_exact_unsent_plan': True}
             (evidence / f"receipt-{width}.json").write_text(json.dumps(receipt, indent=2) + "\n")
             print(json.dumps({"viewport": width, "passed": True, "phases": phases}), flush=True)
             return receipt
