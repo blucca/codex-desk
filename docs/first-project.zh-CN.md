@@ -37,7 +37,7 @@ uvx --refresh --prerelease allow codex-desk@latest
 3. 先保持 **All indexed projects**。在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 **2–200 个字符**，再点击 **Search** 或按 Enter。索引进行中也可以提交查询；明确启动的索引完成后，仍在当前搜索对话框中、未修改的已提交查询会自动刷新一次。搜索按字面文字匹配，忽略大小写并规范化 Unicode。修改文字或范围后，点击 **Search** 提交修改。
 4. 核对结果中的会话、项目目录和匹配片段。需要缩小范围时，选择 **Project folder (optional)**，再点 **Search**。
 
-**Index coverage and text limits** 显示实际缓存范围和缩短／省略的条目。**Index existing history again** 刷新最近 200 个会话并跳过未变化的快照，不会自动进入更旧历史。**Cancel indexing** 保留已缓存的内容；关闭搜索对话框后，正在进行的索引仍会继续。失败或取消后用 **Retry** 重试。
+**Index coverage and text limits** 显示实际缓存范围和缩短／省略的条目。**Refresh recent history** 刷新最近 200 个会话并跳过未变化的快照。**Index next older conversations** 明确继续读取更旧的一组历史，沿用已保存的分页进度。**Cancel indexing** 保留已缓存的内容和未读分页条目；取消或重启后用 **Continue indexing** 继续，失败的原文读取用 **Retry unread histories** 重试。关闭搜索对话框后，正在进行的索引仍会继续。
 
 索引完成时会保留未提交的修改、正在阅读的原会话、结果焦点和导航选择。关闭搜索对话框或正在查看已有结果时，返回后用 **Search** 更新匹配。仍在等待响应的已提交查询会先完成，再执行一次新查询；新提交的查询优先于旧响应。
 
@@ -49,11 +49,15 @@ uvx --refresh --prerelease allow codex-desk@latest
 
 长会话每页最多显示 **40 个条目**（原生内容项或未产生内容项的回合结果），用 **Previous items**／**Next items** 换页；含无内容项回合时按钮为 **Previous entries**／**Next entries**。没有内容项的回合仍显示原生 ID、状态和已报告的错误信息，计数与原始内容项分开。长输出用 **Earlier text**／**Later text** 阅读其他文字窗口，每个窗口最多 **20,000 个字符**。原匹配项已变化时，查看器显示实际定位状态；读取失败用 **Retry read** 重试。
 
+**Find in this original conversation** 查找本次读取提供的全部可读文字，包括其他条目页和超出缓存前缀的长输出。输入文字后点 **Find**，用 **Previous match**／**Next match**，或查看器中的 Shift+F3／F3 跳转。**Copy full item text** 复制整个可读内容项，**Copy source reference** 复制会话及原生 thread／turn／item／项目目录标识。正文结果的 **Previous matches**／**Next matches** 可查看后续匹配页；从原文返回后保留当前结果页。
+
 ### 已知标题，或会话不在近期索引里
 
 首页点击 **Browse all conversations**，或侧栏 **Browse existing Codex sessions**。输入标题文字，点击 **Search titles**，需要时用 **Load more**。在该行直接点击 **Read original conversation**，无需先续接，也不要求原目录存在。返回后保留标题查询和已加载列表。
 
-标题搜索不搜索正文。若要把更旧会话的正文加入内容搜索，可在目录存在时明确续接它；打开后的可读活动会缓存到 Desk。
+标题搜索不搜索正文。若要把更旧会话的正文加入内容搜索，用 **Index next older conversations** 延伸索引；也可在目录存在时明确续接，打开后的可读活动会缓存到 Desk。
+
+指定项目时，可在 **Open a project** 输入原来保存的完整目录，即使目录已删除，**Find existing sessions** 仍能按该目录搜索标题、分页并阅读原文。缺失目录的结果不提供 Resume，新建任务也保持不可用；**Back to project results** 返回原查询、分页和来源行。
 
 ## 4. 准备好后再继续任务
 
@@ -70,6 +74,14 @@ uvx --refresh --prerelease allow codex-desk@latest
 - **检查准备是否恢复：** 选中同一会话，核对任务文字、Work／Plan 模式和 **Prepared follow-ups**。草稿和后续任务保存在本地，不会因重启自动发送。
 
 本地记录默认位于 `~/.local/state/codex-desk/desk.sqlite3`。同一 state directory 保留会话绑定、索引缓存和准备内容；浏览器记住上次选中的会话。换浏览器时，在侧栏重新选择它。
+
+### 不打开原生任务，也能检查和复用准备内容
+
+首页或侧栏 **Prepared work** 按项目显示已保存的草稿和后续任务。点击 **Review draft and follow-ups** 阅读、复制或修改该会话的准备内容，目录已删除时仍可只读查看。后续任务的 **Use in this session draft** 先展示原指令，再用 **Append** 或 **Replace** 明确放入同一会话草稿；源后续任务及顺序不变。
+
+**Save draft locally** 只保存草稿；**Save draft and open** 在保存成功后打开该会话，并显示刚审核的原文及 Work／Plan 模式，随后才由你决定是否运行。保存期间有更新的编辑、切换阅读或冲突时，会保留编辑而不继续打开。打开失败后可用 **Open conversation** 重试已保存的草稿，或继续本地检查。
+
+已有任务打开时，**Recent work** 提供只读历史入口；**Return to selected work** 返回原任务，保留当前 Plan、草稿和后续任务。
 
 ## 6. 分享结果或求助
 
