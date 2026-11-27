@@ -28,6 +28,8 @@ Each item shows a window of up to **20,000 text characters**. For longer output,
 
 **Copy full item text** copies the whole readable message/tool item, not just its visible 20,000-character window. **Copy source reference** copies the conversation, native thread/turn/item IDs and project folder for your current investigation. These actions leave your saved preparation unchanged.
 
+**Previous items** and **Next items** move keyboard focus into the newly displayed page, including a final page without a saved-text match. Tab then reaches that page's item controls; F3 remains local to the original reader.
+
 ## What the index covers
 
 - The initial pass reads up to 200 recent conversations. **Refresh recent history** starts at the current top and skips unchanged snapshots. **Index next older conversations** explicitly reads the next bounded group using retained native page progress; it never starts automatically. Cancellation and restart keep unread page rows for **Continue indexing**. **Retry unread histories** retries retained failed reads. An active older boundary is not rewound by recent refresh, and older cached evidence remains.
