@@ -44,6 +44,9 @@ async def check(width, browser, root, evidence):
             native.append('explicit-open:'+id);assert id in ('a','d')
             if id=='d' and open_control['fail']:raise OSError('Daily project temporarily unavailable')
             desk.store.update(id,status='ready',provider='fixture',model='fixture')
+            if id=='d' and open_control.get('entered'):
+                open_control['entered'].set()
+                assert open_control['release'].wait(30),'Native open reply was not released'
             return {'thread':{'id':'native-'+id,'cwd':str(a if id=='a' else d),'name':'Project '+id.upper(),'turns':[]},'model':'fixture','modelProvider':'fixture'}
         def start_server(port=0):
             desk.catalog=lambda:Catalog();desk.open=open_saved
@@ -272,6 +275,54 @@ async def check(width, browser, root, evidence):
             assert native==daily_native_before+['explicit-open:d']
             checks.append('queued Work append preserves destination Plan; a late save keeps newer Work edits local until a second explicit Save and open shows the exact unsent task')
 
+            # Save has finished, but the admitted native Open reply is still
+            # waiting. New typing belongs to this retained local editor, not
+            # the saved capture being opened behind it.
+            await page.locator('#show-preparation').click()
+            await page.wait_for_function("$('preparation-list').getAttribute('aria-busy')==='false'")
+            await page.get_by_role('button',name='Review preparation in Project D',exact=True).click()
+            saved_open_capture='Saved Plan capture before the native Open reply.'
+            await page.locator('#preparation-text').fill(saved_open_capture)
+            await page.locator('#preparation-mode').select_option('plan')
+            entered,release=threading.Event(),threading.Event()
+            open_control.update(entered=entered,release=release)
+            opens_before=list(native)
+            try:
+                await page.locator('#preparation-save-open').click()
+                assert await asyncio.to_thread(entered.wait,10),'Native open never entered the held reply'
+                assert load_draft(desk.store,'d')['text']==saved_open_capture
+                assert load_draft(desk.store,'d')['mode']=='plan'
+                assert native==opens_before+['explicit-open:d']
+                assert await page.locator('#preparation-open').is_disabled()
+                newer='Newer unsent Work while the native Open reply waits.'
+                await page.locator('#preparation-text').fill(newer)
+                await page.locator('#preparation-mode').select_option('native')
+                release.set()
+                await page.wait_for_function("!opening && !$('preparation-save-open').disabled && $('preparation').open")
+                assert await page.locator('#prompt').input_value()==saved_open_capture
+                assert await page.locator('#turn-mode').input_value()=='plan'
+                assert await page.locator('#preparation-text').input_value()==newer
+                assert await page.locator('#preparation-mode').input_value()=='native'
+                assert 'Newer edits' in await page.locator('#preparation-draft-status').inner_text()
+                assert load_draft(desk.store,'d')['text']==saved_open_capture
+                assert followup_snapshot(desk.store,'d')==daily_queue
+                assert native==opens_before+['explicit-open:d']
+            finally:
+                release.set();open_control.pop('entered',None);open_control.pop('release',None)
+            await page.get_by_role('button',name='Review preparation in Project B',exact=True).click()
+            await page.get_by_role('button',name='Review preparation in Project D',exact=True).click()
+            assert await page.locator('#preparation-text').input_value()==newer
+            assert await page.locator('#preparation-mode').input_value()=='native'
+            await page.locator('#preparation-save').click()
+            await page.wait_for_function("v => !$('preparation-save').disabled && $('prompt').value===v",arg=newer)
+            assert load_draft(desk.store,'d')['text']==newer
+            assert load_draft(desk.store,'d')['mode']=='native'
+            assert await page.locator('#turn-mode').input_value()=='native'
+            assert native==opens_before+['explicit-open:d']
+            assert followup_snapshot(desk.store,'d')==daily_queue
+            await page.locator('#preparation-close').click()
+            checks.append('real held native Open reply admits one open and shows its saved Plan capture while newer Work text stays in the current modal, survives review switching, and reaches the task only after an explicit later local Save')
+
             # Replace explicitly adopts the queued Plan mode. Real save errors,
             # another writer's revision, and an unavailable open each keep it.
             await page.locator('#show-preparation').click()
@@ -336,7 +387,7 @@ async def check(width, browser, root, evidence):
             checks.append('cold same-state Desk/Store restart restores the exact unsent Plan, native binding and both original prepared queues; review remains local at this width')
             await page.screenshot(path=str(evidence/f'preparation-{width}.png'))
             assert not errors
-            receipt={'width':width,'checks':checks,'javascript_errors':errors,'controlled_model_turns':0,'explicit_preparation_opens':native[len(daily_native_before):],'cold_restart_same_state':True,
+            receipt={'width':width,'checks':checks,'javascript_errors':errors,'controlled_model_turns':0,'explicit_preparation_opens':native[len(daily_native_before):],'cold_restart_same_state':True,'newer_editor_during_native_open':True,
                      'same_session_clean_update':True,'pending_root_revision_conflict':root_conflicts,'draft_response_codes':draft_response_codes}
             (evidence/f'acceptance-{width}.json').write_text(json.dumps(receipt,indent=2)+'\n')
             return len(checks)
