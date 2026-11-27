@@ -237,8 +237,9 @@ async def check(width, playwright, evidence):
             async def catalog_read(identifier):
                 row = catalog_row(identifier)
                 assert await row.count() == 1
-                assert await row.locator('button').all_text_contents() == [
-                    'Resume with current settings', 'Review handoff', 'Read original conversation']
+                expected = ['Review handoff', 'Read original conversation']
+                if Path(threads[identifier]['cwd']).is_dir():expected.insert(0, 'Resume with current settings')
+                assert await row.locator('button').all_text_contents() == expected
                 before = len(paths('/api/native/thread'))
                 await row.get_by_role('button', name='Read original conversation', exact=True).click()
                 await ready()
