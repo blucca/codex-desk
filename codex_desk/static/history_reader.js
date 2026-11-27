@@ -422,7 +422,7 @@
   }
   async function refreshFind(query,anchor,ticket){
     const search=++findVersion,valid=()=>search===findVersion && current(ticket);
-    finding=true;findGroups=[];findTotal=0;findCursor=-1;findControls();
+    preserveChrome(()=>{finding=true;findGroups=[];findTotal=0;findCursor=-1;findControls();},ticket);
     const groups=[];let total=0;
     try{
       for(let index=0;index<rows.length;index++){
@@ -483,7 +483,7 @@
       else if(targetIndex>=0){const row=rows[targetIndex],phrase=str(requested.match_text);
         el('match').textContent=!visibleTypes.has(row.item.type)?'The requested item has no supported readable text. You can still read the conversation.':
           phrase && (Number.isInteger(requested.match_start)?textFor(row.item).slice(requested.match_start,requested.match_start+phrase.length)!==phrase:!textFor(row.item).includes(phrase))?'The saved phrase is no longer at its captured location in this original native item. You can still read the conversation.':'Showing the matching original native turn and item.';}
-      el('error').hidden=el('retry').hidden=true;render(false,view);findControls();
+      el('error').hidden=el('retry').hidden=true;render(false,view);preserveChrome(()=>findControls(),ticket);
       if(submitted && query)await refreshFind(query,anchor,ticket);
       return true;
     }catch(error){

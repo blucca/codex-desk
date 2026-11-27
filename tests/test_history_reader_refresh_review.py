@@ -76,6 +76,29 @@ response=Error('Failed native read');const failed=refresh();const beforeFailure=
 assert.equal(item.getBoundingClientRect().top,beforeFailure,'Error and retry controls preserve the same latest text viewport');
 ''')
 
+    def test_submitted_find_chrome_preserves_source_during_refresh_recomputation(self):
+        view_handlers=VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
+            '  function restoreView(view,ticket){', 'restoreView=function(view,ticket){')
+        self.run_js(r'''
+const document={activeElement:null},pre={scrollTop:80};let headerShift=0;
+const item={dataset:{turnId:'turn',itemId:'old',windowStart:'40000'},open:true,
+  getBoundingClientRect:()=>({top:400+headerShift-el('').scrollTop-el('body').scrollTop,bottom:500+headerShift-el('').scrollTop-el('body').scrollTop}),
+  contains:()=>false,querySelector:()=>pre,querySelectorAll:()=>[]};
+const viewItems=()=>[item],elementKey=item=>JSON.stringify([item.dataset.turnId,item.dataset.itemId]);
+const selectedText=()=>null,restoreSelectedText=()=>{};
+el('body').getBoundingClientRect=()=>({top:200+headerShift-el('').scrollTop,bottom:500+headerShift-el('').scrollTop});
+el('body').scrollTop=100;el('').scrollTop=40;
+'''+view_handlers+r'''
+findQuery='evidence';findSubmitted=true;el('find-query').value='evidence';
+findGroups=[{index:0,spans:root.DeskHistoryFind.spans(rows[0].item.text,'evidence'),first:0}];findTotal=1;findCursor=0;
+findControls=()=>{headerShift=finding?18:findTotal?0:-22;};
+render=(scroll,snapshot)=>restoreView(snapshot,version);
+const before=item.getBoundingClientRect().top;
+response=thread([['old','exact old evidence']]);const pending=refresh();release();assert(await pending);
+assert.equal(item.getBoundingClientRect().top,before,'Both the intermediate no-matches and busy-Find status preserve original screen coordinates');
+assert.equal(findCursor,0);assert.equal(pre.scrollTop,80);
+''')
+
     def test_edited_then_restored_query_is_unsent_until_explicit_find(self):
         self.run_js(HANDLERS+"""
 findQuery='evidence';findSubmitted=true;el('find-query').value='evidence';
