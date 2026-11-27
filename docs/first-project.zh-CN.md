@@ -79,6 +79,8 @@ uvx --refresh --prerelease allow codex-desk@latest
 
 首页或侧栏 **Prepared work** 按项目显示已保存的草稿和后续任务。点击 **Review draft and follow-ups** 阅读、复制或修改该会话的准备内容，目录已删除时仍可只读查看。后续任务的 **Use in this session draft** 先展示原指令，再用 **Append to draft** 或 **Replace draft text** 明确放入同一会话草稿；源后续任务及顺序不变。
 
+准备列表中的 **Edit instruction**、Work／Plan 和 **Save instruction** 只修改该条后续指令；**Cancel instruction edit** 只放弃这一条的未保存编辑。**Remove saved instruction** 删除已保存版本，**Move instruction up/down** 调整顺序，**Clear saved queued instructions** 清空当前显示顺序的准备列表；都不会打开原生任务或改变独立草稿。刷新或切换审阅会保留指令编辑。其他窗口修改后，先明确选择 **Load current instruction** 或 **Keep my instruction edit**，再保存。指令已被删除时保留本地编辑直到 Cancel，不会由 Save 自动重建。
+
 **Save draft locally** 只保存草稿；**Save draft and open** 在保存成功后打开该会话，并显示刚审核的原文及 Work／Plan 模式，随后才由你决定是否运行。保存期间有更新的编辑、切换阅读或冲突时，会保留编辑而不继续打开。打开失败后可用 **Open conversation** 重试已保存的草稿，或继续本地检查。
 
 已有任务打开时，**Recent work** 提供只读历史入口；**Return to selected work** 返回原任务，保留当前 Plan、草稿和后续任务。

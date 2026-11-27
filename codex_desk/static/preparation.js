@@ -44,6 +44,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     if(el('').open)el(editors.get(selected)?.ready?'text':'editor-title').focus({preventScroll:true});
   }
   function remember(){
+    rememberQueueViews();
     const editor=editors.get(selected);if(!editor?.ready)return;
     const text=el('text').value,mode=el('mode').value;
     if(editor.text!==text || editor.mode!==mode){editor.text=text;editor.mode=mode;++editor.sequence;}
@@ -83,6 +84,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   function updateRow(row){
     const editor=editors.get(row.id);if(!editor)return;
     editor.row=row;
+    reconcileQueueEdits(editor);
     if(row.draft){
       const latest=draft(row.draft);
       if(!editor.ready){Object.assign(editor,latest,{saved:latest,ready:true});editor.message='Saved draft loaded. Nothing has been sent.';}
@@ -140,7 +142,132 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
       if(editor)editor.message='Copy failed — select the text to copy.';
     }finally{if(visible(id))controls();}
   }
+  function queueEntry(editor,id){return editor.row.followups?.entries?.find(e=>e.id===id);}
+  function rememberQueueViews(){
+    const editor=editors.get(selected);if(!editor?.queueEdits)return;
+    for(const node of el('followups').querySelectorAll('textarea')){
+      const edit=editor.queueEdits.get(node.dataset.followup);if(!edit || node.dataset.session!==editor.row.id)continue;
+      edit.view={start:node.selectionStart,end:node.selectionEnd,direction:node.selectionDirection,scroll:node.scrollTop};
+    }
+  }
+  function reconcileQueueEdits(editor){
+    for(const edit of editor.queueEdits?.values() || []){
+      const entry=queueEntry(editor,edit.id);
+      edit.unavailable=!entry || entry.state!=='queued';
+      if(entry && entry.revision>edit.revision)edit.conflict={...entry};
+    }
+  }
+  function beginQueueEdit(editor,entry){
+    if(!visible(editor.row.id) || entry.state!=='queued')return;
+    remember();editor.queueEdits??=new Map();
+    if(!editor.queueEdits.has(entry.id))editor.queueEdits.set(entry.id,
+      {id:entry.id,text:entry.text,mode:entry.mode,revision:entry.revision,sequence:0,busy:false,conflict:null,view:null});
+    drawFollowups(editor);
+    const node=[...el('followups').querySelectorAll('textarea')].find(n=>n.dataset.followup===entry.id);
+    node?.focus({preventScroll:true});
+  }
+  function cancelQueueEdit(editor,id){
+    remember();editor.queueEdits?.delete(id);
+    if(visible(editor.row.id))drawFollowups(editor);
+  }
+  async function queueConflict(editor,snapshot,current,id){
+    if(editor.row.followups!==snapshot)return;
+    let latest=current;
+    // Edit/remove 409s carry one entry, not a complete queue. Read its
+    // exact session before offering a revision choice or changing order.
+    if(!Array.isArray(latest?.entries)){
+      if(!id || latest?.entry?.id!==id)return;
+      const version=saveVersion;
+      latest=await options.api('/api/followups?session='+encodeURIComponent(editor.row.id));
+      if(version!==saveVersion || editor.row.followups!==snapshot)return;
+    }
+    if(Array.isArray(latest?.entries))editor.row.followups=latest;
+  }
+  async function saveQueueEdit(editor,id){
+    const edit=editor.queueEdits?.get(id),entry=queueEntry(editor,id);
+    if(!visible(editor.row.id) || editor.queueBusy || !edit || edit.busy || edit.conflict || !entry || entry.state!=='queued')return false;
+    const sequence=edit.sequence,snapshot=editor.row.followups;
+    const payload={session:editor.row.id,id,text:edit.text,mode:edit.mode,revision:edit.revision};
+    edit.busy=true;edit.message='Saving this queued instruction locally…';++saveVersion;
+    drawFollowups(editor);
+    try{
+      const result=await options.api('/api/followups/edit',payload);
+      const saved=result?.entries?.find(e=>e.id===id);
+      if(!saved || saved.text!==payload.text || saved.mode!==payload.mode || !Number.isInteger(saved.revision) || saved.revision<=payload.revision)
+        throw Error('Queue save receipt did not match this instruction. Refresh preparation to check it.');
+      ++saveVersion;
+      if(editor.row.followups===snapshot)editor.row.followups=result;
+      if(editor.queueEdits?.get(id)!==edit)return true;
+      edit.revision=saved.revision;edit.conflict=null;
+      edit.message=sequence===edit.sequence?'Queued instruction saved locally.':'Earlier edit saved. Your newer edits are kept; choose Save instruction.';
+      reconcileQueueEdits(editor);return true;
+    }catch(e){
+      if(editor.queueEdits?.get(id)===edit){
+        try{await queueConflict(editor,snapshot,e.current,id);}catch(readError){e.message+=' Choose Refresh to read the current queue.';}
+        reconcileQueueEdits(editor);
+        edit.message=e.message;
+      }
+      return false;
+    }finally{
+      edit.busy=false;
+      if(visible(editor.row.id) && editor.queueEdits?.get(id)===edit){rememberQueueViews();drawFollowups(editor);}
+    }
+  }
+  async function changeQueue(editor,path,payload){
+    if(!visible(editor.row.id) || editor.queueBusy)return false;
+    remember();const snapshot=editor.row.followups;
+    editor.queueBusy=true;editor.queueMessage='Updating saved queued instructions locally…';++saveVersion;
+    drawFollowups(editor);
+    try{
+      const result=await options.api(path,{session:editor.row.id,...payload});
+      if(!Array.isArray(result?.entries))throw Error('Queue receipt unavailable. Refresh saved preparation to check it.');
+      ++saveVersion;
+      if(editor.row.followups===snapshot){editor.row.followups=result;reconcileQueueEdits(editor);editor.queueMessage='Saved queue updated locally. Nothing has been sent.';}
+      else editor.queueMessage='Saved queue updated. Choose Refresh to read the latest order; your local edits are kept.';
+      return true;
+    }catch(e){
+      try{await queueConflict(editor,snapshot,e.current,payload.id);}catch(readError){e.message+=' Choose Refresh to read the current queue.';}
+      reconcileQueueEdits(editor);
+      editor.queueMessage=e.message;return false;
+    }finally{editor.queueBusy=false;if(visible(editor.row.id))drawFollowups(editor);}
+  }
+  function moveQueueEntry(editor,entry,direction){
+    const entries=editor.row.followups?.entries || [],index=entries.findIndex(e=>e.id===entry.id),next=index+direction;
+    if(index<0 || next<0 || next>=entries.length || entries.some(e=>e.state!=='queued') || editor.row.followups?.reservation)return false;
+    const order=entries.map(e=>e.id),ids=[...order];[ids[index],ids[next]]=[ids[next],ids[index]];
+    return changeQueue(editor,'/api/followups/reorder',{ids,order});
+  }
+  function drawQueueEdit(editor,entry,box,action){
+    const edit=editor.queueEdits?.get(entry.id);if(!edit)return;
+    const text=make('textarea','','preparation-queue-text');text.value=edit.text;text.rows=5;
+    text.dataset.session=editor.row.id;text.dataset.followup=entry.id;text.dataset.control='queue-text';
+    text.setAttribute('aria-label','Queued instruction in '+name(editor.row));
+    const mode=make('select');mode.dataset.session=editor.row.id;mode.dataset.followup=entry.id;mode.dataset.control='queue-mode';
+    for(const value of ['native','plan']){const option=make('option',modeLabel(value));option.value=value;mode.append(option);}mode.value=edit.mode;
+    mode.setAttribute('aria-label','Queued instruction mode');
+    text.oninput=()=>{edit.text=text.value;++edit.sequence;};mode.onchange=()=>{edit.mode=mode.value;++edit.sequence;};
+    text.disabled=mode.disabled=!!edit.unavailable;
+    const status=make('p',edit.unavailable?'Instruction is no longer queued. Your local edit is kept.':
+      edit.conflict?'This instruction changed elsewhere. Your edits are kept.':edit.message || 'Unsaved queue edit. Nothing has been sent.','muted');status.setAttribute('role','status');
+    box.append(text,mode,status);
+    if(edit.conflict){
+      box.append(make('pre',edit.conflict.text));
+      box.append(action('Load current instruction',()=>{
+        if(edit.busy || edit.conflict.state!=='queued')return;
+        Object.assign(edit,{text:edit.conflict.text,mode:edit.conflict.mode,revision:edit.conflict.revision,conflict:null,view:null});
+        ++edit.sequence;drawFollowups(editor);
+      },'queue-load',entry,edit.busy || edit.unavailable));
+      box.append(action('Keep my instruction edit',()=>{
+        if(edit.busy || edit.conflict.state!=='queued')return;
+        edit.revision=edit.conflict.revision;edit.conflict=null;edit.message='Your edit is kept. Choose Save instruction to replace the current revision.';drawFollowups(editor);
+      },'queue-keep',entry,edit.busy || edit.unavailable));
+    }
+    box.append(action('Save instruction',()=>saveQueueEdit(editor,entry.id),'queue-save',entry,editor.queueBusy || edit.busy || !!edit.conflict || edit.unavailable),
+      action('Cancel instruction edit',()=>cancelQueueEdit(editor,entry.id),'queue-cancel',entry));
+    if(edit.view){text.setSelectionRange?.(edit.view.start,edit.view.end,edit.view.direction);text.scrollTop=edit.view.scroll;}
+  }
   function drawFollowups(editor){
+    rememberQueueViews();
     const container=el('followups'),focus=document.activeElement;
     const owned=container.contains(focus) && focus?.dataset?.session===editor.row.id;
     let restore=null;
@@ -158,13 +285,24 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
         make('p','Captured instruction. Open this conversation to review its activity and start receipt.','muted'),make('pre',reservation.text));
       box.append(action('Copy captured instruction',()=>copy(editor.row.id,reservation.text,'Captured instruction'),'copy-captured'));container.append(box);
     }
-    const entries=editor.row.followups?.entries || [];
+    if(editor.queueMessage)container.append(make('p',editor.queueMessage,'muted'));
+    const savedEntries=editor.row.followups?.entries || [],blocked=!!reservation || savedEntries.some(e=>e.state!=='queued');
+    if(savedEntries.length)container.append(action('Clear saved queued instructions',()=>changeQueue(editor,'/api/followups/clear',{order:savedEntries.map(e=>e.id)}),'queue-clear',null,blocked || editor.queueBusy));
+    const entries=[...savedEntries];
+    for(const edit of editor.queueEdits?.values() || [])if(!entries.some(e=>e.id===edit.id))entries.push({id:edit.id,text:edit.text,mode:edit.mode,revision:edit.revision,order:'Removed',state:'unavailable'});
     for(const entry of entries){
       const box=make('article','','preparation-followup');box.dataset.followup=entry.id;
-      const state={queued:'Prepared',reserved:'Awaiting start receipt',needs_review:'Needs start review'}[entry.state] || 'State unreported';
+      const state={queued:'Prepared',reserved:'Awaiting start receipt',needs_review:'Needs start review',unavailable:'No longer queued'}[entry.state] || 'State unreported';
       box.append(make('h4',entry.order+'. '+modeLabel(entry.mode)+' · '+state),make('pre',entry.text));
       const actions=make('div','','actions');
       actions.append(action('Copy instruction',()=>copy(editor.row.id,entry.text,'Instruction'),'copy-followup',entry));
+      if(entry.state==='queued'){
+        const index=savedEntries.findIndex(e=>e.id===entry.id),edit=editor.queueEdits?.get(entry.id);
+        actions.append(action('Edit instruction',()=>beginQueueEdit(editor,entry),'queue-edit',entry,editor.queueBusy));
+        actions.append(action('Remove saved instruction',()=>changeQueue(editor,'/api/followups/remove',{id:entry.id,revision:entry.revision}),'queue-remove',entry,editor.queueBusy || edit?.busy));
+        actions.append(action('Move instruction up',()=>moveQueueEntry(editor,entry,-1),'queue-up',entry,blocked || editor.queueBusy || index===0));
+        actions.append(action('Move instruction down',()=>moveQueueEntry(editor,entry,1),'queue-down',entry,blocked || editor.queueBusy || index===savedEntries.length-1));
+      }
       if(entry.state==='queued')actions.append(action('Use in this session draft',()=>{
         if(!visible(editor.row.id))return;
         remember();editor.reuse={id:entry.id,revision:entry.revision,text:entry.text,mode:entry.mode};
@@ -172,12 +310,22 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
         el('reuse').scrollIntoView({block:'nearest'});
         el('reuse-text').focus({preventScroll:true});
       },'reuse-followup',entry,!editor.ready));
-      box.append(actions);container.append(box);
+      box.append(actions);drawQueueEdit(editor,entry,box,action);container.append(box);
     }
     if(!entries.length && !reservation)container.append(make('p','No prepared follow-ups for this conversation.','muted'));
     // Refresh and a save receipt replace these controls. Restore the exact
     // session/instruction/action, never another row with the same text or ID.
-    if(owned && el('').open){if(restore && !restore.disabled)restore.focus({preventScroll:true});else focusEditor();}
+    if(owned && el('').open){
+      if(['queue-text','queue-mode'].includes(focus.dataset.control)){
+        restore=[...container.querySelectorAll(focus.dataset.control==='queue-text'?'textarea':'select')].find(n=>n.dataset.followup===focus.dataset.followup);
+      }
+      if(restore && !restore.disabled)restore.focus({preventScroll:true});else focusEditor();
+    }
+    // Apply a textarea's view only after its row is attached and focus restored.
+    for(const text of container.querySelectorAll('textarea')){
+      const view=editor.queueEdits?.get(text.dataset.followup)?.view;
+      if(view){text.setSelectionRange?.(view.start,view.end,view.direction);text.scrollTop=view.scroll;}
+    }
   }
   function drawEditor(){
     const editor=editors.get(selected);
@@ -246,6 +394,12 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
         await loadEditor(reviewed);
         if(ticket!==listVersion || !el('').open || !sameScope(query,scope()))return false;
         if(savedAt!==saveVersion){el('status').textContent='A draft was saved while Refresh was reading. Choose Refresh for the latest list; your edits are kept.';return false;}
+      }
+      if(reviewed?.queueEdits?.size && !incoming.has(reviewed.row.id) &&
+         (!query.cwd || query.cwd===reviewed.row.cwd) && (query.archived || !reviewed.row.archived)){
+        const latest=await options.api('/api/followups?session='+encodeURIComponent(reviewed.row.id));
+        if(ticket!==listVersion || !el('').open || !sameScope(query,scope()) || savedAt!==saveVersion)return false;
+        reviewed.row={...reviewed.row,followups:latest};reconcileQueueEdits(reviewed);
       }
       rows=incoming;drawProjects();drawList();drawEditor();
       el('status').textContent=rows.size?rows.size+' conversation'+(rows.size===1?'':'s')+' with saved preparation or task requests. Review locally.':'No saved drafts, prepared follow-ups or task requests in this scope.';

@@ -100,7 +100,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
-- **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. **Prepared work** reviews saved drafts, queued instructions and unconfirmed Run requests across projects without starting native work, including removed folders. Choose **Review task request** to inspect the original captured instruction and target independently of your current draft. Explicitly append or replace draft text to reuse an instruction; save locally, then choose when to open and send it.
+- **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. **Prepared work** reviews saved drafts, queued instructions and unconfirmed Run requests across projects without starting native work, including removed folders. Edit, remove, reorder or clear saved queued instructions locally while leaving today's task and draft in place. Choose **Review task request** to inspect the original captured instruction and target independently of your current draft. Explicitly append or replace draft text to reuse an instruction; save locally, then choose when to open and send it.
 - **Review before changing provider.** Carry editable visible task evidence into a distinct target-provider conversation, preserving the original.
 - **Find a saved decision.** Search readable history and inspect the original answer before deciding whether to continue the task.
 
