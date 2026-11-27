@@ -46,3 +46,16 @@ To rerun only Prepared lookup and original-source return:
 python3 examples/check_browser_preview_lookup.py --site temp/browser-preview/demo --evidence temp/browser-preview/lookup-checks
 python3 examples/check_browser_preview_lookup.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/embedded-lookup-checks
 ```
+
+## Read the task behind sample evidence
+
+In an original sample conversation, use **Read containing task** beside a command
+item. Read its full supplied instruction, then **Read this task response**.
+**Return to task context** restores the reviewed control and scroll;
+**Return to original passage** restores the original Find/selection/window.
+The maintained checker exercises these paths at both widths, ordinary and in an
+actual iframe, alongside the existing Prepared lookup workflow.
+
+```sh
+python3 examples/check_browser_preview_task_context.py --site temp/browser-preview/demo --evidence temp/browser-preview/task-context
+```

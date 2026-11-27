@@ -21,7 +21,10 @@ def sample_threads():
             'cwdExists': True, 'modelProvider': 'sample', 'updatedAt': 1795650000,
             'turns': [{'id': f'sample-{name}-turn', 'status': 'completed', 'items': [
                 {'id': f'sample-{name}-question', 'type': 'userMessage', 'content': [{'type': 'text', 'text': f'Review the {name} decision and retain one useful next step.'}]},
-                {'id': f'sample-{name}-answer', 'type': 'agentMessage', 'text': answer}]}]})
+                {'id': f'sample-{name}-answer', 'type': 'agentMessage', 'text': answer},
+                {'id': f'sample-{name}-evidence', 'type': 'commandExecution', 'command': f'printf sample-{name}',
+                 'status': 'completed', 'exitCode': 0,
+                 'aggregatedOutput': f'Sample {name} command evidence: retained result — café🙂.'}]}]})
     return result
 
 

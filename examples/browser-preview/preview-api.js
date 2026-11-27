@@ -21,7 +21,7 @@
   const queue=id=>{lookup(id);return state.followups[id] || (state.followups[id]={entries:[],reservation:null});};
   const draftView=d=>({text:d.text,mode:d.mode,revision:d.revision});
   const conflict=current=>{const error=new Error('Sample draft changed elsewhere. Choose Keep mine or Load saved.');error.status=409;error.current=draftView(current);throw error;};
-  const coverage=()=>({indexed_threads:state.indexed?3:0,indexed_items:state.indexed?6:0,truncated_threads:0,omitted_items:0,unsupported_items:0,invalid_items:0,max_thread_items:5000,max_thread_chars:2000000,max_item_chars:200000});
+  const coverage=()=>({indexed_threads:state.indexed?3:0,indexed_items:state.indexed?threads.reduce((n,t)=>n+t.turns.reduce((m,turn)=>m+(turn.items?.length || 0),0),0):0,truncated_threads:0,omitted_items:0,unsupported_items:0,invalid_items:0,max_thread_items:5000,max_thread_chars:2000000,max_item_chars:200000});
   const job=()=>({id:'sample-index-1',status:state.indexed?'completed':'idle',mode:'recent',seen:state.indexed?3:0,indexed:state.indexed?3:0,skipped:0,failed:0,limit:200,has_more:false,older_available:false,resumable:false,retryable_failures:0});
   const fold=text=>String(text).normalize('NFKC').toLowerCase();
   const preparationFold=text=>Array.from(String(text).normalize('NFKC'), c=>window.DeskPreviewCasefold?.[c] ?? c.toLowerCase()).join('').normalize('NFKC');
@@ -55,7 +55,7 @@
     if(state.indexed && needle.length>=2)for(const t of threads){
       if(cwd && cwd!==t.cwd)continue;
       for(const turn of t.turns)for(const item of turn.items){
-        const text=item.type==='agentMessage'?item.text:(item.content || []).map(c=>c.text || '').join('\n');
+        const text=item.type==='agentMessage'?item.text:item.type==='commandExecution'?[item.command,item.aggregatedOutput].filter(x=>typeof x==='string').join('\n'):(item.content || []).map(c=>c.text || '').join('\n');
         const at=fold(text).indexOf(needle);if(at<0)continue;
         const binding=state.sessions.find(s=>s.thread_id===t.id);
         results.push({kind:binding?'activity':'native-activity',session_id:binding?.id,thread_id:t.id,turn_id:turn.id,item_id:item.id,item_type:item.type,cwd:t.cwd,title:t.name,profile:'default',provider:'sample',updated:t.updatedAt,snippet:text,match_text:text.slice(at,at+q.length)});

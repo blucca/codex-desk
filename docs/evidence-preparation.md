@@ -56,6 +56,31 @@ with the original `--codex-home` to read evidence from another native home.
 Reuse the same `--state-dir` when restarting Desk. The saved evidence remains in
 the draft; reopening the page restores preparation before you explicitly read A.
 
+## Read the task behind an excerpt
+
+In A's original reader, choose **Read containing task** beside the answer, command
+result or tool evidence you are inspecting. The task context identifies that
+item's own native turn, its reported status/error and each user instruction
+supplied in that turn.
+
+1. Choose **Read full instruction** to read the exact user-message item with the
+   ordinary full-text windows, Find and Copy controls.
+2. Choose **Return to task context**, then **Read this task response**. Desk reads
+   that same turn's last supplied final answer, or its last readable assistant
+   message when no final answer was supplied. The displayed phase and native
+   turn status remain separate facts.
+3. Choose **Return to task context** to inspect another supplied instruction, or
+   **Previous task** / **Next task** to follow the original's supplied turn order.
+4. Choose **Return to original passage** to restore the excerpt, text selection,
+   Find position and reading view. The outer Return control still leads back to
+   B's same unsent draft, saved follow-up or captured instruction.
+
+A task with no supplied readable user instruction reports that availability;
+its own response can still be read. An earlier instruction or a later answer
+belongs to another task and is not used in its place. Navigating task context,
+instruction and response uses the already-read original snapshot. **Refresh
+original** is the separate action that reads the native source again.
+
 ## Continue through ordinary preparation
 
 - **Prepared work → Review draft and follow-ups** reads the same saved text independently of today's selected task. **Browse originals for this draft** explicitly chooses that row as the destination; review and append there using its normal save. The draft, saved queue and captured request each offer **Read referenced original**.
@@ -108,3 +133,14 @@ output, reviews/appends locally, returns to its exact text window, and exercises
 changed/missing-source and cold-return paths. Both examples use generated fixture
 content. See [the complete workbench guide](workbench.md) for ordinary preparation
 and admission controls.
+
+The [browser-sample task-context check](../examples/check_browser_preview_task_context.py)
+reproduces tool evidence → its own supplied instruction → that task's response →
+the original passage → the unsent outer task across all three sample histories.
+It also checks a targeted no-input task without substituting a neighboring prompt.
+After building the maintained preview:
+
+```sh
+python3 examples/check_browser_preview_task_context.py --site temp/browser-preview/demo --evidence temp/browser-preview/task-context-checks
+python3 examples/check_browser_preview_task_context.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/embedded-task-context-checks
+```

@@ -4,9 +4,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'codex_desk/static/history_reader.js').read_text()
 READ = SOURCE[SOURCE.index('  async function readEmbeddedReference('):SOURCE.index('  function scrollMatch(')]
 CLOSE = SOURCE[SOURCE.index('  function close('):SOURCE.index('  function available(')]
+TASK_CONTROLS = SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  function taskSnapshot(')]
 SETUP = r'''
 const assert=require('assert/strict');
-let live=true,version=7,source={id:'sent-B',turns:[]},requested={thread_id:'sent-B',turn_id:'sent-turn',item_id:'sent-item'};
+let taskReview=null;let live=true,version=7,source={id:'sent-B',turns:[]},requested={thread_id:'sent-B',turn_id:'sent-turn',item_id:'sent-item'};
 let returned=0,options={valid:()=>live,onReturn:()=>returned++},page=3,findSubmitted=true,findQuery='needle',findGroups=[{index:121,spans:[{start:9,end:15}]}],findTotal=1,findCursor=0;
 const query={value:'needle'},elements={'find-query':query,'':{open:true,close(){this.open=false;}}};
 const el=id=>elements[id];let reads=[],shows=[],renders=[],restores=[],findUpdates=0,reply,hold=null;
@@ -16,7 +17,7 @@ const captureView=()=>({items:new Map(),selection:{text:'needle'},scroll:21,oute
 const textFor=()=>'';
 const root={DeskEvidencePreparation:{resolve:(r,h,t,f)=>{assert.strictEqual(r,reference);assert.equal(h,r.native_home);assert.equal(t.id,'original-A');assert.strictEqual(f,textFor);return {available:true,start_utf16:40};}}};
 const api=async path=>{reads.push(path);if(hold)await hold;return reply || {home_namespace:reference.native_home,thread:{id:'original-A',turns:[]}};};
-const show=async (target,callbacks)=>{shows.push({target,callbacks});options=callbacks;source=callbacks.preloadedThread;requested=target;++version;return true;};
+const show=async (target,callbacks)=>{shows.push({target,callbacks});options=callbacks;source=callbacks.preloadedThread;requested=target;taskReview=null;++version;return true;};
 const findControls=()=>findUpdates++,render=(scroll,view)=>renders.push({scroll,view});
 const invalidate=()=>{const cb=options?.onReturn;options=null;source=null;requested=null;++version;cb?.();};
 const settle=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -24,7 +25,7 @@ const settle=()=>new Promise(resolve=>setTimeout(resolve,0));
 @unittest.skipUnless(shutil.which('node'), 'Node required')
 class EvidenceReaderLifecycleTests(unittest.TestCase):
     def js(self, body):
-        result=subprocess.run(['node','-e',SETUP+READ+CLOSE+'\n(async()=>{'+body+'})().catch(e=>{console.error(e);process.exitCode=1;});'],capture_output=True,text=True,timeout=10)
+        result=subprocess.run(['node','-e',SETUP+TASK_CONTROLS+READ+CLOSE+'\n(async()=>{'+body+'})().catch(e=>{console.error(e);process.exitCode=1;});'],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
     def test_one_get_exact_source_then_back_restores_same_instruction_view_and_find(self):
@@ -77,4 +78,12 @@ await readEmbeddedReference(reference,7);assert.equal(close({}),false);assert.eq
     def test_owner_change_while_reading_cannot_restore_previous_instruction(self):
         self.js(r'''
 await readEmbeddedReference(reference,7);live=false;shows[0].callbacks.onReturn();await settle();assert.equal(shows.length,1);assert.equal(returned,1);
+''')
+
+    def test_embedded_return_restores_exact_native_task_context_owner(self):
+        self.js(r'''
+taskReview={mode:'item',capture:{thread_id:'sent-B',turn_id:'sent-turn'},itemLabel:'Original task response'};
+const owner=taskReview;await readEmbeddedReference(reference,7);assert.equal(taskReview,null);
+shows[0].callbacks.onReturn();await settle();assert.strictEqual(taskReview,owner);
+assert.equal(taskReview.capture.turn_id,'sent-turn');assert.equal(reads.length,1);assert.equal(shows.length,2);
 ''')

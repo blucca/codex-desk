@@ -14,7 +14,7 @@ ROW=SOURCE[SOURCE.index('  function rowKey('):SOURCE.index('  function itemNode(
 class ReaderRefreshTests(unittest.TestCase):
     def run_js(self,body):
         setup=r'''
-const assert=require('assert/strict'),root={DeskHistoryFind:require(FIND)};
+const assert=require('assert/strict'),root={DeskHistoryFind:require(FIND),DeskHistoryTasks:require(TASKS)};let taskReview=null;
 const elements=new Map();function el(id){if(!elements.has(id))elements.set(id,{hidden:false,disabled:false,value:'',textContent:''});return elements.get(id);}
 const PAGE_ENTRIES=40;const str=x=>typeof x==='string'?x:'';let version=1,refreshVersion=0,refreshing=false,loading=false,findVersion=0,finding=false,findGroups=[],findTotal=0,findCursor=-1,findSubmitted=false,findQuery='';
 let options=null;let source={id:'original',name:'First original'},requested={thread_id:'original'},rows=[{turn:{id:'turn'},item:{id:'old',type:'agentMessage',text:'exact old evidence'}}],page=0,targetIndex=-1;
@@ -26,7 +26,7 @@ function textFor(item){return item.text;}const visibleTypes=new Set(['agentMessa
 function findControls(message){findMessages.push(message);}function findMatch(){if(findCursor<0)return null;const group=findGroups.findLast(g=>g.first<=findCursor);return {index:group.index,...group.spans.at(findCursor-group.first)};}
 let response,release;async function api(path){apiCalls.push(path);return await new Promise((resolve,reject)=>{release=()=>response instanceof Error?reject(response):resolve(response);});}
 const thread=(items)=>({id:'original',name:'Updated original',cwd:'/retained',turns:[{id:'turn',items:items.map(([id,text])=>({id,type:'agentMessage',text}))}]});
-'''.replace('FIND',json.dumps(str(ROOT/'codex_desk/static/history_find.js')))
+'''.replace('FIND',json.dumps(str(ROOT/'codex_desk/static/history_find.js'))).replace('TASKS',json.dumps(str(ROOT/'codex_desk/static/history_tasks.js')))
         script=setup+ROW+HELPERS+'\n(async()=>{'+body+'})().catch(e=>{console.error(e);process.exitCode=1;});'
         result=subprocess.run(['node','-e',script],capture_output=True,text=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)

@@ -5,7 +5,7 @@ import unittest
 import test_history_reader_refresh as refresh_tests
 
 SOURCE=refresh_tests.SOURCE
-CONFIGURE=SOURCE[SOURCE.index('  function configure('):SOURCE.index('  root.DeskHistoryReader=')]
+CONFIGURE=SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  root.DeskHistoryReader=')]
 MANUAL=SOURCE[SOURCE.index('  function manualFindNavigation('):SOURCE.index('  function findMatch(')]
 ITEM=SOURCE[SOURCE.index('  function itemNode('):SOURCE.index('  function render(')]
 BOUNDS=SOURCE[SOURCE.index('  function bounds('):SOURCE.index('  function findControls(')]

@@ -55,7 +55,7 @@ async function request(path,data){const response=await window.fetch(path,data?{m
  const home=(await request('/api/native/home')).body.home_namespace;assert.match(home,/^[a-f0-9]{64}$/);
  const original=fixture.threads[0],turn=original.turns[0];
  const read=(await request('/api/native/task-response?thread='+original.id+'&turn='+turn.id));assert.equal(read.status,200);
- assert.deepEqual(read.body.thread,original);assert.equal(read.body.response.item_id,turn.items.at(-1).id);
+ assert.deepEqual(read.body.thread,original);assert.equal(read.body.response.item_id,turn.items.filter(item=>item.type==='agentMessage' && typeof item.text==='string' && item.text.trim()).at(-1).id);
  assert.equal(read.body.response.phase,null);assert.equal(read.body.response.selection,'last_assistant_message');
  const source=await request('/api/native/evidence-source?home='+home+'&thread='+original.id);
  assert.equal(source.status,200);assert.deepEqual(source.body.thread,original);assert.equal(source.body.home_namespace,home);
@@ -119,9 +119,19 @@ async function request(path,data){const response=await window.fetch(path,data?{m
  assert.equal((await request('/api/preparation?q='+phrase+'&archived=true')).body.lookup.total,2);
  await request('/api/archive',{session:id,archived:false});
  assert.deepEqual(window.DeskBrowserPreview.snapshot(),lookupBaseline);
+ await request('/api/history/index',{});
+ const indexedBaseline=window.DeskBrowserPreview.snapshot();
+ for(const t of fixture.threads){
+  const turn=t.turns[0],tool=turn.items.find(item=>item.type==='commandExecution');
+  const found=await request('/api/recall?q='+encodeURIComponent(tool.aggregatedOutput));
+  assert.equal(found.status,200);assert.equal(found.body.total,1);
+  assert.equal(found.body.results[0].thread_id,t.id);assert.equal(found.body.results[0].turn_id,turn.id);
+  assert.equal(found.body.results[0].item_id,tool.id);assert.equal(found.body.results[0].match_text,tool.aggregatedOutput);
+ }
+ assert.deepEqual(window.DeskBrowserPreview.snapshot(),indexedBaseline,'Command evidence searches changed preparation');
  assert(!requests.some(r=>/\/api\/(turn|followups\/send)$/.test(r.path)));assert.equal(external,0);
  console.log(JSON.stringify({passed:true,sample_histories:3,overview_sessions:1,prepared_followups:2,
-   overview_read_only:true,exact_project_scope:true,archive_scope:true,literal_unicode_lookup:true,lookup_owners:3,duplicate_phrase_owners:2,lookup_read_only:true,source_queue_unchanged:true,
+   overview_read_only:true,exact_project_scope:true,archive_scope:true,literal_unicode_lookup:true,command_evidence_search:true,lookup_owners:3,duplicate_phrase_owners:2,lookup_read_only:true,source_queue_unchanged:true,
    reload_preserved:true,conflict_status:409,same_page_sequence_recovery:true,native_model_calls:0,external_http_requests:external}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
 '''
@@ -528,15 +538,20 @@ async def main(args):
     assert (site / "index.html").is_file(), f"Build the preview first: {site}"
     evidence.mkdir(parents=True, exist_ok=True)
     from check_browser_preview_lookup import check as check_lookup
+    from check_browser_preview_task_context import check as check_task_context
     lookup_evidence = evidence / "prepared-lookup"
     lookup_evidence.mkdir(parents=True, exist_ok=True)
+    task_evidence = evidence / "task-context"
+    task_evidence.mkdir(parents=True, exist_ok=True)
     embedded = 'data-preview-embedded="true"' in (site / "index.html").read_text()
     async with async_playwright() as playwright:
         results = [await check(playwright, site, evidence, int(width), args.chromium, args.url) for width in args.widths.split(",")]
         lookup_results = [await check_lookup(playwright, site, lookup_evidence, int(width), args.chromium, embedded, args.url)
                           for width in args.widths.split(",")]
+        task_results = [await check_task_context(playwright, site, task_evidence, int(width), args.chromium, embedded, args.url)
+                        for width in args.widths.split(",")]
     (evidence / "acceptance.json").write_text(json.dumps({"passed": True, "viewports": results,
-        "prepared_lookup": lookup_results}, indent=2) + "\n")
+        "prepared_lookup": lookup_results, "task_context": task_results}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

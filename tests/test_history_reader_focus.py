@@ -9,14 +9,16 @@ READER=Path(__file__).resolve().parents[1]/'codex_desk/static/history_reader.js'
 NODE=shutil.which('node')
 FIXTURE=r"""
 const assert=require('assert'),frames=[],targets=[];
+const root={DeskHistoryTasks:require(TASK_HELPER)};let taskReview=null;
 const document={body:{},activeElement:null};document.activeElement=document.body;
 class Element {
-  constructor(){this.children=[];this.isConnected=true;this.scrollTop=0;this.dataset={};this.className='';this.classList={add:()=>{}};}
+  constructor(){this.children=[];this.isConnected=true;this.scrollTop=0;this.dataset={};this.listeners={};this.className='';this.classList={add:()=>{}};}
   append(...children){this.children.push(...children);}
   replaceChildren(){for(const child of this.children)child.disconnect();this.children=[];if(document.activeElement!==queryInput)document.activeElement=document.body;}
   disconnect(){this.isConnected=false;for(const child of this.children)child.disconnect();}
   querySelector(selector){if(selector==='mark')return null;for(const child of this.children){if(child.className==='history-reader-target')return child;const found=child.querySelector(selector);if(found)return found;}return null;}
-  addEventListener(){}
+  addEventListener(type,callback){this.listeners[type]=callback;}
+  contains(target){return this===target || this.children.some(child=>child.contains(target));}
   getBoundingClientRect(){return {top:100};}
   focus(options){document.activeElement=this;this.focusOptions=options;}
 }
@@ -24,7 +26,8 @@ const queryInput=new Element(),elements=new Map(),el=id=>{if(!elements.has(id))e
 const node=()=>new Element(),str=value=>typeof value==='string'?value:'';
 const requestAnimationFrame=callback=>frames.push(callback);
 const current=()=>true,available=()=>true;
-let api;const close=()=>{},read=()=>{},submitFind=()=>{},jumpFind=()=>{},invalidate=()=>{};
+let api,loading=false,finding=false,findSubmitted=false,findQuery='',findTotal=0,findActions=0;
+const close=()=>{},read=()=>{},submitFind=()=>{++findActions;},jumpFind=()=>{},invalidate=()=>{};
 const PAGE_ENTRIES=40,TEXT_CHARS=20000;let source={},version=1,page=0,originalItems=1,unsupportedItems=0,turnOnlyRows=0;
 let manualNavigations=0;const manualFindNavigation=()=>{++manualNavigations;};
 const rows=[{turn:{id:'turn',status:'completed',items:[]},item:{id:'item'}}];
@@ -38,11 +41,22 @@ class HistoryReaderFocusTests(unittest.TestCase):
         source=READER.read_text()
         snippets=[source[source.index('  function scrollMatch('):source.index('  function itemNode(')],
                   source[source.index('  function render('):source.index('  async function read(')],
+                  source[source.index('  function taskControls('):source.index('  function configure(')],
                   source[source.index('  function configure('):source.index('  root.DeskHistoryReader=')]]
-        result=subprocess.run([NODE,'-e',FIXTURE+'\n'+'\n'.join(snippets)+'\nconfigure({api(){}});\nconst pageClick=direction=>el(direction>0?"next":"previous").onclick();\n'+body+
+        result=subprocess.run([NODE,'-e',FIXTURE.replace('TASK_HELPER',json.dumps(str(READER.parent/'history_tasks.js')))+'\n'+'\n'.join(snippets)+'\nconfigure({api(){}});\nconst pageClick=direction=>el(direction>0?"next":"previous").onclick();\n'+body+
             "\nprocess.stdout.write(JSON.stringify({passed:true}));"],text=True,capture_output=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(json.loads(result.stdout),{'passed':True})
+
+    def test_f3_in_visible_task_context_keeps_focus_scroll_and_hidden_find_unsent(self):
+        self.run_case(r"""
+const contextControl=new Element();el('body').append(contextControl);el('').append(el('body'));
+el('').open=true;el('find-query').value='old quote';taskReview={mode:'context'};
+contextControl.focus();el('body').scrollTop=35;el('').scrollTop=55;
+let consumed=false;el('').listeners.keydown({key:'F3',target:contextControl,preventDefault(){consumed=true;}});
+assert(consumed);assert.equal(findActions,0);assert.strictEqual(document.activeElement,contextControl);
+assert.equal(el('body').scrollTop,35);assert.equal(el('').scrollTop,55);assert.equal(frames.length,0);
+""")
 
     def test_consecutive_rendered_targets_own_focus_before_any_animation_frame(self):
         self.run_case(r"""
