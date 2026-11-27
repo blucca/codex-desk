@@ -142,6 +142,10 @@ async def one(browser,width):
   from codex_desk.server import Desk,handler
   from http.server import ThreadingHTTPServer
   import threading
+  cold_view=await page.evaluate('()=>DeskSessionReading.capture()')
+  assert cold_view and not cold_view['latest']
+  assert next(row for row in cold_view['turn_views'] if row['kind']=='native_steps')=={
+   'turn_id':'turn-three','kind':'native_steps','open':True,'scroll_top':180,'scroll_left':0}
   retained_events=f.desk.store.events(original);port=f.server.server_port
   f.close_server();f.desk.store.db.close()
   f.desk=Desk('unused-fake-native',f.path,f.path/'state')
@@ -149,11 +153,22 @@ async def one(browser,width):
   f.server=ThreadingHTTPServer(('127.0.0.1',port),handler(f.desk))
   f.server_thread=threading.Thread(target=f.server.serve_forever,daemon=True);f.server_thread.start()
   assert f.desk.store.events(original)==retained_events
+  # A poll during owner shutdown can insert a connection banner. Settle
+  # the real replacement GET and ordinary recovery before pagehide saves.
+  await page.evaluate('()=>api("/api/state")')
+  await page.wait_for_function("$('error').hidden")
+  await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+  assert await page.evaluate('()=>DeskSessionReading.capture()')==cold_view
   await page.reload();await page.wait_for_function("$('native-steps-status').textContent==='Task failed'")
+  await page.wait_for_function('''s=>selected===s&&!opening&&
+   sessionReadingKey===JSON.stringify([s,"native-original"])&&
+   !sessionReadingPending&&!sessionReadingRestoring''',arg=original)
   r['cold_report']=await page.evaluate('()=>DeskNativeSteps.state()')
-  await page.locator('#native-steps summary').click()
+  cold_restored=await page.evaluate('()=>DeskSessionReading.capture()')
+  assert cold_restored==cold_view,(cold_view,cold_restored)
+  r['cold_reading_before'],r['cold_reading_after']=cold_view,cold_restored
   assert 'Fix parser' in await page.locator('#native-steps-list').inner_text();assert await page.evaluate('()=>DeskNativeSteps.state().reported')==last_report
-  r['checks'].append('actual HTTP and SQLite cold owner replacement/reload restores same native terminal/checklist from exact retained events')
+  r['checks'].append('actual HTTP and SQLite cold owner replacement/reload restores same native terminal/checklist and complete prior metadata-only reading view after settled owner restoration')
   assert {sid:{'draft':load_draft(f.desk.store,sid),'queue':followup_snapshot(f.desk.store,sid)} for sid in [original,other]}==before
   assert not [q for q in requests[boundary:] if q['method']=='POST' and q['path'] not in ['/api/open']]
   assert not f.requests and not f.sent and not errors

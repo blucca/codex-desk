@@ -122,6 +122,11 @@ async def one(browser, width):
             await page.locator(f'.session-row[data-session="{sid}"] .session').click()
             await page.wait_for_function('(s)=>selected===s&&!opening', arg=sid)
 
+        async def reading_settled(sid):
+            await page.wait_for_function('''s=>selected===s&&!opening&&
+                sessionReadingKey===JSON.stringify([s,"native-original"])&&
+                !sessionReadingPending&&!sessionReadingRestoring''', arg=sid)
+
         async def drained():
             seq = f.desk.store.events(original)[-1]['seq']
             await page.wait_for_function('(seq)=>after>=seq&&!opening', arg=seq)
@@ -353,6 +358,11 @@ async def one(browser, width):
         result['checks'].append('real SQLite state-only terminal via HTTP poll preserves exact diff/reading and increments Latest once across native steps+changes, not again on repeated refresh')
         await page.screenshot(path=str(OUT / f'turn-changes-{width}.png'))
 
+        cold_view = await page.evaluate('()=>DeskSessionReading.capture()')
+        assert cold_view and not cold_view['latest']
+        assert next(row for row in cold_view['turn_views'] if row['kind'] == 'turn_changes') == {
+            'turn_id': 'turn-state-only', 'kind': 'turn_changes', 'open': True,
+            'scroll_top': 170, 'scroll_left': 110}
         retained_events, port = f.desk.store.events(original), f.server.server_port
         f.close_server()
         f.desk.store.db.close()
@@ -363,14 +373,23 @@ async def one(browser, width):
         f.server_thread = threading.Thread(target=f.server.serve_forever, daemon=True)
         f.server_thread.start()
         assert f.desk.store.events(original) == retained_events
+        # Let the replacement owner answer and ordinary polling clear any
+        # connection banner inserted during shutdown before pagehide saves.
+        await page.evaluate('()=>api("/api/state")')
+        await page.wait_for_function("$('error').hidden")
+        await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+        assert await page.evaluate('()=>DeskSessionReading.capture()') == cold_view
         await page.reload()
-        await page.wait_for_function('(s)=>selected===s&&!opening', arg=original)
+        await reading_settled(original)
         await expect_diff(DIFF_TWO)
         assert await page.locator('#turn-changes-status').text_content() == 'Task failed'
-        assert await page.locator('#turn-changes').evaluate('n=>n.open') is False
+        cold_restored = await page.evaluate('()=>DeskSessionReading.capture()')
+        assert cold_restored == cold_view, (cold_view, cold_restored)
+        result['cold_reading_before'], result['cold_reading_after'] = cold_view, cold_restored
         assert await page.evaluate('()=>DeskNativeSteps.state().reported.plan') == STEPS
         result['cold_report'] = await page.evaluate('()=>DeskTurnChanges.state()')
-        result['checks'].append('real HTTP/SQLite owner close/reopen and reload restores exact terminal aggregate from retained events plus independent native steps')
+        await page.screenshot(path=str(OUT / f'turn-changes-cold-{width}.png'))
+        result['checks'].append('real HTTP/SQLite owner close/reopen and reload restores exact terminal aggregate, independent native steps and complete prior metadata-only reading view after settled owner restoration')
 
         token = str(uuid.uuid4())
         payload = {'session': original, 'token': token, 'text': 'Retained captured request independent of Plan',
@@ -381,7 +400,12 @@ async def one(browser, width):
         request_boundary, opened_boundary = len(requests), len(opened)
         await page.reload()
         await page.wait_for_function('(s)=>selected===s&&!opening&&turnRequest()?.status==="needs_review"', arg=original)
+        await reading_settled(original)
         await expect_diff(DIFF_TWO)
+        retained_view = await page.evaluate('()=>DeskSessionReading.capture()')
+        assert retained_view == cold_view, (cold_view, retained_view)
+        result['retained_cold_reading'] = retained_view
+        await page.screenshot(path=str(OUT / f'turn-changes-retained-cold-{width}.png'))
         assert await page.locator('#turn-changes-status').text_content() == 'Task failed'
         assert len(opened) == opened_boundary
         assert not [q for q in requests[request_boundary:] if q['method'] == 'POST']

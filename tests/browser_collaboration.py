@@ -76,7 +76,7 @@ async def check():
         ]}
         thread = {'id': 'fixture-thread', 'cwd': str(project), 'name': 'Collaboration replay',
                   'modelProvider': 'fixture', 'turns': [first, second]}
-        native_calls = []
+        native_calls, catalog_reads = [], []
 
         class ControlledRuntime:
             def __init__(self, store, identifier, binary, native_home):
@@ -92,6 +92,10 @@ async def check():
                 return self.thread_result
 
             def request(self, method, params):
+                if method == 'thread/list':
+                    assert params == {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}, params
+                    catalog_reads.append({'method': method, **params})
+                    return {'data': [], 'nextCursor': None}
                 assert method == 'thread/read', method
                 assert params == {'threadId': thread['id'], 'includeTurns': True}, params
                 native_calls.append({'method': method, **params})
@@ -158,6 +162,30 @@ async def check():
                         async def sync():
                             seq = desk.store.events(identifier)[-1]['seq']
                             await page.wait_for_function('after >= ' + str(seq))
+
+                        reopen_views = []
+
+                        async def reopen_reading(width):
+                            # Capture the real click entry after Playwright's
+                            # ordinary session-button reveal, before open leaves.
+                            await page.evaluate('''() => {
+                                const capture = event => {
+                                    if (!event.target.closest('#sessions .session')) return;
+                                    window.collaborationReopenBefore = {generation, view:DeskSessionReading.capture()};
+                                    window.removeEventListener('click', capture, true);
+                                };
+                                window.addEventListener('click', capture, true);
+                            }''')
+                            await page.locator('#sessions .session').click()
+                            await page.wait_for_function('''s => selected===s.id&&!opening&&
+                                generation===collaborationReopenBefore.generation+1&&nativeThreadId==="fixture-thread"&&
+                                sessionReadingKey===JSON.stringify([s.id,"fixture-thread"])&&
+                                !sessionReadingPending&&!sessionReadingRestoring&&after>=s.seq''',
+                                arg={'id': identifier, 'seq': desk.store.events(identifier)[-1]['seq']})
+                            before = await page.evaluate('collaborationReopenBefore.view')
+                            restored = await page.evaluate('()=>DeskSessionReading.capture()')
+                            assert before and restored == before, (before, restored)
+                            reopen_views.append({'width': width, 'before': before, 'after': restored})
 
                         async def assert_groups():
                             assert await page.locator('#activity > details.activity-collaboration').count() == 2
@@ -333,16 +361,21 @@ async def check():
                         assert 'private-collab-meta' not in handoff and 'private-extension-value' not in handoff
                         assert 'private-state-extension' not in handoff
                         await page.keyboard.press('Escape')
-                        await page.locator('#sessions .session').click()
-                        await page.wait_for_function('!opening && after >= ' + str(desk.store.events(identifier)[-1]['seq']))
+                        await reopen_reading(390)
                         await assert_groups()
-                        assert await page.locator('details.activity-collaboration[open]').count() == 0
+                        assert await group('t1').get_attribute('open') is None
+                        assert await group('t2').get_attribute('open') is not None
                         await group('t1').locator(':scope > summary').click()
-                        await group('t2').locator(':scope > summary').click()
                         assert 'Public retry failed' in await row('legacy-live').inner_text()
                         assert 'Updated public failure' in await row('legacy-wait').inner_text()
-                        for width in (390, 360):
+                        for width in (1250, 390, 360):
                             await page.set_viewport_size({'width': width, 'height': 844})
+                            await reopen_reading(width)
+                            await assert_groups()
+                            assert await group('t1').get_attribute('open') is not None
+                            assert await group('t2').get_attribute('open') is not None
+                            if os.environ.get('DESK_COLLABORATION_RECEIPT'):
+                                await page.screenshot(path=str(Path(os.environ['DESK_COLLABORATION_RECEIPT']) / f'collaboration-reopen-{width}.png'))
                             assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth && document.querySelector("#activity").scrollWidth <= document.querySelector("#activity").clientWidth'), width
                         external = [request for request in requests if not request.startswith(url + '/')]
                         assert not external, external
@@ -358,7 +391,9 @@ async def check():
                             'unknownKindsAndMissingFieldsGraceful': True, 'noChildControls': True,
                             'foreignChildTurnsAndMessagesDoNotPolluteParentTimeline': True,
                             'rawHTMLTextOnly': True, 'nativeCalls': native_calls,
-                            'viewportWidths': [390, 360], 'pageOverflow': False,
+                            'ordinaryReopenReadingExact': True, 'reopenViews': reopen_views,
+                            'nativeCatalogReads': catalog_reads,
+                            'viewportWidths': [1250, 390, 360], 'pageOverflow': False,
                             'externalRequests': external, 'javascriptErrors': errors}
                         if os.environ.get('DESK_COLLABORATION_RECEIPT'):
                             destination = Path(os.environ['DESK_COLLABORATION_RECEIPT'])
