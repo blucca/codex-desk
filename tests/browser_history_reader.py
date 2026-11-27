@@ -328,12 +328,16 @@ async def check(width, playwright, evidence):
                 assert await page.locator('.history-reader-target').count() == 0
                 assert 'Original earliest request' in await page.locator('#history-reader-body').text_content()
                 assert await page.locator('#history-reader-previous').is_disabled()
+                assert await page.locator('#history-reader-body').evaluate('(body)=>body===document.activeElement')
                 await bounded()
                 await page.locator('#history-reader-next').click()
                 assert await page.locator('.history-reader-target mark').inner_text() == 'OLD ANSWER'
                 await page.locator('#history-reader-next').click()
                 assert await page.locator('.history-reader-item').count() == 15
                 assert await page.locator('#history-reader-next').is_disabled()
+                assert await page.locator('#history-reader-body').evaluate('(body)=>body===document.activeElement')
+                await page.keyboard.press('Tab')
+                assert await page.locator('#history-reader-body').evaluate('(body)=>body.contains(document.activeElement) && document.activeElement.tagName==="SUMMARY"')
                 assert 'Original neighbouring context 94' in await page.locator('#history-reader-body').text_content()
                 await bounded(); await unchanged()
                 checkpoint('long original text and neighbouring pages remain bounded and replace rather than accumulate DOM')
