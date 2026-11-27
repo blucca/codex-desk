@@ -373,6 +373,16 @@ class Runtime:
             if 'result' not in message:
                 raise NativeRequestUnknown('Native Codex reply did not confirm the request')
             return message['result']
+        except NativeRequestUnknown as error:
+            if getattr(self, 'id', None) == 'native-catalog':
+                # A failed reader can remain alive while no longer answering.
+                # Retire only this read-only backend. The next explicit read
+                # (or remaining scan row) opens a fresh one, without replaying
+                # the failed request or touching a project task runtime.
+                self.close()
+                raise NativeRequestUnknown('Native history reader became unavailable. '
+                    'Choose Retry to reopen it.') from error
+            raise
         finally:
             with self.lock:
                 self.pending.pop(number, None)
