@@ -163,9 +163,9 @@ async def check():
                             'message': 'Native transient rate limit; retrying the original task',
                             'codexErrorInfo': 'rateLimitExceeded'}})
                         await replay()
-                        retry = page.locator('#activity .native-error-card').filter(has_text='Native retry in progress')
+                        retry = page.locator('#activity .native-error-card').filter(has_text='Native retry reported')
                         assert await retry.count() >= 1
-                        assert 'Native Codex is retrying this turn' in await retry.first.inner_text()
+                        assert 'Native Codex reported a retry for this turn' in await retry.first.inner_text()
                         assert await page.locator('#status').inner_text() == 'approval'
                         assert await page.locator('#send').is_disabled()
                         assert await page.locator('#native-failure').is_hidden()

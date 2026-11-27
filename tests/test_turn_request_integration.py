@@ -294,6 +294,10 @@ async function until(fn,message){for(let i=0;i<150;i++){if(await fn())return;awa
         for key, value in {'BASE': f'http://127.0.0.1:{self.server.server_port}', 'SESSION': self.identifier,
                            'TEXT': TEXT, 'NEWER': NEWER, 'ACCESS': ACCESS, 'RETAINED': retained or []}.items():
             setup = setup.replace(key, json.dumps(value, ensure_ascii=False))
+        # Actual state now carries the retained outcome; use its production
+        # presenter alongside the real Run/receipt/open controller fragments.
+        setup = setup.replace("const DeskNativeState={usage(){return '';},card(){return new Element();}};",
+                              (PRODUCT / 'codex_desk/static/native-state.js').read_text())
         chunks = [fragment('function deskAccessHeaders(', 'function nearLatest('),
                   fragment('async function api(', 'function make('),
                   fragment('function activeSession(', 'function sidebarGroups('),

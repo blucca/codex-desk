@@ -49,6 +49,10 @@ function unchanged(){
 }
 '''
 
+# draw() uses the real outcome presenter global introduced by this candidate.
+_app_globals = APP.read_text()
+SETUP += '\nlet nativeOutcomeSignature=' + _app_globals.split('nativeOutcomeSignature=', 1)[1].split(',', 1)[0] + ';\n'
+
 
 @unittest.skipUnless(NODE, 'Node is required for archive keyboard continuity')
 class ArchiveNavigationControllerTests(unittest.TestCase):

@@ -19,7 +19,8 @@ class E{
 const all=node=>node.children.flatMap(child=>[child,...all(child)]);
 const elements=new Map(),$=id=>{if(!elements.has(id))elements.set(id,new E());return elements.get(id);};
 const make=(tag,text='',cls='')=>Object.assign(new E(tag),{textContent:text,className:cls});
-let selected='A',generation=1,requests=new Map();let calls=[],reads=0,transport=async()=>{};
+let state={sessions:[{id:'A',thread_id:'native-A'},{id:'B',thread_id:'native-B'}]};
+let selected='A',generation=1,nativeThreadId='native-A',requests=new Map();let calls=[],reads=0,transport=async()=>{};
 const api=async(path,body)=>{calls.push({path,body});return transport(path,body);}, refresh=async()=>{reads++;},error=()=>{};
 const question=(id,secret=false)=>({id,method:'item/tool/requestUserInput',params:{threadId:'native-A',questions:[{id:'choice',header:'Mode',question:'Which?',options:[{label:'Safe',description:'Read'},{label:'Edit',description:'Write'}]},{id:'note',header:'Note',question:'Next check?',isSecret:secret}]}});
 const approval=id=>({id,method:'item/commandExecution/requestApproval',params:{command:'pytest parser'}});

@@ -84,6 +84,14 @@ Pending native questions keep their entered answers, choices and reading focus w
 
 Choose **Send answers**, **Allow once** or **Decline** for the request you reviewed. Its controls remain disabled while that response is being sent; other requests and your Work/Plan preparation remain independent. A failed local response leaves the pending input visible with its status. Question answers are held in this page only; reloading starts with blank fields for any still-pending native question.
 
+## Last native task outcome
+
+Expand **Last native task outcome** to read the last supplied parent native turn’s ID, status and reported error, with its native-notification or original-read provenance. The workbench status beside **Run task** reports current readiness; this separate readout retains the native task evidence when you reopen a saved conversation or return after restarting Desk.
+
+A new parent native turn shows **In progress**. Native completion reports **Completed**, **Failed** or **Interrupted**, including turns with no messages or tool items. Transient native retry errors remain activity evidence while the turn is in progress. Your unsent draft and prepared follow-ups stay in place as you read the outcome.
+
+The readout projects retained local turn events and compact native-history reads. Native approvals, task admission and actual turn completion keep their existing controls and authority.
+
 ## Native task steps
 
 When native Codex reports a checklist, **Native task steps** shows its current step and the latest ordered statuses. Expand it to read the full explanation and checklist; updates keep the disclosure, keyboard focus and reading position. An expanded checklist pauses automatic following of live output; **Latest output ↓** remains available.
@@ -183,3 +191,9 @@ This reports loaded thread IDs/status, providers and working directories through
 Choose **Stop current task** to interrupt the established native task shown next to the control. Desk retains its exact thread and turn with the request. An accepted Stop receipt means the interruption was requested; the matching native terminal report shows whether that task completed, failed or was interrupted.
 
 If the local reply is lost, choose **Check stop receipt**. This reads the original request without resending or opening another task, including after a restart. A later task requires a new explicit Stop. Your unsent draft, prepared follow-ups and newer task approvals remain in place.
+
+## Review a native request in its original context
+
+Command approvals display the reported command, native working directory and reason together. Expand **Original request context** to identify its native request, original thread, turn and item alongside the selected parent thread. **Read related native activity** opens that exact original conversation and item, including a related child thread; **Return to native request** keeps the selected task, pending answers and preparation in place. **Allow once**, **Decline** and **Send answers** remain the existing explicit one-time responses.
+
+Prepared work retains the latest unsaved draft and queue-editor position after Close or Escape and a later return. Long project paths wrap within the reader. Historical retry cards record the retry report; **Last native task outcome** supplies the latest reported status independently of task-admission readiness.

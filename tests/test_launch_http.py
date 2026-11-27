@@ -212,7 +212,7 @@ class LaunchHTTPTests(unittest.TestCase):
             self.assertEqual((status, mime), (200, 'application/json; charset=utf-8'))
             self.assertEqual(json.loads(body), {'profiles': [{'id': 'default',
                 'name': 'Current Codex settings', 'editable': False}],
-                'sessions': [], 'organized': [], 'pending': {}})
+                'sessions': [], 'organized': [], 'pending': {}, 'native_outcomes': {}})
             status, mime, body = self.get(address, '/')
             self.assertEqual((status, mime), (200, 'text/html; charset=utf-8'))
             static = Path(desk_server.__file__).resolve().parent / 'static'

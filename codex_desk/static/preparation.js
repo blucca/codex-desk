@@ -44,6 +44,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     if(el('').open)el(editors.get(selected)?.ready?'text':'editor-title').focus({preventScroll:true});
   }
   function remember(){
+    if(!el('').open)return;
     rememberQueueViews();
     const editor=editors.get(selected);if(!editor?.ready)return;
     const text=el('text').value,mode=el('mode').value;
@@ -486,7 +487,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
       const result=await options.openConversation(id);
       if(result===false || result?.error)throw result?.error || new Error('The conversation could not be opened. Local preparation is kept.');
       if(visible(id)){
-        if(selectionVersion===reviewVersion && editor.sequence===sequence)el('').close();
+        if(selectionVersion===reviewVersion && editor.sequence===sequence){remember();el('').close();}
         else editor.message=editor.sequence!==sequence?
           'Conversation opened with the saved draft. Newer edits are kept here; choose Save draft to keep them.':
           'Conversation opened. Your current preparation review is kept.';
@@ -543,7 +544,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   function configure(value){
     options=value;el('mode').value='native';
     root.DeskPreparedRequest.configure({api:options.api});
-    el('refresh').onclick=refresh;el('close').onclick=()=>{el('').close();restoreOrigin();};
+    el('refresh').onclick=refresh;el('close').onclick=()=>{remember();el('').close();restoreOrigin();};
     el('project').onchange=el('archived').onchange=refresh;
     el('text').oninput=edit;el('mode').onchange=edit;
     el('save').onclick=save;el('copy').onclick=()=>{remember();const editor=editors.get(selected);if(editor?.ready)return copy(selected,editor.text,'Draft text');};
@@ -552,6 +553,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     el('reuse-cancel').onclick=cancelReuse;
     el('open').onclick=openConversation;
     el('save-open').onclick=saveAndOpen;
+    el('').addEventListener('cancel',()=>remember());
     el('').addEventListener('close',()=>{
       if(el('').open)return;
       remember();++listVersion;++selectionVersion;reading=false;root.DeskPreparedRequest.close('prepared');

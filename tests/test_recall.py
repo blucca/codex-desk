@@ -64,7 +64,10 @@ class RecallTests(unittest.TestCase):
         self.assertEqual((hit['session_id'], hit['turn_id'], hit['item_id']),
                          (imported['id'], 'turn-original', 'test-command'))
         self.assertIn('7 tests passed', hit['snippet'])
-        self.assertEqual(desk.store.events(imported['id']), [])
+        self.assertEqual(desk.store.events(imported['id']), [{'seq': 1, 'event': {
+            'method': 'desk/nativeTaskSnapshot', 'params': {
+                'threadId': 'native-original', 'turn': {'id': 'turn-original',
+                    'status': 'completed', 'error': None}, 'turnIds': ['turn-original']}}}])
         self.assertEqual(desk.runtimes, {})
         desk.close()
         desk.store.db.close()

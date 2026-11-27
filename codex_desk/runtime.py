@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 from . import __version__, recall
+from .native_outcome import record_snapshot, initialize as initialize_outcomes
 
 
 NAME_LIMIT = 120
@@ -267,6 +268,7 @@ class Store:
                     (title or default_name(cwd, created or 0, identifier),
                      'task' if title else 'default', int(bool(title)), identifier))
             recall.initialize(self)
+            initialize_outcomes(self)
     def create(self, cwd, profile, identifier=None, name=None):
         identifier = identifier or uuid.uuid4().hex
         now = time.time()
@@ -290,6 +292,10 @@ class Store:
     def recall_snapshot(self, identifier, thread):
         with self.lock, self.db:
             recall.save_snapshot(self, identifier, thread)
+            snapshot = record_snapshot(self, identifier, thread)
+            if snapshot:
+                seq, event = snapshot
+                recall.record_event(self, identifier, event, seq)
     def recall(self, q, cwd=None, include_archived=False, limit=30, offset=0):
         return recall.search(self, q, cwd, include_archived, limit, offset)
     def events(self, identifier, after=0):

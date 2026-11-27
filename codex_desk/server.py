@@ -27,6 +27,7 @@ from .turn_dispatch import (start_turn, turn_status, resolve_turn, block_unresol
 from .steer_dispatch import start_steer, steer_status, SteerConflict
 from .stop_dispatch import stop_current, stop_status, StopConflict
 from .preparation import preparation_snapshot
+from .native_outcome import outcomes
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
 
@@ -445,8 +446,9 @@ def handler(desk, access_token=None):
                     params = parse_qs(url.query)
                     return self.reply(load_draft(desk.store, params['session'][0]))
                 if url.path == '/api/state':
+                    sessions = [s for s in desk.store.sessions() if s['id'] != 'native-catalog']
                     return self.reply({'profiles': profiles(desk.home),
-                        'sessions': [s for s in desk.store.sessions() if s['id'] != 'native-catalog'],
+                        'sessions': sessions, 'native_outcomes': outcomes(desk.store, sessions),
                         'organized': desk.store.organized_sessions(include_archived=True),
                         'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
                 if url.path == '/api/organized':

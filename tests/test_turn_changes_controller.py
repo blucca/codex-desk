@@ -404,6 +404,7 @@ class TurnChangesAppProjectionTests(unittest.TestCase):
         consume = source[source.index('function consume(m)'):source.index('async function refresh()')]
         poll = source[source.index('async function pollActivity()'):source.index('async function tick()')]
         draw_sync = source[source.index('function draw()'):source.index("  $('archive-session').hidden=false;")] + '}\n'
+        draw_sync = 'let nativeOutcomeSignature=' + source.split('nativeOutcomeSignature=', 1)[1].split(',', 1)[0] + ';\n' + draw_sync
         script = (HARNESS + '\n' + (static / 'native-steps.js').read_text() + '\n'
                   + (static / 'turn-changes.js').read_text() + '\n' + APP_SETUP + '\n'
                   + consume + poll + draw_sync + '\n(async () => {\n' + body

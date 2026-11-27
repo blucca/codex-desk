@@ -47,7 +47,7 @@ async def one(browser,width):
   assert await page.evaluate('()=>window.originalQuestionNode.value')==''
   r['checks'].append('held exact native answers sent once; sibling approval survives accepted answer; retired fields cleared')
   held=asyncio.Event();release=asyncio.Event();await page.route('**/api/approval',hold_response)
-  await page.evaluate('()=>window.originalApprovalButtons=[...document.querySelectorAll("#approvals button")]');await page.get_by_role('button',name='Allow once',exact=True).click();await asyncio.wait_for(held.wait(),10)
+  await page.evaluate('()=>window.originalApprovalButtons=[...document.querySelectorAll("#approvals .actions button")]');await page.get_by_role('button',name='Allow once',exact=True).click();await asyncio.wait_for(held.wait(),10)
   await page.evaluate('()=>window.originalApprovalButtons.forEach(b=>b.onclick())')
   assert len(f.sent)==2;assert f.sent[-1]=={'id':103,'result':{'decision':'accept'}}
   release.set();await page.wait_for_function('()=>!requests.has("103")');await page.unroute('**/api/approval',hold_response)

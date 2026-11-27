@@ -19,7 +19,7 @@ let state = {profiles: [], sessions: []}, selected = null, after = 0, items = ne
 const nodes = new Map(), itemTurns = new Map(), collaborationGroups = new Map();
 const collaborationTypes = new Set(['collabAgentToolCall', 'subAgentActivity']);
 let nativeThreadId = null, currentTurn = null, stopStateSnapshot = null;
-let modeSelected=null, generation=0, opening=false, refreshVersion=0, nativeFailureSignature='';
+let modeSelected=null, generation=0, opening=false, refreshVersion=0, nativeOutcomeSignature='',nativeFailureSignature='';
 const drafts=new Map(), submitting=new Set();
 let projectVersion=0, projectCursor=null, projectQuery=null, projectScope=null, projectOpening=false;
 let latestUpdates=0, statePollAt=0;
@@ -410,7 +410,17 @@ function draw() {
   const running=state.sessions.filter(s=>['running','approval','starting'].includes(s.status)).length;
   document.title=(running?`(${running} active) `:'')+'Codex Desk';
   $('activity-controls').hidden=!selected;
-  const s = state.sessions.find(s=>s.id===selected); if(!s) return;
+  const s = state.sessions.find(s=>s.id===selected); if(!s){$('native-outcome').hidden=true;return;}
+  const outcome=state.native_outcomes?.[selected];
+  const visibleOutcome=outcome && outcome.thread_id===s.thread_id;
+  $('native-outcome').hidden=!visibleOutcome;
+  const outcomeKey=visibleOutcome?JSON.stringify([selected,outcome]):'';
+  if(outcomeKey!==nativeOutcomeSignature){
+    nativeOutcomeSignature=outcomeKey;
+    $('native-outcome-summary').textContent=visibleOutcome?'— '+outcome.status:'';
+    $('native-outcome-identity').textContent=visibleOutcome?`Thread ${outcome.thread_id}\nTurn ${outcome.turn_id}\nSource: ${outcome.source}`:'';
+    $('native-outcome-body').replaceChildren(...(visibleOutcome?[DeskNativeState.outcome(outcome,make)]:[]));
+  }
   if(!opening){
     const progressChanged=DeskNativeSteps.sync(s,{session:selected,thread:nativeThreadId,generation});
     const diffChanged=DeskTurnChanges.sync(s,{session:selected,thread:nativeThreadId,generation});
@@ -494,7 +504,8 @@ function renderItem(i,turnId) {
 let approvalsSignature='';
 const interactionCards=new Map();
 function approvals() {
-  const signature=JSON.stringify([selected,[...requests]]);
+  const parentThread=state.sessions.find(s=>s.id===selected)?.thread_id || null;
+  const signature=JSON.stringify([selected,generation,parentThread,[...requests]]);
   if(signature===approvalsSignature)return;
   approvalsSignature=signature;
   const host=$('approvals'), session=selected;
@@ -506,6 +517,7 @@ function approvals() {
     if(card.box.contains(active))retiredFocus=true;
     for(const input of card.fields.values())input.value='';
     card.retired=true;
+    if(card.readerCallbacks){retiredFocus=true;DeskHistoryReader.close(card.readerCallbacks);}
     card.box.remove();
   }
   for(const [id,card] of cards){
@@ -517,11 +529,42 @@ function approvals() {
     if(!card){
       const p=m.params || {}, title=m.method==='item/tool/requestUserInput'?'Questions for this task':m.method==='item/commandExecution/requestApproval'?'Command approval':m.method==='item/fileChange/requestApproval'?'File change approval':'Native input required';
       const box=make('section','','approval');box.append(make('strong',title));
-      const detail=p.command || p.reason;
-      if(detail)box.append(make('pre',typeof detail==='string'?detail:JSON.stringify(detail)));
+      for(const [key,label] of [['command','Command'],['cwd','Native working directory'],['reason','Native reason']]) {
+        const value=p[key];
+        if(typeof value==='string' && value.length)box.append(make('pre',label+'\n'+value,'approval-context-field'));
+      }
       const status=make('p','','muted');status.setAttribute('role','status');
       card={box,signature:JSON.stringify(m),fields:new Map(),controls:[],pending:false,retired:false,status};cards.set(id,card);
-      const owned=card;
+      const owned=card;owned.contextGeneration=generation;
+      const reportedId=value=>typeof value==='string' && value.trim() && value.length<=200;
+      const context=make('details','','approval-context'),summary=make('summary',
+        reportedId(p.threadId) && p.threadId!==parentThread?'Original request context · related thread':'Original request context');
+      const identity=make('pre','Native request '+id+'\nMethod '+m.method+
+        '\nSelected parent thread '+(parentThread || 'unreported')+
+        '\nRequest thread '+(reportedId(p.threadId)?p.threadId:'unreported')+
+        '\nRequest turn '+(reportedId(p.turnId)?p.turnId:'unreported')+
+        '\nRequest item '+(reportedId(p.itemId)?p.itemId:'unreported'),'approval-context-identity');
+      context.append(summary,identity);box.append(context);card.contextIdentity=identity;card.contextSummary=summary;
+      if(reportedId(p.threadId)) {
+        const read=make('button','Read related native activity','approval-context-read');read.type='button';
+        const readStatus=make('p','','muted');readStatus.setAttribute('role','status');context.append(read,readStatus);
+        const valid=()=>selected===session && generation===owned.contextGeneration && !owned.retired &&
+          cards.get(id)===owned && requests.get(id) && JSON.stringify(requests.get(id))===owned.signature;
+        read.onclick=async()=>{
+          if(!valid() || read.disabled || $('history-reader').open)return false;
+          read.disabled=true;readStatus.textContent='';
+          const readGeneration=generation;
+          const callbacks={valid:()=>valid() && generation===readGeneration,backLabel:'Return to native request',onReturn:()=>{
+            if(owned.readerCallbacks===callbacks)owned.readerCallbacks=null;
+            read.disabled=false;if(valid() && read.isConnected)read.focus({preventScroll:true});
+          }};owned.readerCallbacks=callbacks;
+          try {
+            return await DeskHistoryReader.show({thread_id:p.threadId,
+              ...(reportedId(p.turnId) && reportedId(p.itemId)?{turn_id:p.turnId,item_id:p.itemId}:{})},callbacks);
+          }catch(error){if(valid())readStatus.textContent='Original activity could not be read: '+error.message;return false;}
+          finally{read.disabled=false;}
+        };
+      }
       async function send(path,body){
         if(owned.pending || owned.retired)return;
         owned.pending=true;for(const control of owned.controls)control.disabled=true;
@@ -560,6 +603,17 @@ function approvals() {
       }else box.append(make('p','Use Stop current task to end this native interaction.'));
       box.append(status);
     }
+    card.contextGeneration=generation;
+    if(card.contextIdentity){
+      const p=m.params || {},reported=value=>typeof value==='string' && value.trim() && value.length<=200;
+      card.contextSummary.textContent=reported(p.threadId) && p.threadId!==parentThread?'Original request context · related thread':'Original request context';
+      const identity='Native request '+id+'\nMethod '+m.method+
+        '\nSelected parent thread '+(parentThread || 'unreported')+
+        '\nRequest thread '+(reported(p.threadId)?p.threadId:'unreported')+
+        '\nRequest turn '+(reported(p.turnId)?p.turnId:'unreported')+
+        '\nRequest item '+(reported(p.itemId)?p.itemId:'unreported');
+      if(card.contextIdentity.textContent!==identity)card.contextIdentity.textContent=identity;
+    }
     desired.push(card.box);
   }
   // Keep unchanged nodes in place: sibling requests must not reset answers,
@@ -576,10 +630,11 @@ function syncInteractionCards(pending){
   // Retire resolved inputs in tasks being read in the background, too.
   for(const [session,cards] of interactionCards){
     if(session===selected)continue;
+    for(const card of cards.values())if(card.readerCallbacks)DeskHistoryReader.close(card.readerCallbacks);
     const current=new Map((pending?.[session] || []).map(m=>[String(m.id),JSON.stringify(m)]));
     for(const [id,card] of cards)if(current.get(id)!==card.signature){
       for(const input of card.fields.values())input.value='';
-      card.retired=true;card.box.remove();cards.delete(id);
+      card.retired=true;if(card.readerCallbacks)DeskHistoryReader.close(card.readerCallbacks);card.box.remove();cards.delete(id);
     }
     if(!cards.size)interactionCards.delete(session);
   }
@@ -716,7 +771,7 @@ async function open(id,{revealLatest=true,keepError=false,steerReceiptOnly=false
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;DeskSteering.opened();DeskStopTask.opened();
-    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
+    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && ($('native-outcome').hidden || !$('native-outcome').open) && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
     return true;
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
@@ -896,7 +951,7 @@ async function pollActivity(){
     const editor=document.activeElement;
     const editorAnchor=editor?.isConnected && editor.closest?.('.approval')
       ? {node:editor,top:editor.getBoundingClientRect().top}:null;
-    const follow=nearLatest() && !globalThis.DeskActivity?.reading?.() && !document.activeElement?.closest?.('.approval') && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
+    const follow=nearLatest() && !globalThis.DeskActivity?.reading?.() && !document.activeElement?.closest?.('.approval') && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && ($('native-outcome').hidden || !$('native-outcome').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
     for(const r of rows){
       after=r.seq;const progressChanged=consume(r.event);
       if(progressChanged || ['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
@@ -909,7 +964,7 @@ async function pollActivity(){
     if(changed){
       if(follow)requestAnimationFrame(()=>{
         if(current!==generation)return;
-        if(!globalThis.DeskActivity?.reading?.() && !document.activeElement?.closest?.('.approval') && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
+        if(!globalThis.DeskActivity?.reading?.() && !document.activeElement?.closest?.('.approval') && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && ($('native-outcome').hidden || !$('native-outcome').open) && !$('recent-work').open && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
         else{latestUpdates+=changed;latestLabel();}
       });
       else{latestUpdates+=changed;latestLabel();}
