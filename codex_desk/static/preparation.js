@@ -290,11 +290,16 @@
   }
   async function openConversation(){
     remember();const editor=editors.get(selected);if(!editor || editor.saving || editor.opening || !options.openConversation)return;
-    const id=editor.row.id;editor.opening=true;controls();
+    const id=editor.row.id,sequence=editor.sequence,reviewVersion=selectionVersion;editor.opening=true;controls();
     try{
       const result=await options.openConversation(id);
       if(result===false || result?.error)throw result?.error || new Error('The conversation could not be opened. Local preparation is kept.');
-      if(visible(id))el('').close();
+      if(visible(id)){
+        if(selectionVersion===reviewVersion && editor.sequence===sequence)el('').close();
+        else editor.message=editor.sequence!==sequence?
+          'Conversation opened with the saved draft. Newer edits are kept here; choose Save draft to keep them.':
+          'Conversation opened. Your current preparation review is kept.';
+      }
     }catch(e){error(e.message,id);}
     finally{editor.opening=false;if(visible(id))controls();}
   }

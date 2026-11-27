@@ -130,6 +130,50 @@ assert.deepEqual(opened,[]);assert.equal(n('').open,true);assert.match(n('draft-
 control.saved=()=>true;await n('save-open').click();assert.deepEqual(opened,['a']);
 ''')
 
+    def test_newer_typing_after_save_reply_stays_in_review_when_native_open_finishes(self):
+        self.check(r'''
+await review('b');fill('Saved native-open capture','plan');
+const held=deferred();control.open=()=>held.promise;
+const handoff=n('save-open').click();
+while(!opened.length)await settle();
+assert.equal(world.b.draft.text,'Saved native-open capture');assert.deepEqual(opened,['b']);
+assert.equal(n('save-open').disabled,true);assert.equal(n('open').disabled,true);
+fill('Newer text while native open waits','native');
+held.resolve(true);await handoff;
+assert.equal(n('').open,true);assert.equal(n('text').value,'Newer text while native open waits');
+assert.equal(n('mode').value,'native');assert.equal(world.b.draft.text,'Saved native-open capture');
+assert.equal(world.b.draft.mode,'plan');assert.deepEqual(opened,['b']);
+assert.match(n('draft-status').textContent,/Newer edits/);
+await review('a');await review('b');
+assert.equal(n('text').value,'Newer text while native open waits');assert.equal(n('mode').value,'native');
+await n('save').click();assert.equal(world.b.draft.text,'Newer text while native open waits');
+assert.deepEqual(opened,['b']);
+''')
+
+    def test_returning_to_review_while_native_open_waits_keeps_that_review_open(self):
+        self.check(r'''
+await review('a');fill('Saved A native-open capture','plan');
+const held=deferred();control.open=()=>held.promise;
+const handoff=n('save-open').click();while(!opened.length)await settle();
+await review('b');fill('B retained during native open','native');await review('a');
+held.resolve(true);await handoff;
+assert.equal(n('').open,true);assert.equal(n('text').value,'Saved A native-open capture');
+assert.deepEqual(opened,['a']);assert.equal(calls.filter(c=>c.data).length,1);
+await review('b');assert.equal(n('text').value,'B retained during native open');assert.equal(world.b.draft.text,'');
+''')
+
+    def test_reopening_review_while_native_open_waits_is_not_closed_by_its_receipt(self):
+        self.check(r'''
+await review('a');fill('Saved native-open preparation','plan');
+const held=deferred();control.open=()=>held.promise;
+const handoff=n('save-open').click();while(!opened.length)await settle();
+await n('close').click();await DeskPreparation.show();
+held.resolve(true);await handoff;
+assert.equal(n('').open,true);assert.equal(n('text').value,'Saved native-open preparation');
+assert.equal(n('mode').value,'plan');assert.deepEqual(opened,['a']);
+assert.equal(calls.filter(c=>c.data).length,1);
+''')
+
     def test_open_failure_after_save_keeps_preparation_and_open_retry_needs_no_save(self):
         self.check(r'''
 await review('b');fill('Saved before unavailable native project','plan');
