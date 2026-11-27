@@ -9,9 +9,10 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request,urlopen
 from unittest.mock import Mock,patch
-W=Path('/home/i/workspace');S=Path(os.environ.get('DESK_SOURCE',Path(__file__).resolve().parents[1]))
-T=W/'temp/round159-steer/contract-scratch';T.mkdir(parents=True,exist_ok=True)
-os.environ['DESK_TEST_TEMP']=str(T);sys.path[:0]=[str(S),str(S/'tests')]
+S=Path(os.environ.get('DESK_SOURCE',Path(__file__).resolve().parents[1])).resolve()
+T=Path(os.environ.get('DESK_TEST_TEMP',Path.cwd()/'temp')).resolve()/'steer-admission'
+T.mkdir(parents=True,exist_ok=True)
+os.environ.setdefault('DESK_TEST_TEMP',str(T));sys.path[:0]=[str(S),str(S/'tests')]
 from test_approval_lifecycle import NativeHTTPFixture
 from codex_desk.runtime import NativeRequestRejected,NativeRequestUnknown
 from codex_desk.server import Desk,handler
@@ -74,8 +75,8 @@ class SteerFixture(NativeHTTPFixture):
 
 class CurrentBaselineContracts(SteerFixture):
  def test_native_schema_is_same_turn_not_start_response(self):
-  schema=json.loads((W/'temp/codex-protocol-0.171/v2/TurnSteerParams.json').read_text());self.assertEqual(set(schema['required']),{'threadId','expectedTurnId','input'})
-  reply=json.loads((W/'temp/codex-protocol-0.171/v2/TurnSteerResponse.json').read_text());self.assertEqual(reply['required'],['turnId'])
+  schema=json.loads((S/'tests/fixtures/native-turn-steer-params-0.171.json').read_text());self.assertEqual(set(schema['required']),{'threadId','expectedTurnId','input'})
+  reply=json.loads((S/'tests/fixtures/native-turn-steer-response-0.171.json').read_text());self.assertEqual(reply['required'],['turnId'])
  def test_current_stop_resolver_is_not_a_steer_active_turn_precondition(self):
   self.emit('turn/completed',{'threadId':THREAD,'turn':{'id':TURN,'status':'completed','items':[]}})
   calls=[];self.runtime.request=lambda m,p:calls.append((m,p))

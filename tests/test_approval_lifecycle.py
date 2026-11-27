@@ -14,7 +14,7 @@ from codex_desk.runtime import Runtime
 from codex_desk.server import Desk, handler
 
 
-ROOT = Path(os.environ.get('DESK_TEST_TEMP', '/home/i/workspace/temp'))
+ROOT = Path(os.environ.get('DESK_TEST_TEMP', Path.cwd() / 'temp'))
 ROOT.mkdir(parents=True, exist_ok=True)
 
 
