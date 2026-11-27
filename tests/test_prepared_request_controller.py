@@ -249,5 +249,14 @@ n('archived').checked=true;await n('refresh').click();await requestReview('s');c
 ''')
 
 
+    def test_close_button_restores_before_queued_native_close_event(self):
+        self.check(r'''await n('close').click();mainText.focus();mainText.setSelectionRange(3,11,'backward');mainText.scrollTop=190;
+await DeskPreparation.show();await requestReview('r');await req('return').click();
+const dialog=n('');dialog.close=()=>{dialog.open=false;mainText.focus();mainText.setSelectionRange(0,0,'forward');setTimeout(()=>dialog.dispatch('close'),0);};
+await n('close').click();assert(document.activeElement===mainText);assert.equal(mainText.selectionStart,3);assert.equal(mainText.selectionEnd,11);assert.equal(mainText.selectionDirection,'backward');assert.equal(mainText.scrollTop,190);
+await settle();assert.equal(mainText.selectionStart,3);assert.equal(mainText.selectionEnd,11);
+''')
+
+
 if __name__ == '__main__':
     unittest.main()

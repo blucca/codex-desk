@@ -381,7 +381,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   function configure(value){
     options=value;el('mode').value='native';
     root.DeskPreparedRequest.configure({api:options.api,onResolved:()=>{++saveVersion;return refresh();}});
-    el('refresh').onclick=refresh;el('close').onclick=()=>el('').close();
+    el('refresh').onclick=refresh;el('close').onclick=()=>{el('').close();restoreOrigin();};
     el('project').onchange=el('archived').onchange=refresh;
     el('text').oninput=edit;el('mode').onchange=edit;
     el('save').onclick=save;el('copy').onclick=()=>{remember();const editor=editors.get(selected);if(editor?.ready)return copy(selected,editor.text,'Draft text');};
