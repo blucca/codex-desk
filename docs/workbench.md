@@ -46,6 +46,8 @@ The sidebar groups saved Desk sessions by project. **Active** keeps running task
 
 **Archive session** hides an idle Desk entry from Recent, preserving its native history, provider binding, drafts and prepared follow-ups. **Show archived** → **Restore** returns it to the project list. An archived task that is still running stays in Active so you can approve or stop it. Returning through native history reuses and restores the original binding.
 
+Keyboard focus stays on a sidebar **Archive** or **Restore** action while its local save is pending. When an archived row leaves the list, focus moves to the next visible action, the previous action at the end, or saved-title search if no rows remain. Choosing another control while the save waits keeps that newer focus.
+
 ## Read delegated work without coordination clutter
 
 Native sub-agent activity appears in one collapsed **Sub-agents** group per turn. Your prompts and Codex replies stay visible while the native lifecycle rows remain available on expansion. The group stays closed during work unless you open it; streaming updates and state refresh preserve your choice.

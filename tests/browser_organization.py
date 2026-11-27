@@ -11,12 +11,14 @@ import sys
 import tempfile
 import threading
 from types import SimpleNamespace
+from unittest.mock import patch
 
 if not os.environ.get('DESK_USE_INSTALLED'):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from codex_desk.server import Desk, ThreadingHTTPServer, handler
 from codex_desk.runtime import save_profile
 from codex_desk.drafts import load_draft
+from codex_desk.followups import add_followup, followup_snapshot
 from playwright.async_api import async_playwright
 
 
@@ -184,6 +186,53 @@ async def check():
                     await page.locator('#turn-mode').select_option('plan')
                     await page.wait_for_function('v=>draftSaved.get("session-03")?.text===v', arg=text)
                     prepared = load_draft(desk.store, 'session-03')
+                    add_followup(desk.store,'session-03','Prepared Work remains paused.','native')
+                    add_followup(desk.store,'session-03','Prepared Plan remains paused.','plan')
+                    queued=followup_snapshot(desk.store,'session-03')
+
+                    async def held_archive(archived, fail=False):
+                        id='session-08';entered,release=threading.Event(),threading.Event()
+                        original=desk.store.archive
+                        def controlled(identifier, choice):
+                            if identifier==id and choice==archived:
+                                entered.set();assert release.wait(30),'Held sidebar archive was not released'
+                                if fail:raise OSError('Local archive temporarily unavailable')
+                            return original(identifier,choice)
+                        rows=await page.locator('.session-row').evaluate_all('rows=>rows.map(row=>row.dataset.session)')
+                        index=rows.index(id);remaining=[row for row in rows if row!=id]
+                        expected=id if fail or not archived or await page.locator('#show-archived').is_checked() else remaining[min(index,len(remaining)-1)]
+                        calls_before=sum(method=='POST' and path=='/api/archive' for method,path in http_calls)
+                        try:
+                            with patch.object(desk.store,'archive',side_effect=controlled):
+                                await page.locator(f'.session-row[data-session="{id}"] .session-archive').focus()
+                                await page.keyboard.press('Enter')
+                                assert await asyncio.to_thread(entered.wait,10),'Archive HTTP request never entered'
+                                assert await page.evaluate("id=>document.activeElement.closest('.session-row')?.dataset.session===id && document.activeElement.classList.contains('session-archive')",id)
+                                assert await page.evaluate("document.activeElement.getAttribute('aria-disabled')==='true'")
+                                await page.keyboard.press('Enter')
+                                assert sum(method=='POST' and path=='/api/archive' for method,path in http_calls)==calls_before+1
+                                release.set()
+                                await page.wait_for_function('id=>!archiving.has(id)',arg=id)
+                                assert await page.evaluate("id=>document.activeElement.closest('.session-row')?.dataset.session===id && document.activeElement.classList.contains('session-archive')",expected)
+                                assert await page.evaluate("document.activeElement.getAttribute('aria-disabled')==='false'")
+                                assert await page.locator('#prompt').input_value()==text
+                                assert await page.locator('#turn-mode').input_value()=='plan'
+                                assert await page.evaluate('selected')=='session-03'
+                                assert load_draft(desk.store,'session-03')==prepared
+                                assert followup_snapshot(desk.store,'session-03')==queued
+                                if fail:
+                                    assert await page.locator('#organization-error').inner_text()=='Local archive temporarily unavailable'
+                                    assert desk.store.get(id)['archived'] is True
+                                else:assert desk.store.get(id)['archived']==archived
+                        finally:release.set()
+
+                    await held_archive(True)
+                    await page.locator('#show-archived').check()
+                    await held_archive(False,fail=True)
+                    await held_archive(False)
+                    await page.locator('#show-archived').uncheck()
+                    result['passed'].append('keyboard Archive/Restore through held real HTTP keeps pending action focus, rejects repeated Enter, restores failed-action focus or nearest visible action, and preserves the active unsent Plan plus both paused queued modes')
+
                     before_archive = desk.store.get('session-03')
                     await page.locator('#archive-session').click()
                     await page.wait_for_function('state.sessions.find(s=>s.id==="session-03").archived && !archiving.has("session-03")')
@@ -258,6 +307,7 @@ async def check():
                     assert await page.evaluate('selected') is None
                     assert desk.store.get('session-03')['archived'] is True
                     assert load_draft(desk.store, 'session-03') == prepared
+                    assert followup_snapshot(desk.store,'session-03')==queued
                     await page.locator('#show-archived').check()
                     await open_session('session-03')
                     assert await page.locator('#prompt').input_value() == text

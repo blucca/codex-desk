@@ -112,6 +112,7 @@ function drawSidebar(){
   const focused=document.activeElement, focusedRow=list.contains(focused)?focused.closest('.session-row'):null;
   const focusedControl=focusedRow && (focused.classList.contains('session-archive')?'archive':focused.classList.contains('session')?'session':null);
   const focusedSession=focusedControl?focusedRow.dataset.session:null;let restoreFocus=null;
+  const focusedIndex=focusedRow?[...list.querySelectorAll('.session-row')].indexOf(focusedRow):-1;
   list.replaceChildren();
   const query=$('session-filter').value.trim().normalize('NFC').toLocaleLowerCase(), showArchived=$('show-archived').checked;
   const current=new Map(state.sessions.map(s=>[s.id,s]));let visible=0;
@@ -138,7 +139,8 @@ function drawSidebar(){
         b.onclick=()=>open(s.id);
         const archive=make('button',s.archived?'Restore':'Archive','session-archive');archive.type='button';
         archive.setAttribute('aria-label',`${s.archived?'Restore':'Archive'} saved session ${s.name || group.name}`);
-        archive.disabled=archiving.has(s.id);archive.onclick=()=>setArchived(s.id,!s.archived);
+        // Keep the pending action focusable; setArchived rejects repeats.
+        archive.setAttribute('aria-disabled',String(archiving.has(s.id)));archive.onclick=()=>setArchived(s.id,!s.archived);
         if(s.id===focusedSession)restoreFocus=focusedControl==='archive'?archive:b;
         row.append(b,archive);section.append(row);++visible;
       }
@@ -148,6 +150,11 @@ function drawSidebar(){
   if(!visible && state.sessions.length)list.append(make('p',query?'No saved titles or project folders match.':'No recent saved sessions. Open a project or show archived sessions.','muted'));
   $('session-count').textContent=`${visible} shown · ${state.sessions.length} saved${state.sessions.some(s=>activeSession(s))?' · active tasks stay visible':''}`;
   if(restoreFocus && !restoreFocus.disabled)restoreFocus.focus({preventScroll:true});
+  else if(focusedControl==='archive' && archiving.has(focusedSession)){
+    const remaining=[...list.querySelectorAll('.session-row')];
+    const nearby=remaining[Math.min(focusedIndex,remaining.length-1)];
+    (nearby?.querySelector('.session-archive') || $('session-filter')).focus({preventScroll:true});
+  }
   list.scrollLeft=left;list.scrollTop=top;
 }
 async function setArchived(id,archived){
