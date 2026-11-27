@@ -415,7 +415,7 @@ async def one(browser, width):
 
 async def main():
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM', '/usr/bin/chromium'),
+        browser = await playwright.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM'),
                                                   headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
         try:
             rows = [await one(browser, width) for width in (1250, 390)]

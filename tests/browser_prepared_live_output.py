@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+import os
 from unittest.mock import patch
 import browser_prepared_request as c
 
@@ -77,7 +78,7 @@ async def check(browser,width,surface):
 
 async def main():
     async with c.async_playwright() as p:
-        browser=await p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
+        browser=await p.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM'),headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
         results=[]
         for width in (1250,390):
             for surface in ('request','editor'):

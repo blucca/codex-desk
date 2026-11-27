@@ -142,7 +142,7 @@ async def one(browser,width):
 
 async def main():
  async with async_playwright() as p:
-  browser=await p.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM','/usr/bin/chromium'),headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
+  browser=await p.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM'),headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
   try:rows=[await one(browser,width) for width in (1250,390)]
   finally:await browser.close()
  path=OUT/'result.json';path.write_text(json.dumps({'passed':all(r['passed'] for r in rows),'results':rows},indent=2,ensure_ascii=False)+'\n');path.chmod(0o600)

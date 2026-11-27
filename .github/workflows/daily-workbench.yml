@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
+      DESK_SOURCE: ${{ github.workspace }}
       DESK_TEST_TEMP: ${{ github.workspace }}/temp
       TMPDIR: ${{ github.workspace }}/temp
       TEMP: ${{ github.workspace }}/temp

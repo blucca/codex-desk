@@ -3,7 +3,7 @@ import asyncio,copy,json,os,sys,threading,traceback
 from pathlib import Path
 from unittest.mock import Mock
 from urllib.parse import urlsplit
-S=Path(os.environ['DESK_SOURCE']).resolve();sys.path.insert(0,str(S/'tests'))
+S=Path(os.environ.get('DESK_SOURCE',Path(__file__).resolve().parents[1])).resolve();sys.path.insert(0,str(S/'tests'))
 if os.environ.get('DESK_USE_INSTALLED')!='1':sys.path.insert(0,str(S))
 import codex_desk
 if os.environ.get('DESK_USE_INSTALLED')=='1':assert not Path(codex_desk.__file__).resolve().is_relative_to(S)
@@ -87,7 +87,7 @@ async def one(browser,width):
  (OUT/f'case-{width}.json').write_text(json.dumps(r,indent=2)+'\n');print(json.dumps({k:v for k,v in r.items() if k not in ('http','native','traceback')}),flush=True);return r
 async def main():
  async with async_playwright() as p:
-  b=await p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
+  b=await p.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM'),headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
   try:rows=[await one(b,w) for w in (1250,390)]
   finally:await b.close()
  (OUT/'result.json').write_text(json.dumps({'passed':all(x['passed'] for x in rows),'cases':rows},indent=2)+'\n')

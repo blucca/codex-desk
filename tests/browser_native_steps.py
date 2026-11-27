@@ -161,7 +161,7 @@ async def one(browser,width):
  (OUT/f'case-{width}.json').write_text(json.dumps(r,indent=2,ensure_ascii=False)+'\n');print(json.dumps({k:v for k,v in r.items() if k not in ['http','traceback']}),flush=True);return r
 async def main():
  async with async_playwright() as p:
-  b=await p.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM','/usr/bin/chromium'),headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
+  b=await p.chromium.launch(executable_path=os.environ.get('DESK_CHROMIUM'),headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
   try:rows=[await one(b,1250),await one(b,390)]
   finally:await b.close()
  (OUT/'result.json').write_text(json.dumps({'passed':all(r['passed'] for r in rows),'results':rows},indent=2)+'\n')
