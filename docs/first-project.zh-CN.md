@@ -77,7 +77,7 @@ uvx --refresh --prerelease allow codex-desk@latest
 
 ### 不打开原生任务，也能检查和复用准备内容
 
-首页或侧栏 **Prepared work** 按项目显示已保存的草稿和后续任务。点击 **Review draft and follow-ups** 阅读、复制或修改该会话的准备内容，目录已删除时仍可只读查看。后续任务的 **Use in this session draft** 先展示原指令，再用 **Append** 或 **Replace** 明确放入同一会话草稿；源后续任务及顺序不变。
+首页或侧栏 **Prepared work** 按项目显示已保存的草稿和后续任务。点击 **Review draft and follow-ups** 阅读、复制或修改该会话的准备内容，目录已删除时仍可只读查看。后续任务的 **Use in this session draft** 先展示原指令，再用 **Append to draft** 或 **Replace draft text** 明确放入同一会话草稿；源后续任务及顺序不变。
 
 **Save draft locally** 只保存草稿；**Save draft and open** 在保存成功后打开该会话，并显示刚审核的原文及 Work／Plan 模式，随后才由你决定是否运行。保存期间有更新的编辑、切换阅读或冲突时，会保留编辑而不继续打开。打开失败后可用 **Open conversation** 重试已保存的草稿，或继续本地检查。
 
