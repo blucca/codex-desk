@@ -100,6 +100,8 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
+- **Review this turn's changes.** The latest native cumulative diff appears in **Turn changes**. Read or copy its full patch without losing your position as output continues; actual completion, interruption or failure keeps the last reported diff until the next turn.
+- **Correct the task underway.** Use a separate **Instruction for current task** editor and **Send to current task** to steer the active native turn while keeping your unsent Plan and prepared follow-ups intact.
 - **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. **Prepared work** reviews saved drafts, queued instructions and unconfirmed Run requests across projects without starting native work, including removed folders. Edit, remove, reorder or clear saved queued instructions locally while leaving today's task and draft in place. Choose **Review task request** to inspect the original captured instruction and target independently of your current draft. Explicitly append or replace draft text to reuse an instruction; save locally, then choose when to open and send it.
 - **Review before changing provider.** Carry editable visible task evidence into a distinct target-provider conversation, preserving the original.
 - **Find a saved decision.** Search readable history and inspect the original answer before deciding whether to continue the task.

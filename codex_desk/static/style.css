@@ -168,7 +168,7 @@ button[aria-disabled="true"]{opacity:.5;cursor:default}
 @media(max-width:500px){#preparation-request{padding:18px}#preparation-request .actions button{flex:1 1 100%;white-space:normal}}
 
 /* Native scroll anchoring must not move the workbench behind a local review. */
-html:has(#preparation[open]), html:has(#preparation-request[open]), html:has(#native-steps[open]:not([hidden])) { overflow-anchor: none; }
+html:has(#preparation[open]), html:has(#preparation-request[open]), html:has(#native-steps[open]:not([hidden])), html:has(#turn-changes[open]:not([hidden])) { overflow-anchor: none; }
 
 /* Compact native checklist; independent of Work/Plan drafts and preparation. */
 .native-steps{margin:12px 0;border:1px solid #344356;border-radius:9px;background:#151e29;min-width:0}
@@ -184,3 +184,21 @@ html:has(#preparation[open]), html:has(#preparation-request[open]), html:has(#na
 .native-step-text{white-space:pre-wrap}
 .native-step-status{display:block;color:#9aaaba;font-size:11px}
 #native-steps-list li[data-status="inProgress"] .native-step-status{color:#9adcbe}
+
+.turn-changes{margin:12px 0;border:1px solid #344356;border-radius:9px;background:#151e29;min-width:0}
+.turn-changes[hidden]{display:none}
+.turn-changes>summary{cursor:pointer;padding:12px 15px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#turn-changes-summary{color:#9eb6c8;margin-left:12px}
+#turn-changes-status,.turn-changes>.actions{margin:0 16px 10px}
+#turn-changes-body{max-height:420px;overflow:auto;margin:0;padding:14px 16px;white-space:pre;font-size:12px;line-height:1.6;tab-size:4}
+#turn-changes-body:focus-visible,.turn-changes>summary:focus-visible{outline:2px solid #70d6b0;outline-offset:2px}
+
+/* Same-turn correction editor and retained native instruction receipt. */
+.steering{margin:16px 0;padding:14px 16px;border:1px solid #344356;border-radius:9px;background:#151e29;min-width:0}
+.steering[hidden]{display:none}.steering h2{font-size:15px;margin:0 0 8px}
+.steering textarea{box-sizing:border-box;width:100%;resize:vertical;min-height:90px;margin:8px 0 12px}
+.steering .actions{flex-wrap:wrap}.steering p{overflow-wrap:anywhere;white-space:pre-wrap}
+#steering-captured{margin-top:12px}#steering-captured summary{cursor:pointer}
+#steering-captured-text{max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#101821}
+html:has(#steering-input:focus),html:has(#steering-captured[open]:not([hidden])){overflow-anchor:none}
+@media(max-width:500px){.steering .actions button{flex:1 1 100%;white-space:normal}}

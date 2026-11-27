@@ -84,6 +84,20 @@ When native Codex reports a checklist, **Native task steps** shows its current s
 
 These are reported task steps, separate from your Work/Plan draft and prepared follow-ups. Completion, interruption or failure retains the last reported statuses without marking unfinished steps completed. A new native turn starts with an empty readout; returning to the same saved Desk task restores its retained reports.
 
+## Turn changes
+
+When native Codex reports a turn-level diff, **Turn changes** shows its latest cumulative patch across changed files. Expand it to read the complete literal diff; **Copy complete diff** copies exactly that displayed patch. Later native updates replace it rather than append duplicate patches. Reading stays in place while new output accumulates in **Latest output ↓**.
+
+Completion, interruption or failure keeps the last reported patch with the task outcome. A new turn clears the previous patch until Codex reports another; a newer empty diff clears it too. This reader does not apply patches or edit files. Work/Plan drafts, Prepared work and native task steps remain separate.
+
+## Instruction for current task
+
+While a native task is active, write a correction in **Instruction for current task** and choose **Send to current task**. The instruction targets the displayed native thread and active turn—for example, “Skip the slow integration suite; run parser unit tests only.” Work/Plan preparation uses its original editor and stays unchanged.
+
+Native acceptance confirms that same task. Only the exact captured correction clears; edits made while the response waits remain unsent. The literal captured instruction and its receipt remain available to read. Native rejection retains the correction for editing, while **Check instruction** reads an unconfirmed receipt without sending again. Stop and native approval controls remain available independently.
+
+Returning to the saved task restores the retained instruction receipt. If an unconfirmed instruction belongs to an earlier turn, **Prepare instruction for current task** explicitly prepares a fresh correction for the displayed current turn; choose Send separately. Each send is an explicit current-task instruction, separate from Run and Prepared follow-ups.
+
 ## Prepared follow-ups
 
 Write a task, choose **Work** or **Plan**, then click **Save as follow-up**. This saves preparation for the current Desk conversation and provider, even while another task runs. Expand **Prepared follow-ups** to edit, remove, reorder or clear the saved instructions.

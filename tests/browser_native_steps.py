@@ -115,7 +115,8 @@ async def one(browser,width):
   await page.evaluate('()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
   reading=await page.evaluate("()=>({focus:document.activeElement.id,inner:$('native-steps-body').scrollTop,window:scrollY,open:$('native-steps').open})")
   # Read within the page, not at its bottom clamp: terminal queue controls
-  # can shorten the document below the reader when the task becomes idle.
+  # and the empty current-task instruction controls can shorten the document
+  # below the reader when the task becomes idle.
   # Expanded native-step reading also disables scroll anchoring: terminal
   # controls above it must not shift an otherwise reachable window position.
   await page.evaluate("()=>window.scrollTo({top:Math.max(0,scrollY-140),behavior:'instant'})")

@@ -304,8 +304,9 @@ async function until(fn,message){for(let i=0;i<150;i++){if(await fn())return;awa
                   '\n'.join(line for line in source.splitlines() if line.startswith("$('prompt').oninput=") or line.startswith("$('turn-mode').onchange=") or line.startswith('DeskFollowups.configure('))]
         followups = (PRODUCT / 'codex_desk/static/followups.js').read_text()
         presentation = (PRODUCT / 'codex_desk/static/preparation.js').read_text()
-        native_steps = (PRODUCT / 'codex_desk/static/native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
-        return dom + setup + '\n' + native_steps + presentation + '\n' + followups + '\n' + '\n'.join(chunks) + '\n' + r'''
+        native_readouts = (PRODUCT / 'codex_desk/static/native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
+        native_readouts += (PRODUCT / 'codex_desk/static/turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
+        return dom + setup + '\n' + native_readouts + presentation + '\n' + followups + '\n' + '\n'.join(chunks) + '\n' + r'''
 (async()=>{
 selected=session;generation=3;nativeThreadId='native-original';state=await api('/api/state');
 await loadDraft(session,generation);DeskFollowups.select(session);await DeskFollowups.refresh(session);$('prompt').focus();draw();

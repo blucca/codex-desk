@@ -70,8 +70,9 @@ class SelectedOriginalControllerTests(unittest.TestCase):
                      source[source.index("$('read-original').onclick="):source.index('DeskRecall.configure(')],
                      source[source.index('function consume(m)'):source.index('async function refresh()')],
                      source[source.index('async function pollActivity()'):source.index('async function tick()')]]
-        native_steps = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
-        code = SETUP + '\n' + native_steps + '\n'.join(fragments) + '\n(async()=>{\n' + body + r'''
+        native_readouts = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
+        native_readouts += (APP.parent / 'turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
+        code = SETUP + '\n' + native_readouts + '\n'.join(fragments) + '\n(async()=>{\n' + body + r'''
 unchanged();process.stdout.write(JSON.stringify({passed:true}));
 })().catch(error=>{process.stderr.write(error.stack);process.exitCode=1;});
 '''

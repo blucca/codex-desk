@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 DeskNativeSteps.configure({$,make});
+DeskTurnChanges.configure({$,writeText:text=>navigator.clipboard.writeText(text)});
 function consumeDeskAccessFragment(){
   const accessFragment = new URLSearchParams(window.location.hash.slice(1));
   if(!accessFragment.has('access'))return false;
@@ -409,7 +410,12 @@ function draw() {
   document.title=(running?`(${running} active) `:'')+'Codex Desk';
   $('activity-controls').hidden=!selected;
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
-  if(!opening && DeskNativeSteps.sync(s,{session:selected,thread:nativeThreadId,generation})){++latestUpdates;latestLabel();}
+  if(!opening){
+    const progressChanged=DeskNativeSteps.sync(s,{session:selected,thread:nativeThreadId,generation});
+    const diffChanged=DeskTurnChanges.sync(s,{session:selected,thread:nativeThreadId,generation});
+    if(progressChanged || diffChanged){++latestUpdates;latestLabel();}
+  }
+  DeskSteering.sync(s,{session:selected,thread:nativeThreadId,generation});
   $('archive-session').hidden=false;$('archive-session').textContent=s.archived?'Restore session':'Archive session';
   $('archive-session').disabled=archiving.has(s.id);
   $('archive-status').hidden=!s.archived;
@@ -519,7 +525,9 @@ function consume(m) {
   // Old cached streams may contain owned child notifications. Keep native
   // requests/resolutions, but never display a child as the selected parent.
   if(p.threadId && nativeThreadId && p.threadId!==nativeThreadId && m.id===undefined && m.method!=='serverRequest/resolved')return;
+  DeskSteering.consume(m,{session:selected,thread:nativeThreadId,generation});
   const progressChanged=DeskNativeSteps.consume(m,{session:selected,thread:nativeThreadId,generation});
+  const diffChanged=DeskTurnChanges.consume(m,{session:selected,thread:nativeThreadId,generation});
   if(m.method==='turn/started')currentTurn=p.turn?.id || p.turnId || currentTurn;
   if(m.id !== undefined && m.method) {requests.set(String(m.id),m);approvals();}
   if(m.method==='serverRequest/resolved') {requests.delete(String(p.requestId));approvals();}
@@ -535,19 +543,21 @@ function consume(m) {
     i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i,p.turnId);
   }
   if(m.method==='error')$('activity').append(DeskNativeState.card(p.error || p,!!p.willRetry,make));
-  return progressChanged;
+  return progressChanged || diffChanged;
 }
 async function refresh() {
   const current=generation, version=++refreshVersion, next=await api('/api/state');
   if(current!==generation || version!==refreshVersion)return;
   state=next;DeskFollowups.refresh(selected);requests=new Map((state.pending?.[selected] || []).map(m=>[String(m.id),m]));approvals();draw();DeskRecall.stateChanged();if($('profiles-dialog').open)drawProfiles();
 }
-async function open(id,{revealLatest=true,keepError=false}={}) {
+async function open(id,{revealLatest=true,keepError=false,steerReceiptOnly=false}={}) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
   selected=id;DeskHome.selectionChanged();DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
   DeskNativeSteps.select({session:id,thread:null,generation:current});
+  DeskTurnChanges.select({session:id,thread:null,generation:current});
+  DeskSteering.select({session:id,thread:null,generation:current});
   if(!keepError)$('error').hidden=true;
   $('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
@@ -561,6 +571,23 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
       await preparation;await readTurnRequest(retained);if(current!==generation)return;
       nativeThreadId=state.sessions.find(s=>s.id===id)?.thread_id || null;
       DeskNativeSteps.select({session:id,thread:nativeThreadId,generation:current});
+      DeskTurnChanges.select({session:id,thread:nativeThreadId,generation:current});
+      DeskSteering.select({session:id,thread:nativeThreadId,generation:current});
+      const rows=await api('/api/events?session='+encodeURIComponent(id)+'&after=0');
+      if(current!==generation)return;
+      for(const row of rows){after=row.seq;consume(row.event);}
+      await refresh();if(current!==generation)return;
+      localStorage.setItem('codex-desk-session',id);
+      opening=false;$('welcome').hidden=true;$('task').hidden=false;$('handoff').hidden=false;draw();DeskSteering.opened();
+      return true;
+    }
+    let steeringRetained=false;
+    if(steerReceiptOnly){steeringRetained=await DeskSteering.opened();if(current!==generation)return;}
+    if(steeringRetained){
+      nativeThreadId=state.sessions.find(s=>s.id===id)?.thread_id || null;
+      DeskNativeSteps.select({session:id,thread:nativeThreadId,generation:current});
+      DeskTurnChanges.select({session:id,thread:nativeThreadId,generation:current});
+      DeskSteering.select({session:id,thread:nativeThreadId,generation:current});
       const rows=await api('/api/events?session='+encodeURIComponent(id)+'&after=0');
       if(current!==generation)return;
       for(const row of rows){after=row.seq;consume(row.event);}
@@ -574,17 +601,21 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
     localStorage.setItem('codex-desk-session',id);
     nativeThreadId=opened.thread.id;
     DeskNativeSteps.select({session:id,thread:nativeThreadId,generation:current});
+    DeskTurnChanges.select({session:id,thread:nativeThreadId,generation:current});
+      DeskSteering.select({session:id,thread:nativeThreadId,generation:current});
     for(const [index,t] of (opened.thread.turns || []).entries())for(const i of t.items || [])renderItem(i,t.id || 'snapshot:'+index);
     const rows=await api('/api/events?session='+encodeURIComponent(id)+'&after=0');
     if(current!==generation)return;
     for(const row of rows){after=row.seq;consume(row.event);}
     DeskNativeSteps.restoreThread(opened.thread,{session:id,thread:nativeThreadId,generation:current});
+    DeskTurnChanges.restoreThread(opened.thread,{session:id,thread:nativeThreadId,generation:current});
+    DeskSteering.restoreThread(opened.thread,{session:id,thread:nativeThreadId,generation:current});
     $('prompt').value=drafts.get(id) || '';$('welcome').hidden=true;
     await refresh();
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
-    opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
-    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && ($('native-steps').hidden || !$('native-steps').open) && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
+    opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;DeskSteering.opened();
+    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !DeskSteering.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
     return true;
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
@@ -680,6 +711,7 @@ $('project-more').onclick=()=>findProject(projectCursor);
 $('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
 $('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
 $('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
+DeskSteering.configure({$,api,selection:()=>({session:selected,thread:nativeThreadId,generation,opening,connected:Object.hasOwn(state.pending || {},selected),status:state.sessions.find(s=>s.id===selected)?.status})});
 DeskFollowups.configure({api,make,selected:()=>selected,refresh,afterDraw:drawTurnRequest});
 DeskHistoryReader.configure({api});
 $('read-original').onclick=()=>readSelectedOriginal();
@@ -739,7 +771,7 @@ async function startup(){
   // A deliberate selection supersedes this return, including a late open reply.
   if(restoreSession && restoreGeneration===generation){
     const attempt=generation+1;
-    const restored=await open(restoreSession,{keepError:true});
+    const restored=await open(restoreSession,{keepError:true,steerReceiptOnly:true});
     if(generation===attempt){
       restoreGeneration=attempt;
       if(restored!==true){
@@ -760,7 +792,7 @@ async function pollActivity(){
   if(selected && !opening){
     const rows=await api(`/api/events?session=${selected}&after=${after}`);
     if(current!==generation)return;
-    const follow=nearLatest() && ($('native-steps').hidden || !$('native-steps').open) && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
+    const follow=nearLatest() && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
     for(const r of rows){
       after=r.seq;const progressChanged=consume(r.event);
       if(progressChanged || ['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
@@ -768,7 +800,7 @@ async function pollActivity(){
     if(changed){
       if(follow)requestAnimationFrame(()=>{
         if(current!==generation)return;
-        if(($('native-steps').hidden || !$('native-steps').open) && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
+        if(($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && !$('recent-work').open && !DeskSteering.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
         else{latestUpdates+=changed;latestLabel();}
       });
       else{latestUpdates+=changed;latestLabel();}

@@ -24,6 +24,7 @@ from .native_recall import NativeRecallIndex
 from .history_scan import NativeHistoryScanner
 from .drafts import load_draft, save_draft, DraftConflict
 from .turn_dispatch import (start_turn, turn_status, resolve_turn, block_unresolved_turn, turn_cursor, TurnConflict)
+from .steer_dispatch import start_steer, steer_status, SteerConflict
 from .preparation import preparation_snapshot
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
@@ -59,6 +60,7 @@ class Desk:
         self.lock = threading.RLock()
         self.admissions = {}
         self.followup_sends = {}
+        self.steer_sends = {}
     def open(self, identifier):
         with self.lock:
             validate_handoff_home(self, identifier)
@@ -410,6 +412,14 @@ def handler(desk, access_token=None):
                     if result is None:
                         return self.reply({'error': 'No saved target for this handoff request'}, 404)
                     return self.reply(result)
+                if url.path == '/api/steer/request':
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2)
+                    if set(params) not in ({'session'}, {'session', 'token'}) or any(len(values) != 1 for values in params.values()):
+                        raise ValueError('Use one session and optional correction request ID')
+                    result = steer_status(desk, params['session'][0], params.get('token', [None])[0])
+                    if result is None:
+                        return self.reply({'error': 'No saved same-turn instruction'}, 404)
+                    return self.reply(result)
                 if url.path == '/api/turn/request':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2)
                     if set(params) not in ({'session'}, {'session', 'token'}) or any(len(values) != 1 for values in params.values()):
@@ -464,12 +474,12 @@ def handler(desk, access_token=None):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/followups.js', '/native-state.js', '/native-steps.js', '/recall.js', '/home.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/recall.js', '/home.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()
@@ -537,6 +547,8 @@ def handler(desk, access_token=None):
                     result = desk.open(data['session'])
                 elif path == '/api/rename':
                     result = desk.rename(data['session'], data['name'])
+                elif path == '/api/steer':
+                    result = start_steer(desk, data)
                 elif path == '/api/turn':
                     if 'token' in data:
                         result = start_turn(desk, data)
@@ -558,7 +570,7 @@ def handler(desk, access_token=None):
                 else:
                     return self.reply({'error': 'Not found'}, 404)
                 self.reply(result)
-            except (DraftConflict, FollowupConflict, HandoffConflict, TurnConflict) as error:
+            except (DraftConflict, FollowupConflict, HandoffConflict, TurnConflict, SteerConflict) as error:
                 self.reply({'error': str(error), 'current': error.current}, 409)
             except FollowupDispatchError as error:
                 self.reply({'error': str(error), **error.snapshot}, 400)

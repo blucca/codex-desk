@@ -145,6 +145,41 @@ def _thread_scope(params):
     return thread.get('id') if isinstance(thread, dict) and isinstance(thread.get('id'), str) else None
 
 
+def active_turn_id(store, session, thread_id):
+    """Established unfinished parent turn from retained native boundaries."""
+    with store.lock:
+        row = store.get(session)
+        if not row or row['thread_id'] != thread_id or row['status'] not in ('running', 'approval'):
+            return None
+        events = store.db.execute(
+            "SELECT payload FROM events WHERE session_id=? AND "
+            "json_extract(payload,'$.method') IN ('turn/started','turn/completed') ORDER BY seq",
+            (session,)).fetchall()
+    current, retired = None, set()
+    for (raw,) in events:
+        message = json.loads(raw)
+        if 'id' in message:
+            continue
+        params = message.get('params') or {}
+        turn = params.get('turn') or {}
+        scope = _thread_scope(params) or turn.get('threadId')
+        if scope and scope != thread_id:
+            continue
+        identifier = turn.get('id') or params.get('turnId')
+        if not isinstance(identifier, str) or not identifier:
+            continue
+        if message['method'] == 'turn/started':
+            if identifier in retired or identifier == current:
+                continue
+            if current:
+                retired.add(current)
+            current = identifier
+        elif identifier == current:
+            retired.add(identifier)
+            current = None
+    return current
+
+
 def profiles(home):
     home = Path(home)
     result = [{"id": "default", "name": "Current Codex settings", "editable": False}]
@@ -641,6 +676,24 @@ class Runtime:
             if row['thread_id'] and thread_id != row['thread_id'] and row['status'] not in ACTIVE_STATUSES:
                 return
         self.store.update(self.id, status='running' if not self.approvals else 'approval')
+
+    def steer(self, thread_id, expected_turn_id, text):
+        if (not isinstance(thread_id, str) or not thread_id.strip()
+                or not isinstance(expected_turn_id, str) or not expected_turn_id.strip()
+                or not isinstance(text, str) or not text.strip() or len(text) > 200_000):
+            raise ValueError('Use the current native task and a nonblank correction')
+        with self.lifecycle_lock:
+            if self.closing or self.process.poll() is not None:
+                raise ValueError('The selected native task is no longer connected')
+            if active_turn_id(self.store, self.id, thread_id) != expected_turn_id:
+                raise ValueError('The captured native task is no longer active')
+        # The reader must deliver notifications/replies while this call waits.
+        # Native expectedTurnId checks a boundary that changes after our read.
+        result = self.request('turn/steer', {'threadId': thread_id,
+            'expectedTurnId': expected_turn_id, 'input': [{'type': 'text', 'text': text}]})
+        if not isinstance(result, dict) or result.get('turnId') != expected_turn_id:
+            raise NativeRequestUnknown('Native Codex did not confirm this same-turn instruction')
+        return result
 
     def interrupt(self):
         events = self.store.events(self.id)

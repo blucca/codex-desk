@@ -12,8 +12,9 @@ class TransitionNavigationControllerTests(unittest.TestCase):
         source = APP.read_text()
         shipped = source[source.index('function activeSession('):source.index('function itemText(')]
         shipped += source[source.index('async function refresh()'):source.index('async function open(id,')]
-        native_steps = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
-        code = SETUP + '\n' + native_steps + shipped + '\n(async()=>{\n' + body + r'''
+        native_readouts = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
+        native_readouts += (APP.parent / 'turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
+        code = SETUP + '\n' + native_readouts + shipped + '\n(async()=>{\n' + body + r'''
 unchanged();assert(calls.every(call=>call.path==='/api/state'));
 process.stdout.write(JSON.stringify({passed:true}));
 })().catch(error=>{process.stderr.write(error.stack);process.exitCode=1;});
