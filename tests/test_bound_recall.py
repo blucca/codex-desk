@@ -216,7 +216,10 @@ class BoundRecallTests(unittest.TestCase):
         self.assertEqual(self.scan()['skipped'], 1)
         self.assertEqual(self.recall()['results'], result['results'])
         self.assertEqual([method for method, _ in self.calls], ['thread/list'])
-        self.assertEqual(list(store.db.iterdump()), dump)
+        # An explicit refresh advances scan counters; retained evidence is unchanged.
+        evidence = lambda lines: [line for line in lines
+                                  if not line.startswith('INSERT INTO "native_history_scan_state"')]
+        self.assertEqual(evidence(store.db.iterdump()), evidence(dump))
         cold = Desk('never-executed', self.root / 'home', self.root / 'state')
         try:
             cold_dump = list(cold.store.db.iterdump())

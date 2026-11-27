@@ -106,11 +106,12 @@ for line in sys.stdin:
 
     @staticmethod
     def saved_sql(desk):
-        # Indexing may write only its native cache, not bindings or preparation.
+        # Indexing may write its native cache and scan checkpoint, not bindings or preparation.
         with desk.store.lock:
             tables = desk.store.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
             return {name: desk.store.db.execute('SELECT * FROM "' + name + '" ORDER BY rowid').fetchall()
-                    for (name,) in tables if not name.startswith('native_recall_')}
+                    for (name,) in tables if not name.startswith('native_recall_')
+                    and name != 'native_history_scan_state'}
 
     def test_existing_catalog_cwd_survives_cold_launch_from_another_folder(self):
         desk = self.desk(self.launch)

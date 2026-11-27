@@ -17,10 +17,12 @@ class HistoryScanTests(unittest.TestCase):
             if identifier in failed:
                 raise ValueError('Read unavailable')
             return {'id': identifier, 'turns': []}
-        index = SimpleNamespace(needs_snapshot=lambda m: m['id'] not in fresh,
+        store = SimpleNamespace(db=sqlite3.connect(':memory:', check_same_thread=False), lock=threading.RLock())
+        self.addCleanup(store.db.close)
+        index = SimpleNamespace(store=store, needs_snapshot=lambda m: m['id'] not in fresh,
                                 replace_snapshot=lambda t: saved.append(t),
                                 catch_up_bindings=lambda identifier: None)
-        desk = SimpleNamespace(catalog=lambda: SimpleNamespace(request=request), history=history)
+        desk = SimpleNamespace(home='/fixture/native-home', catalog=lambda: SimpleNamespace(request=request), history=history)
         scan = NativeHistoryScanner(desk, index)
         self.addCleanup(scan.close)
         return scan, calls, saved

@@ -162,6 +162,7 @@ $('show-archived').onchange=()=>drawSidebar();
 $('archive-session').onclick=()=>{const s=state.sessions.find(s=>s.id===selected);if(s)setArchived(s.id,!s.archived);};
 function draw() {
   drawSidebar();
+  DeskHome.sync();
   const running=state.sessions.filter(s=>['running','approval','starting'].includes(s.status)).length;
   document.title=(running?`(${running} active) `:'')+'Codex Desk';
   $('activity-controls').hidden=!selected;
@@ -299,7 +300,7 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
   if(selected){rememberDraft(selected);persistDraft(selected);}
   const current=++generation;
   latestUpdates=0;latestLabel();
-  selected=id;$('welcome').hidden=true;DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
+  selected=id;DeskHome.selectionChanged();DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
   if(!keepError)$('error').hidden=true;
   $('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
@@ -468,7 +469,7 @@ async function pollActivity(){
   if(selected && !opening){
     const rows=await api(`/api/events?session=${selected}&after=${after}`);
     if(current!==generation)return;
-    const follow=nearLatest();let changed=0;
+    const follow=nearLatest() && !$('recent-work').open;let changed=0;
     for(const r of rows){
       after=r.seq;consume(r.event);
       if(['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
@@ -504,6 +505,7 @@ DeskPreparation.configure({api,make,profileLabel,onSaved:preparationSaved,
   openConversation:async id=>{await open(id);return selected===id && !opening && !$('task').hidden;}});
 $('show-preparation').onclick=()=>DeskPreparation.show();
 DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>generation,open,
+  state:()=>state,opening:()=>opening,
   browse:()=>$('browse').click(),project:()=>$('new').click()});
 tick();
 

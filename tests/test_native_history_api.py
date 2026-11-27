@@ -310,7 +310,7 @@ class NativeHistoryApiTests(unittest.TestCase):
         self.assertEqual((retried['job']['failed'], retried['job']['skipped']), (3, 1))
         self.assertNotIn(('thread/read', {'threadId': 'good', 'includeTurns': True}), self.calls)
 
-    def test_cancel_single_worker_no_late_snapshot_and_explicit_restart(self):
+    def test_cancel_after_last_inflight_read_keeps_snapshot_and_explicit_recent_refresh(self):
         meta = self.native('blocked', 'cancelled phrase')
         entered, release = threading.Event(), threading.Event()
         self.addCleanup(release.set)
@@ -336,11 +336,11 @@ class NativeHistoryApiTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/api/history/index/cancel', {})[0], 200)
         release.set()
         cancelled = self.finish()
-        self.assertEqual((cancelled['job']['status'], cancelled['job']['indexed']), ('cancelled', 0))
-        self.assertEqual(cancelled['coverage']['indexed_threads'], 0)
+        self.assertEqual((cancelled['job']['status'], cancelled['job']['indexed']), ('completed', 1))
+        self.assertEqual(cancelled['coverage']['indexed_threads'], 1)
         self.assertEqual(self.desk.store.sessions(), [])
         self.catalog.request.side_effect = self.native_request
-        self.assertEqual(self.index([meta], 1)['job']['indexed'], 1)
+        self.assertEqual(self.index([meta], 1)['job']['skipped'], 1)
         self.assertEqual(self.recall(q='cancelled phrase')[1]['total'], 1)
 
     def test_index_limits_validation_and_origin_do_not_start_worker(self):
@@ -391,7 +391,7 @@ class NativeHistoryApiTests(unittest.TestCase):
         self.assertFalse(closer.is_alive())
         self.assertTrue(closed.is_set())
         runtime.close.assert_called_once()
-        self.assertEqual(self.request('GET', '/api/history/index')[1]['job']['status'], 'cancelled')
+        self.assertEqual(self.request('GET', '/api/history/index')[1]['job']['status'], 'completed')
         self.desk.runtimes.clear()
 
 

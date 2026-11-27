@@ -38,7 +38,7 @@ const api=async(path,data)=>{
   if(path==='/api/history/index'){
     if(failGet && !data)throw new Error('Controlled unavailable index status');
     if(data){status='completed';if(scenario.refreshedProjects)projects=scenario.refreshedProjects;return {status,seen:0,indexed:0,failed:0,limit:200};}
-    return {job:{status,seen:0,indexed:0,failed:0,limit:200},coverage:{indexed_threads:threads,indexed_items:0},projects};
+    return {job:{status,seen:0,indexed:0,failed:0,limit:200,...scenario.job},coverage:{indexed_threads:threads,indexed_items:0},projects};
   }
   if(path.startsWith('/api/recall?'))return {results:[],total:0,coverage:{native:{indexed_threads:0,indexed_items:0}}};
   throw new Error('Unexpected request '+path);
@@ -50,7 +50,9 @@ const settle=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setImmedia
 const snapshot=()=>({parent:element('recall-index').parentElement.id,disabled:element('recall-index').disabled,
   primary:element('recall-index').classes.has('recall-index-primary'),summary:element('recall-summary').textContent,
   indexStatus:element('recall-index-status').textContent,error:element('recall-index-error').hidden?null:element('recall-index-error').textContent,
-  retryVisible:!element('recall-index-retry').hidden,query:element('recall-query').value,scope:element('recall-project').value,
+  retryVisible:!element('recall-index-retry').hidden,retryText:element('recall-index-retry').textContent,
+  olderVisible:!element('recall-index-older').hidden,olderDisabled:element('recall-index-older').disabled,
+  recentText:element('recall-index').textContent,query:element('recall-query').value,scope:element('recall-project').value,
   projects:element('recall-project').children.map(n=>n.value),requests:requests.map(r=>({...r}))});
 (async()=>{
   element('home-content').onclick();await settle();const initial=snapshot();
@@ -109,6 +111,34 @@ class RecallFirstUseTests(unittest.TestCase):
         self.assertEqual(result['before']['parent'], 'recall-index-actions')
         self.assertFalse(result['before']['primary'])
         self.assertNotIn('not indexed yet', result['before']['summary'])
+
+    def test_cancelled_first_pass_offers_saved_continue_without_claiming_older_end(self):
+        before = self.run_context(threads=2, job={'status': 'cancelled', 'mode': 'recent',
+                                  'seen': 2, 'resumable': True, 'has_more': True,
+                                  'older_available': False, 'retryable_failures': 0})['before']
+        self.assertTrue(before['retryVisible'])
+        self.assertEqual(before['retryText'], 'Continue indexing')
+        self.assertEqual(before['recentText'], 'Refresh recent history')
+        self.assertFalse(before['olderVisible'])
+        self.assertIn('Unread progress is saved', before['indexStatus'])
+        self.assertNotIn('reached the end', before['indexStatus'])
+        self.assertFalse(any(r['method'] == 'POST' for r in before['requests']))
+
+    def test_running_older_pass_disables_older_and_does_not_offer_continue_yet(self):
+        before = self.run_context(threads=203, job={'status': 'running', 'mode': 'older',
+                                  'seen': 3, 'resumable': True, 'has_more': True,
+                                  'older_available': True, 'retryable_failures': 1})['before']
+        self.assertTrue(before['olderVisible'])
+        self.assertTrue(before['olderDisabled'])
+        self.assertTrue(before['disabled'])
+        self.assertFalse(before['retryVisible'])
+
+    def test_unretryable_malformed_metadata_does_not_offer_unread_retry(self):
+        before = self.run_context(threads=0, job={'status': 'completed', 'mode': 'recent',
+                                  'seen': 1, 'failed': 1, 'resumable': False, 'has_more': False,
+                                  'older_available': False, 'retryable_failures': 0})['before']
+        self.assertFalse(before['retryVisible'])
+        self.assertFalse(before['olderVisible'])
 
     def test_unavailable_status_stays_explicit_and_recovery_does_not_start_a_scan(self):
         result = self.run_context(failGet=True, recover=True)

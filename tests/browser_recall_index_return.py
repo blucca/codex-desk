@@ -72,8 +72,8 @@ async def check(width, case, playwright, evidence):
         if case == 'immediate-completion':
             release.set()
             ordinary_start = desk.history_scanner.start
-            def start(limit=200):
-                ordinary_start(limit)
+            def start(limit=200, **options):
+                ordinary_start(limit, **options)
                 desk.history_scanner.worker.join(10)
                 job = desk.history_scanner.status()
                 assert job['status'] == 'completed'
@@ -195,10 +195,13 @@ async def check(width, case, playwright, evidence):
                 await page.wait_for_function("$('recall-index-status').textContent.includes('Indexing cancelled')")
                 before_cancel = recall_count()
                 await page.wait_for_timeout(850)
-                assert recall_count() == before_cancel and desk.native_index.search('alpha decision')['total'] == 0
+                assert recall_count() == before_cancel and desk.native_index.search('alpha decision')['total'] == 1
+                assert await page.locator('.recall-result').count() == 0
                 assert await page.locator('#recall-query').input_value() == 'alpha decision'
                 before = recall_count()
                 await page.locator('#recall-index-retry').click()
+                # The click submits asynchronously; do not join the previous cancelled worker.
+                await scan_done()
             if case not in ('immediate-completion', 'cancel-retry'): before = recall_count()
             release.set()
             await asyncio.to_thread(desk.history_scanner.worker.join, 10)

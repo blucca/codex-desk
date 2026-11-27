@@ -447,7 +447,7 @@ def handler(desk, access_token=None):
                     if not isinstance(data, dict):
                         raise ValueError('Expected a history indexing object')
                     if path == '/api/history/index':
-                        result = desk.history_scanner.start(data.get('limit', 200))
+                        result = desk.history_scanner.start(data.get('limit', 200), op=data.get('op', 'recent'))
                     else:
                         result = desk.history_scanner.cancel()
                 elif path == '/api/followups':
