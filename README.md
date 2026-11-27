@@ -90,7 +90,7 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 *Example first screen. Listing recent work runs no task; Resume is an explicit choice.*
 
-Know the title? **Browse all conversations** searches native conversation titles across folders. **Open a project** lets you choose an exact folder, another retained profile, or explicitly start a new conversation. For a custom Codex history location, add `--codex-home /your/codex-home` to the launch command.
+Know the title? **Browse all conversations** searches native conversation titles across folders. **Open a project** lets you choose an exact folder, another retained profile, or explicitly start a new conversation. Enter the exact saved folder even if it has been removed: **Find existing sessions** and **Read original conversation** still work. Restore the folder to resume or start new work. For a custom Codex history location, add `--codex-home /your/codex-home` to the launch command.
 
 [中文：打开已有会话并继续工作](docs/first-project.zh-CN.md) · [Illustrated walkthrough](docs/task-walkthrough.md)
 

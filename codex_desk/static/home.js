@@ -57,8 +57,6 @@ const DeskHome=(()=>{
           }});
         row=env.row(preview,thread.cwdExists===false?null:()=>resume(thread,v,g,s),null,'Resume conversation',read);
         row.dataset.thread=thread.id;
-        if(thread.cwdExists===false){const note=document.createElement('p');note.className='muted';
-          note.textContent='Project folder unavailable. Original evidence is still readable; restore the folder to resume.';row.append(note);}
         $('home-list').append(row);
       }
       $('home-status').textContent=rows.length?'Recently updated conversations. Read original evidence without opening a task, or Resume when ready to work.':(unavailable?'Recent history points to unavailable project folders. Browse all to read the original conversations. Restore a folder only to resume work.':'No saved conversations in this Codex home yet. Open a project to start your first task. Use --codex-home if your CLI history is stored elsewhere.');

@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import threading
 import unittest
 from unittest.mock import Mock, patch
@@ -49,13 +51,22 @@ class HistorySearchTests(unittest.TestCase):
 
     def get(self, query=None):
         path = '/api/native' + ('?' + urlencode(query) if query is not None else '')
+        return self.request('GET', path)
+
+    def request(self, method, path, value=None):
         connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
+        headers = {'Content-Type': 'application/json'} if value is not None else {}
         try:
-            connection.request('GET', path)
+            connection.request(method, path, json.dumps(value) if value is not None else None, headers)
             response = connection.getresponse()
             return response.status, json.loads(response.read())
         finally:
             connection.close()
+
+    def scoped_metadata(self, exists=True):
+        return {**self.metadata,
+            'data': [dict(row, cwdExists=exists) for row in self.metadata['data']],
+            'projectScope': {'cwd': str(self.project.resolve()), 'cwdExists': exists}}
 
     @staticmethod
     def base_options():
@@ -76,7 +87,7 @@ class HistorySearchTests(unittest.TestCase):
         status, body = self.get({'cwd': str(self.project / '..' / self.project.name),
                                  'search': '  verification  '})
         self.assertEqual(status, 200)
-        self.assertEqual(body, self.metadata)
+        self.assertEqual(body, self.scoped_metadata())
         self.catalog.request.assert_called_once_with('thread/list', {
             **self.base_options(), 'cwd': str(self.project.resolve()),
             'searchTerm': 'verification',
@@ -116,7 +127,7 @@ class HistorySearchTests(unittest.TestCase):
     def test_empty_search_preserves_project_and_existing_pagination(self):
         status, body = self.get({'cwd': str(self.project), 'search': '', 'cursor': 'older'})
         self.assertEqual(status, 200)
-        self.assertEqual(body, self.metadata)
+        self.assertEqual(body, self.scoped_metadata())
         self.catalog.request.assert_called_once_with('thread/list', {
             **self.base_options(), 'cwd': str(self.project.resolve()), 'cursor': 'older',
         })
@@ -124,12 +135,75 @@ class HistorySearchTests(unittest.TestCase):
     def test_invalid_project_returns_existing_error_before_catalog_request(self):
         ordinary_file = self.root / 'ordinary-file'
         ordinary_file.write_text('fixture')
-        for cwd in ('', str(ordinary_file)):
+        for cwd in ('', ' \t\n ', str(ordinary_file), str(ordinary_file / 'child')):
             with self.subTest(cwd=cwd):
                 status, body = self.get({'cwd': cwd, 'search': 'saved title'})
                 self.assertEqual(status, 400)
-                self.assertEqual(body, {'error': 'Select a project directory'})
+                if cwd != str(ordinary_file / 'child'):
+                    self.assertEqual(body, {'error': 'Select a project directory'})
         self.catalog.request.assert_not_called()
+
+    def test_removed_project_scope_keeps_exact_title_cursor_native_rows_and_read(self):
+        self.project.rmdir()
+        original = json.loads(json.dumps(self.metadata))
+        status, body = self.get({'cwd': str(self.project / '..' / self.project.name),
+                                'search': '  项目验证 + résumé  ', 'cursor': 'older+页 /='})
+        self.assertEqual(status, 200)
+        self.assertEqual(body, self.scoped_metadata(False))
+        self.assertEqual(self.metadata, original)
+        self.catalog.request.assert_called_once_with('thread/list', {
+            **self.base_options(), 'cwd': str(self.project),
+            'searchTerm': '项目验证 + résumé', 'cursor': 'older+页 /=',
+        })
+        thread = {**original['data'][0], 'turns': [{'id': 'turn', 'items': [
+            {'id': 'answer', 'type': 'agentMessage', 'text': 'Original exact decision.'}]}]}
+        self.catalog.request.return_value = {'thread': thread}
+        status, read = self.request('GET', '/api/native/thread?id=saved-thread')
+        self.assertEqual((status, read), (200, thread))
+        self.catalog.request.assert_called_with('thread/read', {
+            'threadId': 'saved-thread', 'includeTurns': True})
+        self.assertEqual(self.desk.store.sessions(), [])
+        self.assertEqual(self.desk.runtimes, {})
+        self.assertFalse(self.project.exists())
+
+    def test_missing_project_empty_page_reports_read_only_scope_without_global_fallback(self):
+        self.project.rmdir()
+        self.catalog.request.return_value = {'data': [], 'nextCursor': None}
+        status, body = self.get({'cwd': str(self.project), 'search': 'unmatched'})
+        self.assertEqual((status, body), (200, {'data': [], 'nextCursor': None,
+            'projectScope': {'cwd': str(self.project), 'cwdExists': False}}))
+        self.catalog.request.assert_called_once_with('thread/list', {
+            **self.base_options(), 'cwd': str(self.project), 'searchTerm': 'unmatched'})
+        self.assertFalse(self.project.exists())
+
+    def test_missing_scope_does_not_relax_create_import_handoff_or_bound_open(self):
+        self.project.rmdir()
+        thread = self.metadata['data'][0]
+        self.catalog.request.return_value = {'thread': thread}
+        for path, value in (
+            ('/api/sessions', {'cwd': str(self.project), 'profile': 'default'}),
+            ('/api/handoff/start', {'cwd': str(self.project), 'profile': 'default',
+                                   'text': 'Original evidence', 'goal': 'Next task'}),
+            ('/api/import', {'thread': thread['id'], 'profile': 'default'}),
+        ):
+            with self.subTest(path=path):
+                status, body = self.request('POST', path, value)
+                self.assertEqual(status, 400)
+                self.assertIn('error', body)
+                self.assertEqual(self.desk.store.sessions(), [])
+                self.assertEqual(self.desk.runtimes, {})
+        self.catalog.request.assert_called_once_with('thread/read', {
+            'threadId': 'saved-thread', 'includeTurns': True})
+        identifier = self.desk.store.create(str(self.project), 'default', identifier='bound')
+        self.desk.store.update(identifier, thread_id='saved-thread', status='saved', thread_saved=1)
+        self.desk.binary = sys.executable
+        with patch('codex_desk.runtime.subprocess.Popen', wraps=subprocess.Popen) as start:
+            status, body = self.request('POST', '/api/open', {'session': identifier})
+            self.assertEqual(status, 400)
+            self.assertIn(str(self.project), body['error'])
+            self.assertEqual(start.call_args.kwargs['cwd'], str(self.project))
+        self.assertEqual(self.desk.runtimes, {})
+        self.assertFalse(self.project.exists())
 
     def test_native_catalog_error_keeps_existing_http_error_response(self):
         self.catalog.request.side_effect = RuntimeError('Fixture native catalog unavailable')

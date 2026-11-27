@@ -19,7 +19,7 @@ const collaborationTypes = new Set(['collabAgentToolCall', 'subAgentActivity']);
 let nativeThreadId = null, currentTurn = null;
 let modeSelected=null, generation=0, opening=false, refreshVersion=0, nativeFailureSignature='';
 const drafts=new Map(), submitting=new Set();
-let projectVersion=0, projectCursor=null, projectQuery=null, projectOpening=false;
+let projectVersion=0, projectCursor=null, projectQuery=null, projectScope=null, projectOpening=false;
 let latestUpdates=0, statePollAt=0;
 const draftWriter=crypto.randomUUID();
 const draftEdits=new Map(), draftRevisions=new Map(), draftModes=new Map(), draftSaved=new Map(), draftLoads=new Map(), draftSaves=new Map(), draftTimers=new Map(), draftConflicts=new Map(), draftMessages=new Map();
@@ -328,13 +328,14 @@ function profileInfo() {
   $('profile-info').textContent=p?`${p.provider || 'Current default'} / ${p.model || 'Configured model'}${p.endpoint?' · '+p.endpoint:''}`:'';
 }
 function resetProject() {
-  ++projectVersion;projectCursor=null;projectQuery=null;projectOpening=false;
+  ++projectVersion;projectCursor=null;projectQuery=null;projectScope=null;projectOpening=false;
   $('project-list').replaceChildren();$('project-results').hidden=true;$('project-more').hidden=true;
   $('project-error').hidden=true;projectBusy(false);
 }
 function projectBusy(busy) {
   for(const id of ['cwd','profile','project-search','session-name','project-find','project-more','project-new'])$(id).disabled=busy;
   for(const b of $('project-list').querySelectorAll('button'))b.disabled=busy;
+  $('project-new').disabled=busy || projectScope?.cwdExists===false;
 }
 function projectFilter() {return {cwd:$('cwd').value,search:$('project-search').value.trim()};}
 function projectCurrent(version, query) {
@@ -350,6 +351,13 @@ function historyPath(search, cwd=null, cursor=null) {
 }
 function projectSummary(query) {
   const count=$('project-list').children.length;
+  if(projectScope?.cwdExists===false){
+    $('project-summary').textContent=(query.search
+      ? (count?`Saved conversation titles matching “${query.search}”. `:`No saved conversation titles match “${query.search}” in this project. `)
+      : (count?'Saved conversations in this project. ':'No saved conversations in this project. '))
+      +'Project folder unavailable. Read original conversations here; restore the folder to resume or start a new conversation.';
+    return;
+  }
   $('project-summary').textContent=count
     ? (query.search?`Saved conversations with titles matching “${query.search}”. `:'')+'Choose a saved conversation to keep its context, or start a new one.'
     : (query.search?`No saved conversation titles match “${query.search}” in this project.`:'No saved conversations in this project.')+' Start a new conversation below.';
@@ -365,6 +373,8 @@ async function findProject(cursor=null) {
   try {
     const data=await api(historyPath(query.search,query.cwd,cursor));
     if(!projectCurrent(current,query))return;
+    projectScope=data.projectScope || null;
+    $('project-new').disabled=projectOpening || projectScope?.cwdExists===false;
     for(const t of data.data || []) {
       const valid=()=>projectCurrent(current,query) && !projectOpening && row.isConnected && row.parentElement===$('project-list');
       const row=nativeRow(t,
@@ -513,7 +523,7 @@ let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;
 function nativeRow(t, resume, handoff, label='Resume with current settings', read=null) {
   const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
   const actions=make('div','','actions');
-  if(resume){const view=make('button',label);view.type='button';
+  if(resume && t.cwdExists!==false){const view=make('button',label);view.type='button';
   view.onclick=async()=>{
     if(view.disabled)return;
     view.disabled=true;
@@ -521,7 +531,9 @@ function nativeRow(t, resume, handoff, label='Resume with current settings', rea
   };actions.append(view);}
   if(handoff){const review=make('button','Review handoff');review.type='button';review.onclick=handoff;actions.append(review);}
   if(read){const original=make('button','Read original conversation','native-read');original.type='button';original.onclick=read;actions.append(original);}
-  box.append(actions);return box;
+  box.append(actions);
+  if(t.cwdExists===false)box.append(make('p','Project folder unavailable. Original evidence is still readable; restore the folder to resume.','muted'));
+  return box;
 }
 function resetNative() {
   ++nativeVersion;nativeCursor=null;nativeQuery=null;nativeLoading=false;

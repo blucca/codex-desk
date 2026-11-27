@@ -34,7 +34,7 @@ class Element {
 document.body=new Element('body');document.body.connect(true);document.activeElement=document.body;
 const elements=new Map(),$=id=>{if(!elements.has(id)){const element=new Element();elements.set(id,element);document.body.append(element);}return elements.get(id);};
 const make=(tag,text='',cls='')=>new Element(tag,text,cls);
-let state={sessions:[],profiles:[]},selected='active',projectVersion=0,projectCursor=null,projectQuery=null,projectOpening=false;
+let state={sessions:[],profiles:[]},selected='active',projectVersion=0,projectCursor=null,projectQuery=null,projectScope=null,projectOpening=false;
 const archiving=new Set(),profileLabel=()=> 'Current settings';
 function open(){throw Error('Navigation fixture must not open or resume');}
 function setArchived(){throw Error('Rendering must not archive');}
@@ -107,6 +107,50 @@ assert.strictEqual(document.activeElement,rows[1].querySelector('.native-read'))
 await rows[0].querySelector('.native-read').onclick();assert.strictEqual(reads.length,2);
 assert.strictEqual(selected,'active');assert.strictEqual($('profile').value,'retained');assert.strictEqual($('project-search').value,' Release + status? ');
 assert.strictEqual(mutations.length,0);assert.strictEqual(calls.length,2);
+""")
+
+    def test_removed_project_read_back_preserves_plan_queue_query_pages_and_row(self):
+        self.run_controller(r"""
+$('project').open=true;$('cwd').value='/removed/a folder';$('project-search').value=' 决策 + résumé ';$('profile').value='retained';
+const plan={text:'Exact unsent Plan',mode:'plan'},queue=['First check','Second prepared Plan'];
+const before=JSON.stringify({selected,plan,queue});
+const scope={cwd:'/removed/a folder',cwdExists:false},calls=[];
+const reply=[{projectScope:scope,data:[{id:'first',cwd:scope.cwd,cwdExists:false,name:'决策 + résumé'}],nextCursor:'opaque+页 /='},
+ {projectScope:scope,data:[{id:'older',cwd:scope.cwd,cwdExists:false,name:'决策 + résumé older'}],nextCursor:null}];
+api=async path=>{calls.push(path);return reply.shift();};
+await findProject();assert($('project-new').disabled);await findProject('opaque+页 /=');
+const rows=$('project-list').children;assert.strictEqual(rows.length,2);
+assert(rows.every(row=>row.querySelectorAll('button').length===1));
+assert(rows.every(row=>row.textContent.includes('Original evidence is still readable')));
+assert($('project-summary').textContent.includes('restore the folder to resume or start'));
+assert(!$('project-summary').textContent.includes('Start a new conversation below'));
+await rows[1].querySelector('.native-read').onclick();
+assert.deepStrictEqual(reads[0].result,{thread_id:'older',cwd:'/removed/a folder'});reads[0].callbacks.onReturn();
+assert.strictEqual(document.activeElement,rows[1].querySelector('.native-read'));
+assert.strictEqual($('project-list').children[1],rows[1]);assert.strictEqual(rows[1].dataset.cursor,'opaque+页 /=');
+assert.strictEqual($('project-search').value,' 决策 + résumé ');assert.strictEqual($('cwd').value,scope.cwd);
+assert.strictEqual(calls.length,2);assert.strictEqual(mutations.length,0);
+const params=new URL(calls[1],'http://local').searchParams;
+assert.strictEqual(params.get('cwd'),scope.cwd);assert.strictEqual(params.get('search'),'决策 + résumé');
+assert.strictEqual(params.get('cursor'),'opaque+页 /=');assert.strictEqual(JSON.stringify({selected,plan,queue}),before);
+projectBusy(true);projectBusy(false);assert($('project-new').disabled);
+$('cwd').value='/available';resetProject();assert(!$('project-new').disabled);assert.strictEqual(projectScope,null);
+""")
+
+    def test_empty_missing_scope_is_read_only_and_stale_scope_cannot_disable_new(self):
+        self.run_controller(r"""
+$('project').open=true;$('cwd').value='/removed';$('project-search').value='Unmatched';
+api=async()=>({projectScope:{cwd:'/removed',cwdExists:false},data:[],nextCursor:null});
+await findProject();assert($('project-new').disabled);assert(!$('project-results').hidden);
+assert($('project-summary').textContent.includes('No saved conversation titles match'));
+assert($('project-summary').textContent.includes('Project folder unavailable'));
+let release;api=async path=>new URL(path,'http://local').searchParams.get('cwd')==='/removed'
+ ?new Promise(resolve=>release=resolve):{projectScope:{cwd:'/available',cwdExists:true},data:[],nextCursor:null};
+const old=findProject();$('cwd').value='/available';await findProject();
+release({projectScope:{cwd:'/removed',cwdExists:false},data:[],nextCursor:null});await old;
+assert(!$('project-new').disabled);assert.strictEqual(projectScope.cwd,'/available');
+assert($('project-summary').textContent.includes('Start a new conversation below'));
+assert.strictEqual(mutations.length,0);
 """)
 
     def test_project_source_invalidates_on_query_close_detach_and_wrong_cursor(self):

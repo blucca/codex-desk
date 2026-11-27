@@ -6,7 +6,7 @@
 
 In **Open a project**, enter part of a conversation title in **Search conversation titles**, then click **Find existing sessions** or press Enter. For conversations from other projects, open **Browse existing Codex sessions** in the sidebar, enter the title text and click **Search titles**.
 
-Project results match the conversation's exact saved working directory (`cwd`): a session started in a subfolder requires that folder or the global browser. Global browsing uses the selected Codex home. Search matches native extracted titles, not message text, command output or MCP results.
+Project results match the conversation's exact saved working directory (`cwd`): a session started in a subfolder requires that folder or the global browser. The exact saved folder can be entered even after it has been removed: **Find existing sessions** still searches its titles, and **Read original conversation** opens the original evidence. Missing-folder results have no Resume action; starting a new conversation stays unavailable until the folder is restored. **Back to project results** retains the query, loaded pages and source row. Global browsing uses the selected Codex home. Search matches native extracted titles, not message text, command output or MCP results.
 
 Editing the query clears old results and pagination; submit it again to search. Leave the title field blank to list conversations in that scope. **Load more** continues the same submitted title query and scope.
 

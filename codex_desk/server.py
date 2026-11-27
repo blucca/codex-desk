@@ -91,6 +91,20 @@ class Desk:
         if not path.is_dir():
             raise ValueError("Select a project directory")
         return path
+    def history_project_path(self, cwd):
+        """Resolve an exact read scope without requiring the former folder."""
+        if not isinstance(cwd, str) or not cwd.strip():
+            raise ValueError("Select a project directory")
+        path = Path(cwd).expanduser()
+        try:
+            path = path.resolve(strict=True)
+        except FileNotFoundError:
+            # Only an absent folder is allowed; other filesystem errors retain
+            # the usual error response. Never create it or drop the cwd filter.
+            path = path.resolve(strict=False)
+        if path.exists() and not path.is_dir():
+            raise ValueError("Select a project directory")
+        return path
     def create(self, cwd, profile, name=None):
         path = self.project_path(cwd)
         profile = self.profile_id(profile)
@@ -399,19 +413,25 @@ def handler(desk, access_token=None):
                 if url.path == '/api/native':
                     params = parse_qs(url.query, keep_blank_values=True)
                     options = {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
+                    scope = None
                     if 'cwd' in params:
-                        options['cwd'] = str(desk.project_path(params['cwd'][0]))
+                        project = desk.history_project_path(params['cwd'][0])
+                        options['cwd'] = str(project)
+                        scope = {'cwd': str(project), 'cwdExists': project.is_dir()}
                     search = params.get('search', [''])[0].strip()
                     if search:
                         options['searchTerm'] = search
                     if params.get('cursor'):
                         options['cursor'] = params['cursor'][0]
                     result = desk.catalog().request('thread/list', options)
-                    if params.get('recent') == ['1']:
-                        # Enrich a copy for Home; ordinary history stays native-shaped.
+                    if scope is not None or params.get('recent') == ['1']:
+                        # Availability is presentation metadata; keep native cwd,
+                        # title, order, cursor and catalog objects unchanged.
                         result = dict(result, data=[dict(row, cwdExists=Path(row['cwd']).expanduser().is_dir())
                             if isinstance(row, dict) and isinstance(row.get('cwd'), str) else row
                             for row in result.get('data', [])])
+                    if scope is not None:
+                        result = dict(result, projectScope=scope)
                     return self.reply(result)
                 if url.path == '/api/native/thread':
                     params = parse_qs(url.query)
