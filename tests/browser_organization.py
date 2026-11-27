@@ -16,7 +16,7 @@ from unittest.mock import patch
 if not os.environ.get('DESK_USE_INSTALLED'):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from codex_desk.server import Desk, ThreadingHTTPServer, handler
-from codex_desk.runtime import save_profile
+from codex_desk.runtime import save_profile, active_turn_id
 from codex_desk.drafts import load_draft
 from codex_desk.followups import add_followup, followup_snapshot
 from playwright.async_api import async_playwright
@@ -44,6 +44,8 @@ async def check():
         class Loaded:
             def __init__(self, desk, row):
                 self.desk, self.row = desk, row
+                self.store, self.id, self.home = desk.store, row["id"], desk.home
+                self.closing = False
                 self.process = SimpleNamespace(poll=lambda: None)
                 self.thread_result = {'thread': threads[row['thread_id']]}
                 self.approvals = {'approval-0': {'id': 'approval-0',
@@ -56,11 +58,15 @@ async def check():
                 self.desk.store.update(self.row['id'], status='running')
                 return {'accepted': True}
 
-            def interrupt(self):
+            def interrupt(self, thread_id, expected_turn_id):
+                assert thread_id == self.row["thread_id"]
+                assert expected_turn_id == active_turn_id(self.store, self.id, thread_id)
+                self.store.event(self.id, {"method": "turn/completed", "params": {
+                    "threadId": thread_id, "turn": {"id": expected_turn_id, "status": "interrupted"}}})
                 controls.append(('stop', self.row['id']))
                 self.approvals.clear()
                 self.desk.store.update(self.row['id'], status='completed')
-                return {'stopped': True}
+                return {}
 
             def close(self):
                 self.process.poll = lambda: 0
@@ -88,6 +94,12 @@ async def check():
                     threads[native] = {'id': native, 'cwd': str(cwd), 'name': name, 'modelProvider': 'desk_provider',
                         'turns': [{'id': 'prior-turn', 'items': [{'id': 'prior-' + id, 'type': 'agentMessage',
                             'text': 'Saved evidence ' + id}]}]}
+                for i in (0, 1):
+                    identifier, native = f'session-{i:02}', f'native-{i:02}'
+                    turn = {'id': 'active-' + identifier, 'status': 'inProgress', 'items': []}
+                    threads[native]['turns'].append(turn)
+                    desk.store.event(identifier, {'method': 'turn/started', 'params': {
+                        'threadId': native, 'turn': turn}})
                 for i in (1, 2, 4, 7):
                     desk.store.archive(f'session-{i:02}', True)
             for row in desk.store.sessions():
@@ -325,11 +337,13 @@ async def check():
                     assert 'session-00' in await visible()
                     assert await page.locator('#prompt').input_value() == text
                     await open_session('session-00')
+                    await page.wait_for_function("!$('stop').disabled")
                     assert await page.locator('#stop').is_enabled()
                     await page.get_by_role('button', name='Allow once', exact=True).click()
                     await page.wait_for_function('state.sessions.find(s=>s.id==="session-00").status==="running"')
                     assert controls == [('approve', 'session-00', 'approval-0', 'accept')]
                     await open_session('session-01')
+                    await page.wait_for_function("!$('stop').disabled")
                     assert await page.locator('#stop').is_enabled()
                     await page.locator('#stop').click()
                     await page.wait_for_function('state.sessions.find(s=>s.id==="session-01").status==="completed"')
@@ -391,7 +405,30 @@ async def check():
                     await layout(1250)
                     assert {p.name: p.read_bytes() for p in home.iterdir()} == settings
                     assert {s['id']: {k: s[k] for k in bindings[s['id']]} for s in desk.store.sessions()} == bindings
-                    assert {s['id']: desk.store.events(s['id']) for s in desk.store.sessions()} == prior_events
+                    for row in desk.store.sessions():
+                        events = desk.store.events(row['id'])
+                        if row['id'] != 'session-01':
+                            assert events == prior_events[row['id']]
+                            continue
+                        original = prior_events[row['id']]
+                        assert events[:len(original)] == original
+                        extra = [r['event'] for r in events[len(original):]]
+                        assert [r['method'] for r in extra] == [
+                            'desk/stopIntent', 'desk/stopReceipt', 'turn/completed', 'desk/stopReceipt']
+                        assert extra[2]['params'] == {'threadId': 'native-01',
+                            'turn': {'id': 'active-session-01', 'status': 'interrupted'}}
+                        payload = extra[0]['params']['payload']
+                        assert payload == {'session': 'session-01',
+                            'token': extra[0]['params']['token'], 'threadId': 'native-01',
+                            'expectedTurnId': 'active-session-01'}
+                        binding = extra[0]['params']['binding']
+                        assert binding == {'session': 'session-01',
+                            'native_home': os.path.normcase(str(home.resolve())),
+                            'cwd': bindings['session-01']['cwd'], 'profile': bindings['session-01']['profile'],
+                            'thread_id': 'native-01', 'turn_id': 'active-session-01'}
+                        assert extra[1]['params']['token'] == extra[3]['params']['token'] == payload['token']
+                        assert extra[1]['params']['status'] == 'pending'
+                        assert extra[3]['params']['status'] == 'accepted'
                     assert json.dumps(threads, sort_keys=True) == native_before
                     assert not result['javascriptErrors'] and not result['externalRequests'], result
                     result['nativeTurnRequests'] = sum(path in ('/api/turn', '/api/handoff/start', '/api/sessions') for method, path in http_calls)
