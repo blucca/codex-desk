@@ -59,6 +59,7 @@ class AssetsTests(unittest.TestCase):
                 self.assertIn('/history_reader.js', page.scripts)
                 self.assertIn('/followups.js', page.scripts)
                 self.assertIn('/native-state.js', page.scripts)
+                self.assertIn('/native-steps.js', page.scripts)
                 self.assertIn('/recall.js', page.scripts)
                 self.assertIn('/home.js', page.scripts)
                 self.assertIn('/style.css', page.styles)

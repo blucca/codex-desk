@@ -78,6 +78,12 @@ Native sub-agent activity appears in one collapsed **Sub-agents** group per turn
 
 Expanded entries show reported agent paths/IDs, lifecycle events, models, prompts and legacy receiver states/results. The same visible collaboration evidence is included in the editable handoff. Native child completion and usage updates keep their own thread scope; they do not finish the parent task or replace its usage. Child approval requests retain their original native request IDs.
 
+## Native task steps
+
+When native Codex reports a checklist, **Native task steps** shows its current step and the latest ordered statuses. Expand it to read the full explanation and checklist; updates keep the disclosure, keyboard focus and reading position. An expanded checklist pauses automatic following of live output; **Latest output ↓** remains available.
+
+These are reported task steps, separate from your Work/Plan draft and prepared follow-ups. Completion, interruption or failure retains the last reported statuses without marking unfinished steps completed. A new native turn starts with an empty readout; returning to the same saved Desk task restores its retained reports.
+
 ## Prepared follow-ups
 
 Write a task, choose **Work** or **Plan**, then click **Save as follow-up**. This saves preparation for the current Desk conversation and provider, even while another task runs. Expand **Prepared follow-ups** to edit, remove, reorder or clear the saved instructions.

@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+DeskNativeSteps.configure({$,make});
 function consumeDeskAccessFragment(){
   const accessFragment = new URLSearchParams(window.location.hash.slice(1));
   if(!accessFragment.has('access'))return false;
@@ -408,6 +409,7 @@ function draw() {
   document.title=(running?`(${running} active) `:'')+'Codex Desk';
   $('activity-controls').hidden=!selected;
   const s = state.sessions.find(s=>s.id===selected); if(!s) return;
+  if(!opening && DeskNativeSteps.sync(s,{session:selected,thread:nativeThreadId,generation})){++latestUpdates;latestLabel();}
   $('archive-session').hidden=false;$('archive-session').textContent=s.archived?'Restore session':'Archive session';
   $('archive-session').disabled=archiving.has(s.id);
   $('archive-status').hidden=!s.archived;
@@ -517,6 +519,7 @@ function consume(m) {
   // Old cached streams may contain owned child notifications. Keep native
   // requests/resolutions, but never display a child as the selected parent.
   if(p.threadId && nativeThreadId && p.threadId!==nativeThreadId && m.id===undefined && m.method!=='serverRequest/resolved')return;
+  const progressChanged=DeskNativeSteps.consume(m,{session:selected,thread:nativeThreadId,generation});
   if(m.method==='turn/started')currentTurn=p.turn?.id || p.turnId || currentTurn;
   if(m.id !== undefined && m.method) {requests.set(String(m.id),m);approvals();}
   if(m.method==='serverRequest/resolved') {requests.delete(String(p.requestId));approvals();}
@@ -532,6 +535,7 @@ function consume(m) {
     i.progress=[...(i.progress || []),p.message].slice(-50);renderItem(i,p.turnId);
   }
   if(m.method==='error')$('activity').append(DeskNativeState.card(p.error || p,!!p.willRetry,make));
+  return progressChanged;
 }
 async function refresh() {
   const current=generation, version=++refreshVersion, next=await api('/api/state');
@@ -543,6 +547,7 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
   const current=++generation;
   latestUpdates=0;latestLabel();
   selected=id;DeskHome.selectionChanged();DeskRecall.selectionChanged();DeskFollowups.select(id);$('prompt').value=drafts.get(id) || '';opening=true;modeSelected=null;after=0;items.clear();nodes.clear();itemTurns.clear();collaborationGroups.clear();nativeThreadId=null;currentTurn=null;requests.clear();
+  DeskNativeSteps.select({session:id,thread:null,generation:current});
   if(!keepError)$('error').hidden=true;
   $('native-failure').hidden=true;$('task').hidden=true;$('handoff').hidden=true;
   $('activity').replaceChildren();approvals();draw();draftStatus();
@@ -555,6 +560,7 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
       // Cold receipt recovery does not attach or resume a native runtime.
       await preparation;await readTurnRequest(retained);if(current!==generation)return;
       nativeThreadId=state.sessions.find(s=>s.id===id)?.thread_id || null;
+      DeskNativeSteps.select({session:id,thread:nativeThreadId,generation:current});
       const rows=await api('/api/events?session='+encodeURIComponent(id)+'&after=0');
       if(current!==generation)return;
       for(const row of rows){after=row.seq;consume(row.event);}
@@ -567,13 +573,18 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
     if(current!==generation)return;
     localStorage.setItem('codex-desk-session',id);
     nativeThreadId=opened.thread.id;
+    DeskNativeSteps.select({session:id,thread:nativeThreadId,generation:current});
     for(const [index,t] of (opened.thread.turns || []).entries())for(const i of t.items || [])renderItem(i,t.id || 'snapshot:'+index);
+    const rows=await api('/api/events?session='+encodeURIComponent(id)+'&after=0');
+    if(current!==generation)return;
+    for(const row of rows){after=row.seq;consume(row.event);}
+    DeskNativeSteps.restoreThread(opened.thread,{session:id,thread:nativeThreadId,generation:current});
     $('prompt').value=drafts.get(id) || '';$('welcome').hidden=true;
     await refresh();
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
-    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
+    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && !$('native-steps').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
     return true;
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
@@ -749,15 +760,15 @@ async function pollActivity(){
   if(selected && !opening){
     const rows=await api(`/api/events?session=${selected}&after=${after}`);
     if(current!==generation)return;
-    const follow=nearLatest() && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
+    const follow=nearLatest() && !$('native-steps').open && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
     for(const r of rows){
-      after=r.seq;consume(r.event);
-      if(['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
+      after=r.seq;const progressChanged=consume(r.event);
+      if(progressChanged || ['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
     }
     if(changed){
       if(follow)requestAnimationFrame(()=>{
         if(current!==generation)return;
-        if(!$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
+        if(!$('native-steps').open && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
         else{latestUpdates+=changed;latestLabel();}
       });
       else{latestUpdates+=changed;latestLabel();}

@@ -70,7 +70,8 @@ class SelectedOriginalControllerTests(unittest.TestCase):
                      source[source.index("$('read-original').onclick="):source.index('DeskRecall.configure(')],
                      source[source.index('function consume(m)'):source.index('async function refresh()')],
                      source[source.index('async function pollActivity()'):source.index('async function tick()')]]
-        code = SETUP + '\n' + '\n'.join(fragments) + '\n(async()=>{\n' + body + r'''
+        native_steps = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
+        code = SETUP + '\n' + native_steps + '\n'.join(fragments) + '\n(async()=>{\n' + body + r'''
 unchanged();process.stdout.write(JSON.stringify({passed:true}));
 })().catch(error=>{process.stderr.write(error.stack);process.exitCode=1;});
 '''

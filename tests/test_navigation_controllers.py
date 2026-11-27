@@ -29,6 +29,7 @@ class Element {
   querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
   replaceChildren(...children){if(this.contains(document.activeElement))document.activeElement=document.body;
     for(const child of this.children){child.connect(false);child.parentElement=null;}this.children=[];this._text='';this.append(...children);}
+  remove(){if(this.parentElement){const parent=this.parentElement;parent.children=parent.children.filter(child=>child!==this);this.parentElement=null;this.connect(false);}}
   focus(options){if(this.disabled)return;document.activeElement=this;this.focusOptions=options;}
 }
 document.body=new Element('body');document.body.connect(true);document.activeElement=document.body;

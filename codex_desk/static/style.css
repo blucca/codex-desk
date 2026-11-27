@@ -168,4 +168,19 @@ button[aria-disabled="true"]{opacity:.5;cursor:default}
 @media(max-width:500px){#preparation-request{padding:18px}#preparation-request .actions button{flex:1 1 100%;white-space:normal}}
 
 /* Native scroll anchoring must not move the workbench behind a local review. */
-html:has(#preparation[open]), html:has(#preparation-request[open]) { overflow-anchor: none; }
+html:has(#preparation[open]), html:has(#preparation-request[open]), html:has(#native-steps[open]) { overflow-anchor: none; }
+
+/* Compact native checklist; independent of Work/Plan drafts and preparation. */
+.native-steps{margin:12px 0;border:1px solid #344356;border-radius:9px;background:#151e29;min-width:0}
+.native-steps[hidden]{display:none}
+.native-steps>summary{cursor:pointer;padding:12px 15px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#native-steps-current{color:#9eb6c8;margin-left:12px}
+#native-steps-body{max-height:320px;overflow:auto;padding:0 16px 14px;overflow-wrap:anywhere}
+#native-steps-body:focus-visible,.native-steps>summary:focus-visible{outline:2px solid #70d6b0;outline-offset:2px}
+#native-steps-status{margin:0 0 8px}
+#native-steps-explanation{white-space:pre-wrap;font-size:13px;line-height:1.6;margin:8px 0}
+#native-steps-list{padding-left:24px;margin:8px 0 0;font-size:13px}
+#native-steps-list li{padding:7px 0;line-height:1.55}
+.native-step-text{white-space:pre-wrap}
+.native-step-status{display:block;color:#9aaaba;font-size:11px}
+#native-steps-list li[data-status="inProgress"] .native-step-status{color:#9adcbe}
