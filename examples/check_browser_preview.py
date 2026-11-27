@@ -13,6 +13,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import threading
 from urllib.parse import parse_qs, urlsplit
 
@@ -25,6 +27,67 @@ QUERY = "retry budget"
 FIRST = "Review the retry budget before changing timeout handling."
 SECOND = "Verify checkout retry behavior and record the result."
 DRAFT = "Plan the next timeout review; keep this draft unsent."
+REUSED_DRAFT = DRAFT + "\n\n" + FIRST
+
+
+def check_preparation_api():
+    """Exercise browser-local preparation against the maintained three histories."""
+    import importlib.util
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location('browser_preview_build', root / 'examples/build_browser_preview.py')
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    node = os.environ.get('DESK_TEST_NODE') or shutil.which('node')
+    assert node, 'Node is required for the local preparation API check'
+    script = r'''
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const fixture=JSON.parse(process.argv[2]),stored=new Map();let external=0;
+global.localStorage={getItem:key=>stored.get(key)||null,setItem:(key,value)=>stored.set(key,value),removeItem:key=>stored.delete(key)};
+global.location={href:'http://127.0.0.1/demo/',origin:'http://127.0.0.1',assign:()=>{throw Error('Unexpected installer navigation');}};
+global.document={getElementById:()=>null,addEventListener:()=>{}};
+global.window={DeskPreviewThreads:fixture.threads,open:()=>{throw Error('Unexpected installer popup');},fetch:()=>{++external;throw Error('Unexpected HTTP request');}};
+const source=fs.readFileSync(process.argv[1],'utf8');
+function load(){vm.runInThisContext(source);}
+async function request(path,data){const response=await window.fetch(path,data?{method:'POST',body:JSON.stringify(data)}:{});return {status:response.status,body:await response.json()};}
+(async()=>{
+ load();assert.equal(fixture.threads.length,3);
+ const imported=await request('/api/import',{thread:fixture.thread});assert.equal(imported.status,200);const id=imported.body.id;
+ await request('/api/draft',{session:id,text:fixture.draft,mode:'plan',revision:0,writer:'sample-page',sequence:1});
+ for(const [text,mode] of [[fixture.first,'plan'],[fixture.second,'native']])assert.equal((await request('/api/followups',{session:id,text,mode})).status,200);
+ const before=window.DeskBrowserPreview.snapshot();const overview=await request('/api/preparation?archived=false');
+ assert.equal(overview.status,200);assert.equal(overview.body.sessions.length,1);
+ const row=overview.body.sessions[0];assert.equal(row.id,id);assert.equal(row.draft.text,fixture.draft);assert.equal(row.draft.mode,'plan');
+ assert.deepEqual(row.followups,before.followups[id]);assert.equal(row.followups.reservation,null);assert.equal(typeof row.updated,'number');
+ assert.deepEqual(window.DeskBrowserPreview.snapshot(),before,'Overview mutated storage');
+ assert.equal((await request('/api/preparation?archived=false&cwd='+encodeURIComponent(row.cwd))).body.sessions.length,1);
+ assert.equal((await request('/api/preparation?archived=false&cwd='+encodeURIComponent(fixture.threads[1].cwd))).body.sessions.length,0);
+ await request('/api/archive',{session:id,archived:true});assert.equal((await request('/api/preparation?archived=false')).body.sessions.length,0);
+ assert.equal((await request('/api/preparation?archived=true')).body.sessions.length,1);await request('/api/archive',{session:id,archived:false});
+ const reused=fixture.draft+'\n\n'+row.followups.entries[0].text;
+ const saved=await request('/api/draft',{session:id,text:reused,mode:'plan',revision:row.draft.revision,writer:'sample-modal',sequence:1});assert.equal(saved.status,200);
+ assert.deepEqual(window.DeskBrowserPreview.snapshot().followups[id],before.followups[id],'Reuse changed the source queue');
+ const conflict=await request('/api/draft',{session:id,text:'Other sample page',mode:'native',revision:row.draft.revision,writer:'sample-page',sequence:2});
+ assert.equal(conflict.status,409);assert.deepEqual(conflict.body.current,saved.body);
+ const duplicate=await request('/api/draft',{session:id,text:reused,mode:'plan',revision:row.draft.revision,writer:'sample-modal',sequence:1});
+ assert.deepEqual(duplicate.body,saved.body);assert.equal(duplicate.status,200);
+ const latest=await request('/api/draft',{session:id,text:reused+'\nReviewed once more.',mode:'plan',revision:row.draft.revision,writer:'sample-modal',sequence:2});
+ assert.equal(latest.status,200);assert.equal(latest.body.revision,saved.body.revision+1);
+ const preserved=window.DeskBrowserPreview.snapshot(),requests=window.DeskBrowserPreview.requests;
+ load();assert.deepEqual(window.DeskBrowserPreview.snapshot(),preserved);
+ const restored=(await request('/api/preparation?archived=false')).body.sessions[0];
+ assert.deepEqual(restored.draft,latest.body);assert.deepEqual(restored.followups,before.followups[id]);
+ assert(!requests.some(r=>/\/api\/(turn|followups\/send)$/.test(r.path)));assert.equal(external,0);
+ console.log(JSON.stringify({passed:true,sample_histories:3,overview_sessions:1,prepared_followups:2,
+   overview_read_only:true,exact_project_scope:true,archive_scope:true,source_queue_unchanged:true,
+   reload_preserved:true,conflict_status:409,same_page_sequence_recovery:true,native_model_calls:0,external_http_requests:external}));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+'''
+    fixture = {'threads': build.sample_threads(), 'thread': THREAD,
+               'draft': DRAFT, 'first': FIRST, 'second': SECOND}
+    result = subprocess.run([node, '-e', script, str(root / 'examples/browser-preview/preview-api.js'),
+                             json.dumps(fixture)], capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    return json.loads(result.stdout)
 
 
 @contextmanager
@@ -78,6 +141,9 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
         browser = await playwright.chromium.launch(executable_path=chromium,
             headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = await browser.new_context(viewport={"width": width, "height": 900 if width > 390 else 844})
+        # Clipboard is isolated to this checker; no system clipboard/account is used.
+        await context.add_init_script("""Object.defineProperty(navigator, 'clipboard', {configurable:true,
+            value:{async writeText(text){(window.__deskSampleCopies ||= []).push(text);}}});""")
         page = await context.new_page()
         page.set_default_timeout(10_000)
         page.on("pageerror", lambda error: errors.append(str(error)))
@@ -209,18 +275,62 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             saved = await snapshot()
             queued_ids = [r["id"] for r in rows]
             await checkpoint("plan-and-followups")
+
+            # Exercise the shipped query-free entry without native open/resume.
+            before_review = await log()
+            await page.locator("#show-preparation").click()
+            await page.wait_for_function("document.querySelector('#preparation-list').getAttribute('aria-busy') === 'false'")
+            prepared = page.locator(f'.preparation-session[data-session="{SESSION}"]')
+            assert await prepared.count() == 1
+            await prepared.locator('button[aria-label^="Review preparation in "]').click()
+            assert await page.locator("#preparation-text").input_value() == DRAFT
+            assert await page.locator("#preparation-mode").input_value() == "plan"
+            assert await page.locator("#prompt").input_value() == DRAFT
+            await page.locator("#preparation-copy").click()
+            await page.wait_for_function("v => window.__deskSampleCopies?.at(-1) === v", arg=DRAFT)
+            source = page.locator(f'.preparation-followup[data-followup="{queued_ids[1]}"]')
+            await source.get_by_role("button", name="Use in this session draft", exact=True).click()
+            assert await page.locator("#preparation-reuse").is_visible()
+            assert await page.locator("#preparation-text").input_value() == DRAFT, "Reuse overwrote the draft without a choice"
+            await page.locator("#preparation-append").click()
+            assert await page.locator("#preparation-text").input_value() == REUSED_DRAFT
+            assert await page.locator("#preparation-mode").input_value() == "plan"
+            assert await page.locator("#prompt").input_value() == DRAFT, "Local review changed the active draft before Save"
+            assert (await snapshot())["drafts"][SESSION]["text"] == DRAFT
+            assert (await snapshot())["followups"][SESSION] == saved["followups"][SESSION]
+            await source.get_by_role("button", name="Copy instruction", exact=True).click()
+            await page.wait_for_function("v => window.__deskSampleCopies?.at(-1) === v", arg=FIRST)
+            await page.locator("#preparation-save").click()
+            await wait_saved(REUSED_DRAFT, "plan")
+            await page.wait_for_function("!document.querySelector('#preparation-save').disabled")
+            assert (await snapshot())["followups"][SESSION] == saved["followups"][SESSION], "Explicit reuse changed source order or instructions"
+            review_requests = (await log())[len(before_review):]
+            assert any(r["path"] == "/api/preparation" and r["method"] == "GET" for r in review_requests)
+            assert not any(r["method"] == "POST" and r["path"] in {"/api/import", "/api/open", "/api/turn", "/api/followups", "/api/followups/send"} for r in review_requests)
+            copied = await page.evaluate("window.__deskSampleCopies")
+            await page.locator("#preparation-close").click()
+            saved = await snapshot()
+            await checkpoint("prepared-work-reuse")
             captured.extend(await log())
 
             await page.reload()
             await page.wait_for_function("!document.querySelector('#task').hidden")
             await page.wait_for_function("document.querySelector('#followup-count').textContent === '2'")
-            assert await page.locator("#prompt").input_value() == DRAFT
+            assert await page.locator("#prompt").input_value() == REUSED_DRAFT
             assert await page.locator("#turn-mode").input_value() == "plan"
             rows = await followups()
             assert [r["text"] for r in rows] == [SECOND, FIRST]
             assert [r["id"] for r in rows] == queued_ids
             preserved = await snapshot()
             assert preserved == saved, "Reload altered local sample preparation"
+            await page.locator("#show-preparation").click()
+            await page.wait_for_function("document.querySelector('#preparation-list').getAttribute('aria-busy') === 'false'")
+            await page.locator(f'.preparation-session[data-session="{SESSION}"]').locator('button[aria-label^="Review preparation in "]').click()
+            assert await page.locator("#preparation-text").input_value() == REUSED_DRAFT
+            assert await page.locator("#preparation-mode").input_value() == "plan"
+            assert await page.locator("#preparation-followups .preparation-followup").count() == 2
+            assert await snapshot() == preserved, "Overview reread mutated restored preparation"
+            await page.locator("#preparation-close").click()
             await page.locator("#followups summary").click()
             await checkpoint("preserved-after-reload")
 
@@ -248,6 +358,9 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
                 "native_model_calls": 0, "external_requests": external, "javascript_errors": errors,
                 "console_errors": console_errors, "failed_requests": failures, "horizontal_overflow": False,
                 "unrelated_storage_preserved": True}
+            receipt['prepared_work'] = {'query_free_entry': 'show-preparation', 'reviewed_session': SESSION,
+                'copied_texts': copied, 'explicit_append': True, 'saved_mode': 'plan', 'source_queue_unchanged': True,
+                'overview_after_reload': True, 'no_native_open_on_review': True}
             (evidence / f"receipt-{width}.json").write_text(json.dumps(receipt, indent=2) + "\n")
             print(json.dumps({"viewport": width, "passed": True, "phases": phases}), flush=True)
             return receipt
@@ -285,4 +398,9 @@ if __name__ == "__main__":
     parser.add_argument("--url", help="Verify the same sample flow at an already-deployed URL")
     parser.add_argument("--widths", default="1250,390")
     parser.add_argument("--chromium", default=os.environ.get("DESK_CHROMIUM"))
-    asyncio.run(main(parser.parse_args()))
+    parser.add_argument("--api-only", action="store_true", help="Check local sample preparation API with Node; no browser or generated site")
+    args = parser.parse_args()
+    if args.api_only:
+        print(json.dumps(check_preparation_api(), indent=2))
+    else:
+        asyncio.run(main(args))

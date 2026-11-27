@@ -284,7 +284,18 @@ async def check(width, playwright, evidence):
                 await search('bulk native choice')
                 assert await page.locator('.recall-result').count() == 30
                 assert 'Showing 30 of 40' in await page.locator('#recall-summary').inner_text()
-                assert 'narrow the query or project' in await page.locator('#recall-summary').inner_text()
+                assert await page.locator('#recall-next').is_visible()
+                first_page=await page.locator('.recall-result').evaluate_all("ns=>ns.map(n=>JSON.stringify(n.dataset))")
+                await page.locator('#recall-next').click()
+                await page.wait_for_function("!$('recall-search').disabled && $('recall-summary').textContent.includes('Items 31–40')")
+                assert await page.locator('.recall-result').count()==10
+                second_page=await page.locator('.recall-result').evaluate_all("ns=>ns.map(n=>JSON.stringify(n.dataset))")
+                assert not set(first_page).intersection(second_page)
+                assert await page.locator('#recall-next').is_disabled()
+                await page.locator('#recall-previous').click()
+                await page.wait_for_function("!$('recall-search').disabled && $('recall-summary').textContent.includes('Items 1–30')")
+                assert await page.locator('.recall-result').evaluate_all("ns=>ns.map(n=>JSON.stringify(n.dataset))")==first_page
+                checkpoint('all later matching items are reachable through stable nonoverlapping result pages without task execution')
                 await no_overflow()
                 await page.screenshot(path=str(evidence / f'native-bounded-{width}.png'))
                 assert not errors and not external

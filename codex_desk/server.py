@@ -21,6 +21,7 @@ from .handoff import build_handoff
 from .native_recall import NativeRecallIndex
 from .history_scan import NativeHistoryScanner
 from .drafts import load_draft, save_draft, DraftConflict
+from .preparation import preparation_snapshot
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
 
@@ -304,25 +305,10 @@ class Desk:
                 self.store.update(identifier, name=title, name_source=source, name_pending=0)
             self.store.recall_snapshot(identifier, thread)
             return {'id': identifier, 'thread': thread}
-    def recall(self, q, cwd=None, include_archived=False, limit=30):
-        # Search only saved SQLite evidence. Bindings include archived sessions:
-        # their native cache must never become an alternate visibility path.
-        with self.store.lock:
-            result = self.store.recall(q, cwd, include_archived, limit)
-            bindings = dict(self.store.db.execute(
-                'SELECT id,thread_id FROM sessions WHERE thread_id IS NOT NULL'))
-            for hit in result['results']:
-                if hit['kind'] == 'activity' and hit['session_id'] in bindings:
-                    hit['thread_id'] = bindings[hit['session_id']]
-            native = self.native_index.search(q, cwd, limit, exclude_thread_ids=bindings.values())
-            native_hits = [dict(hit, name=hit['title'], profile='default', archived=False)
-                           for hit in native['results']]
-            result['results'] = sorted(result['results'] + native_hits,
-                                       key=lambda hit: hit['updated'], reverse=True)[:limit]
-            result['total'] += native['total']
-            result['truncated'] = result['total'] > len(result['results'])
-            result['coverage']['native'] = native['coverage']
-            return result
+    def recall(self, q, cwd=None, include_archived=False, limit=30, offset=0):
+        # One stable page across saved Desk preparation/evidence and unbound
+        # native evidence. Archived bindings stay suppressed by the same query.
+        return self.native_index.search_combined(q, cwd, include_archived, limit, offset)
     def close(self):
         self.history_scanner.close()
         for runtime in list(self.runtimes.values()):
@@ -369,17 +355,29 @@ def handler(desk, access_token=None):
                     return
                 if url.path == '/api/history/index':
                     return self.reply({'job': desk.history_scanner.status(),
-                                       'coverage': desk.native_index.stats()})
+                                       'coverage': desk.native_index.stats(),
+                                       'projects': desk.native_index.projects()})
                 if url.path == '/api/recall':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=10)
-                    if any(key not in ('q', 'cwd', 'archived', 'limit') or len(values) != 1
+                    if any(key not in ('q', 'cwd', 'archived', 'limit', 'offset') or len(values) != 1
                            for key, values in params.items()):
                         raise ValueError('Use each recall query option once')
                     archived = params.get('archived', ['false'])[0].lower()
                     if archived not in ('true', 'false', '0', '1'):
                         raise ValueError('Choose whether to include archived sessions')
                     return self.reply(desk.recall(params.get('q', [''])[0], params.get('cwd', [None])[0],
-                        archived in ('true', '1'), int(params.get('limit', ['30'])[0])))
+                        archived in ('true', '1'), int(params.get('limit', ['30'])[0]),
+                        int(params.get('offset', ['0'])[0])))
+                if url.path == '/api/preparation':
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=4)
+                    if any(key not in ('cwd', 'archived') or len(values) != 1
+                           for key, values in params.items()):
+                        raise ValueError('Use each preparation query option once')
+                    archived = params.get('archived', ['false'])[0].lower()
+                    if archived not in ('true', 'false', '0', '1'):
+                        raise ValueError('Choose whether to include archived preparation')
+                    return self.reply(preparation_snapshot(desk.store, archived in ('true', '1'),
+                                                          params.get('cwd', [None])[0]))
                 if url.path == '/api/followups':
                     params = parse_qs(url.query)
                     return self.reply(followup_snapshot(desk.store, params['session'][0]))
@@ -421,12 +419,12 @@ def handler(desk, access_token=None):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/history_reader.js', '/followups.js', '/native-state.js', '/recall.js', '/home.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/followups.js', '/native-state.js', '/recall.js', '/home.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()

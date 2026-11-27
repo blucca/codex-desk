@@ -24,11 +24,19 @@ Queries are literal, Unicode-normalized and case-insensitive. The dialog shows u
 
 The reader uses 40-entry pages (native items or turn-only outcomes) and 20,000-character text windows. Use **Previous items**／**Next items**, or **Previous entries**／**Next entries** when turn-only outcomes are present, and **Earlier text**／**Later text**. A turn with no items still shows its native ID, status and reported error message. Missing native IDs or changed phrases are reported while the original conversation remains readable; **Retry read** retries a failed read.
 
+In the original reader, **Find in this original conversation** searches all readable supplied items, not only the current page/window. **Find** submits the literal phrase; **Previous match** / **Next match**, or reader-local Shift+F3 / F3, jumps to the exact item/window. **Copy full item text** copies the entire readable item; **Copy source reference** copies its conversation/thread/turn/item/project identity. None of these actions opens a task or changes preparation. Content-search results have **Previous matches** / **Next matches** pages; returning from the reader retains the submitted query and page.
+
 ## Prepare a task and come back later
 
 Write your next task and select Work or Plan. **Draft saved locally** confirms the text and mode are saved for this specific Desk session. Reopen the page or restart Desk with the same state directory to recover them; restoration does not send a task. A failed task submission keeps its preparation. After restarting the server, open its newly printed complete launch URL to restore browser access.
 
 If another tab changes the same draft, choose **Keep this tab draft** or **Load saved draft** before saving or sending again. Sending clears only the preparation actually accepted; newer edits stay in their own session.
+
+### Review preparation without opening native work
+
+Choose **Prepared work** in the sidebar to see nonempty saved drafts, queued instructions and pending-start reviews across projects. Filter by folder or include locally archived sessions. **Review draft** opens its local Work/Plan editor even when that project folder is missing; the active conversation and its draft stay selected. **Save draft locally** is explicit. A revision conflict keeps your editor and offers **Keep mine and save** or **Load saved draft**.
+
+Queued text is read-only in this overview. **Use in draft** offers **Append to draft** or **Replace draft text**; the queue remains unchanged and reuse is unsaved until you choose Save. **Copy draft text** copies the current reviewed text. **Open conversation** is separate and needs an available native project; it runs no task until you use the normal task controls. Pending starts remain captured review entries, not a new send opportunity.
 
 ## Organize active and recent work
 

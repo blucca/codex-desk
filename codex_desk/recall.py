@@ -219,7 +219,83 @@ def _snippet_range(text, left, right):
     return snippet, text[left:min(right, end)]
 
 
-def search(store, q, cwd=None, include_archived=False, limit=30):
+def _validate_page(limit, offset):
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError('Choose a recall limit from 1 to 50')
+    if type(offset) is not int or not 0 <= offset <= 9_223_372_036_854_775_807:
+        raise ValueError('Choose a recall offset of zero or more')
+
+
+def _desk_query(store, scoped, include_archived, needle):
+    """The filtered Desk corpus, shared by standalone and mixed-source pages."""
+    tables = {row[0] for row in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    activity = """SELECT session_id,'activity' kind,turn_id,item_id,NULL followup_id,
+        visible_text text,normalized_text folded,updated FROM recall_items"""
+    if 'native_recall_items' in tables:
+        # A scan can finish a reply previously copied while it was streaming.
+        # Overlay only strict growth of an incomplete bound reply. Keep its
+        # stored prefix intact so subsequent live deltas cannot duplicate it.
+        activity = """SELECT i.session_id,'activity' kind,i.turn_id,i.item_id,NULL followup_id,
+            coalesce(n.visible_text,i.visible_text) text,
+            coalesce(n.normalized_text,i.normalized_text) folded,
+            coalesce(max(n.updated,i.updated),i.updated) updated
+            FROM recall_items i JOIN sessions b ON b.id=i.session_id
+            LEFT JOIN native_recall_items n ON n.thread_id=b.thread_id
+            AND n.turn_id=i.turn_id AND n.item_id=i.item_id AND n.item_type=i.item_type
+            AND i.item_type='agentMessage' AND i.complete=0
+            AND n.visible_text<>i.visible_text AND instr(n.visible_text,i.visible_text)=1"""
+    parts = [activity]
+    if 'drafts' in tables:
+        parts.append("""SELECT session_id,'draft',NULL,NULL,NULL,text,recall_normalize(text),NULL
+            FROM drafts WHERE revision>0 AND trim(text)<>''""")
+    if 'followups' in tables:
+        parts.append("""SELECT session_id,'followup',NULL,NULL,id,text,recall_normalize(text),NULL
+            FROM followups""")
+    scope = "s.id<>'native-catalog' AND (? OR s.archived=0) AND (? IS NULL OR recall_cwd(s.cwd)=?)"
+    options = (int(include_archived), scoped, scoped)
+    corpus = ' UNION ALL '.join(parts)
+    joined = f'''FROM ({corpus}) r JOIN sessions s ON s.id=r.session_id WHERE {scope}'''
+    counts = {kind: count for kind, count in store.db.execute(
+        'SELECT kind,count(*) ' + joined + ' GROUP BY kind', options)}
+    sessions = store.db.execute('SELECT count(*) FROM sessions s WHERE ' + scope, options).fetchone()[0]
+    total = store.db.execute('SELECT count(*) ' + joined + ' AND instr(r.folded,?)>0',
+                             (*options, needle)).fetchone()[0]
+    sql = '''SELECT s.id session_id,s.name name,recall_cwd(s.cwd) cwd,s.profile profile,
+        s.archived archived,r.kind kind,s.thread_id thread_id,r.turn_id turn_id,
+        r.item_id item_id,r.followup_id followup_id,r.text text,
+        coalesce(r.updated,s.updated,0) updated,NULL item_type,NULL provider,
+        0 source,s.id sort_id,0 position ''' + joined + ' AND instr(r.folded,?)>0'
+    coverage = {'text': 'Cached evidence from imported/opened Desk sessions and saved drafts/follow-ups; '
+                'not whole native history. Visible activity is cached up to 200,000 characters per item.',
+        'sessions': sessions, 'activity_items': counts.get('activity', 0),
+        'drafts': counts.get('draft', 0), 'followups': counts.get('followup', 0)}
+    return sql, (*options, needle), total, coverage
+
+
+PAGE_ORDER = ' ORDER BY updated DESC,source,sort_id,kind,position,turn_id,item_id,followup_id LIMIT ? OFFSET ?'
+
+
+def _search_result(row, needle, *, combined=False):
+    (session, name, project, profile, archived, kind, thread, turn, item,
+     followup, text, updated, item_type, provider, *_) = row
+    snippet, match = _snippet(text, needle)
+    if kind == 'native-activity':
+        result = {'kind': kind, 'thread_id': thread, 'cwd': project, 'title': name,
+                  'provider': provider, 'turn_id': turn, 'item_id': item,
+                  'item_type': item_type, 'snippet': snippet, 'match_text': match, 'updated': updated}
+        if combined:
+            result.update(name=name, profile='default', archived=False)
+    else:
+        result = {'session_id': session, 'session_name': name, 'cwd': project,
+                  'profile': profile, 'archived': bool(archived), 'kind': kind, 'turn_id': turn,
+                  'item_id': item, 'followup_id': followup, 'snippet': snippet,
+                  'match_text': match, 'updated': updated}
+        if combined and kind == 'activity' and thread is not None:
+            result['thread_id'] = thread
+    return result
+
+
+def search(store, q, cwd=None, include_archived=False, limit=30, offset=0):
     if not isinstance(q, str) or not 2 <= len(q.strip()) <= 200:
         raise ValueError('Enter a recall phrase of 2–200 characters')
     q = q.strip()
@@ -227,8 +303,7 @@ def search(store, q, cwd=None, include_archived=False, limit=30):
         q.encode('utf-8')
     except UnicodeEncodeError:
         raise ValueError('Enter valid Unicode recall text') from None
-    if type(limit) is not int or not 1 <= limit <= 50:
-        raise ValueError('Choose a recall limit from 1 to 50')
+    _validate_page(limit, offset)
     if type(include_archived) is not bool:
         raise ValueError('Choose whether to include archived sessions')
     if cwd is not None and (not isinstance(cwd, str) or not cwd.strip()):
@@ -236,53 +311,9 @@ def search(store, q, cwd=None, include_archived=False, limit=30):
     scoped = canonical_cwd(cwd) if cwd is not None else None
     needle = normalize(q)
     with store.lock:
-        tables = {row[0] for row in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        activity = """SELECT session_id,'activity' kind,turn_id,item_id,NULL followup_id,
-            visible_text text,normalized_text folded,updated FROM recall_items"""
-        if 'native_recall_items' in tables:
-            # A scan can finish a reply previously copied while it was streaming.
-            # Overlay only strict growth of an incomplete bound reply. Keep its
-            # stored prefix intact so subsequent live deltas cannot duplicate it.
-            activity = """SELECT i.session_id,'activity' kind,i.turn_id,i.item_id,NULL followup_id,
-                coalesce(n.visible_text,i.visible_text) text,
-                coalesce(n.normalized_text,i.normalized_text) folded,
-                coalesce(max(n.updated,i.updated),i.updated) updated
-                FROM recall_items i JOIN sessions b ON b.id=i.session_id
-                LEFT JOIN native_recall_items n ON n.thread_id=b.thread_id
-                AND n.turn_id=i.turn_id AND n.item_id=i.item_id AND n.item_type=i.item_type
-                AND i.item_type='agentMessage' AND i.complete=0
-                AND n.visible_text<>i.visible_text AND instr(n.visible_text,i.visible_text)=1"""
-        parts = [activity]
-        if 'drafts' in tables:
-            parts.append("""SELECT session_id,'draft',NULL,NULL,NULL,text,recall_normalize(text),NULL
-                FROM drafts WHERE revision>0 AND trim(text)<>''""")
-        if 'followups' in tables:
-            parts.append("""SELECT session_id,'followup',NULL,NULL,id,text,recall_normalize(text),NULL
-                FROM followups""")
-        scope = "s.id<>'native-catalog' AND (? OR s.archived=0) AND (? IS NULL OR recall_cwd(s.cwd)=?)"
-        options = (int(include_archived), scoped, scoped)
-        corpus = ' UNION ALL '.join(parts)
-        joined = f'''FROM ({corpus}) r JOIN sessions s ON s.id=r.session_id WHERE {scope}'''
-        counts = {kind: count for kind, count in store.db.execute(
-            'SELECT kind,count(*) ' + joined + ' GROUP BY kind', options)}
-        sessions = store.db.execute('SELECT count(*) FROM sessions s WHERE ' + scope, options).fetchone()[0]
-        total = store.db.execute('SELECT count(*) ' + joined + ' AND instr(r.folded,?)>0',
-                                 (*options, needle)).fetchone()[0]
-        cursor = store.db.execute('''SELECT s.id,s.name,s.cwd,s.profile,s.archived,r.kind,
-            r.turn_id,r.item_id,r.followup_id,r.text,coalesce(r.updated,s.updated,0) updated '''
-            + joined + ''' AND instr(r.folded,?)>0
-            ORDER BY updated DESC,s.id,r.kind,r.turn_id,r.item_id,r.followup_id LIMIT ?''',
-            (*options, needle, limit))
-        results = []
-        for session, name, project, profile, archived, kind, turn, item, followup, text, updated in cursor:
-            snippet, match = _snippet(text, needle)
-            results.append({'session_id': session, 'session_name': name, 'cwd': canonical_cwd(project),
-                'profile': profile, 'archived': bool(archived), 'kind': kind, 'turn_id': turn,
-                'item_id': item, 'followup_id': followup, 'snippet': snippet,
-                'match_text': match, 'updated': updated})
+        sql, options, total, coverage = _desk_query(store, scoped, include_archived, needle)
+        cursor = store.db.execute(sql + PAGE_ORDER, (*options, limit, offset))
+        results = [_search_result(row, needle) for row in cursor]
     return {'query': q, 'cwd': scoped, 'archived': include_archived, 'limit': limit,
-        'total': total, 'truncated': total > len(results), 'results': results,
-        'coverage': {'text': 'Cached evidence from imported/opened Desk sessions and saved drafts/follow-ups; '
-                     'not whole native history. Visible activity is cached up to 200,000 characters per item.',
-            'sessions': sessions, 'activity_items': counts.get('activity', 0),
-            'drafts': counts.get('draft', 0), 'followups': counts.get('followup', 0)}}
+        'offset': offset, 'total': total, 'truncated': total > len(results),
+        'has_more': offset + len(results) < total, 'results': results, 'coverage': coverage}

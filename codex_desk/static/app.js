@@ -34,6 +34,7 @@ async function loadDraft(id,current=generation){
   if(!draftLoads.has(id))draftLoads.set(id,(async()=>{
     try{
       const saved=await api('/api/draft?session='+encodeURIComponent(id));
+      if((draftRevisions.get(id) ?? -1)>saved.revision)return;
       draftRevisions.set(id,saved.revision);draftSaved.set(id,saved);
       if(!drafts.has(id)){drafts.set(id,saved.text);draftModes.set(id,saved.mode);}
       draftMessages.set(id,saved.text?'Saved draft restored. Nothing has been sent.':'Unsent task drafts stay private in your local Desk database.');
@@ -108,6 +109,9 @@ function sidebarGroups(){
 function drawSidebar(){
   $('session-tools').hidden=state.sessions.length===0;
   const list=$('sessions'), left=list.scrollLeft, top=list.scrollTop;
+  const focused=document.activeElement, focusedRow=list.contains(focused)?focused.closest('.session-row'):null;
+  const focusedControl=focusedRow && (focused.classList.contains('session-archive')?'archive':focused.classList.contains('session')?'session':null);
+  const focusedSession=focusedControl?focusedRow.dataset.session:null;let restoreFocus=null;
   list.replaceChildren();
   const query=$('session-filter').value.trim().normalize('NFC').toLocaleLowerCase(), showArchived=$('show-archived').checked;
   const current=new Map(state.sessions.map(s=>[s.id,s]));let visible=0;
@@ -129,11 +133,13 @@ function drawSidebar(){
       for(const s of rows){
         const row=make('div','','session-row');row.dataset.session=s.id;
         const b=make('button','','session'+(s.id===selected?' selected':''));b.title=s.cwd;
+        b.type='button';if(s.id===selected)b.setAttribute('aria-current','page');
         b.append(make('strong',s.name || group.name),make('small',`${profileLabel(s.profile)} · ${s.status}${s.archived?' · archived locally':''}`));
         b.onclick=()=>open(s.id);
         const archive=make('button',s.archived?'Restore':'Archive','session-archive');archive.type='button';
         archive.setAttribute('aria-label',`${s.archived?'Restore':'Archive'} saved session ${s.name || group.name}`);
         archive.disabled=archiving.has(s.id);archive.onclick=()=>setArchived(s.id,!s.archived);
+        if(s.id===focusedSession)restoreFocus=focusedControl==='archive'?archive:b;
         row.append(b,archive);section.append(row);++visible;
       }
     }
@@ -141,6 +147,7 @@ function drawSidebar(){
   }
   if(!visible && state.sessions.length)list.append(make('p',query?'No saved titles or project folders match.':'No recent saved sessions. Open a project or show archived sessions.','muted'));
   $('session-count').textContent=`${visible} shown · ${state.sessions.length} saved${state.sessions.some(s=>activeSession(s))?' · active tasks stay visible':''}`;
+  if(restoreFocus && !restoreFocus.disabled)restoreFocus.focus({preventScroll:true});
   list.scrollLeft=left;list.scrollTop=top;
 }
 async function setArchived(id,archived){
@@ -349,7 +356,7 @@ function projectSummary(query) {
 function projectError(e) {$('project-error').textContent=e.message;$('project-error').hidden=false;}
 async function findProject(cursor=null) {
   if(projectOpening)return;
-  if(cursor && (!projectQuery || !projectCurrent(projectVersion,projectQuery) || $('project-more').disabled))return;
+  if(cursor && (cursor!==projectCursor || !projectQuery || !projectCurrent(projectVersion,projectQuery) || $('project-more').disabled))return;
   if(!cursor)resetProject();
   const current=projectVersion, query=projectFilter();projectQuery=query;
   $('project-error').hidden=true;$('project-find').disabled=true;$('project-more').disabled=true;
@@ -357,8 +364,16 @@ async function findProject(cursor=null) {
   try {
     const data=await api(historyPath(query.search,query.cwd,cursor));
     if(!projectCurrent(current,query))return;
-    for(const t of data.data || [])$('project-list').append(nativeRow(t,
-      ()=>openProjectChoice(()=>api('/api/import',{thread:t.id,profile:$('profile').value}),current,query),null,'Resume this conversation'));
+    for(const t of data.data || []) {
+      const valid=()=>projectCurrent(current,query) && !projectOpening && row.isConnected && row.parentElement===$('project-list');
+      const row=nativeRow(t,
+        ()=>openProjectChoice(()=>api('/api/import',{thread:t.id,profile:$('profile').value}),current,query),null,'Resume this conversation',
+        ()=>{if(valid())return DeskHistoryReader.show({thread_id:t.id,cwd:t.cwd},
+          {valid,backLabel:'Back to project results',onReturn:()=>{
+            const read=row.querySelector('.native-read');if(valid() && read && !read.disabled)read.focus({preventScroll:true});
+          }});});
+      row.dataset.cursor=cursor || '';row.dataset.thread=t.id;$('project-list').append(row);
+    }
     projectCursor=data.nextCursor;$('project-more').hidden=!projectCursor;
     projectSummary(query);
     if(projectOpening)projectBusy(true);
@@ -475,6 +490,19 @@ async function tick(){
   catch(e){if(++failures===1 || e.status===403){const message=e.status===403?e.message:connectionError;error(new Error(message));if(starting)startupError=message;}}
   finally{setTimeout(tick,failures?3000:800);}
 }
+function preparationSaved(id,saved){
+  const previous=draftSaved.get(id);
+  const dirty=draftTimers.has(id) || draftSaves.has(id) ||
+    (drafts.has(id) && (!previous || drafts.get(id)!==previous.text || (draftModes.get(id)||'native')!==previous.mode));
+  if(dirty){draftConflicts.set(id,saved);draftMessages.set(id,'Saved preparation changed in Prepared work. Choose which draft to keep.');draftStatus(id);return;}
+  draftRevisions.set(id,saved.revision);draftSaved.set(id,saved);
+  drafts.set(id,saved.text);draftModes.set(id,saved.mode);
+  draftMessages.set(id,'Draft saved locally. Nothing has been sent.');
+  if(selected===id){$('prompt').value=saved.text;$('turn-mode').value=saved.mode;modeSelected=id;draftStatus(id);}
+}
+DeskPreparation.configure({api,make,profileLabel,onSaved:preparationSaved,
+  openConversation:async id=>{await open(id);return selected===id && !opening && !$('task').hidden;}});
+$('show-preparation').onclick=()=>DeskPreparation.show();
 DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>generation,open,
   browse:()=>$('browse').click(),project:()=>$('new').click()});
 tick();
@@ -482,14 +510,15 @@ tick();
 let nativeVersion=0,nativeCursor=null,nativeQuery=null,nativeLoading=false;
 function nativeRow(t, resume, handoff, label='Resume with current settings', read=null) {
   const box=make('div','','native-row');box.append(make('strong',t.name || t.preview || t.id),make('small',`${t.cwd} · ${t.modelProvider}`));
-  const actions=make('div','','actions'),view=make('button',label);view.type='button';
+  const actions=make('div','','actions');
+  if(resume){const view=make('button',label);view.type='button';
   view.onclick=async()=>{
     if(view.disabled)return;
     view.disabled=true;
     try {await resume();} finally {view.disabled=false;}
-  };actions.append(view);
+  };actions.append(view);}
   if(handoff){const review=make('button','Review handoff');review.type='button';review.onclick=handoff;actions.append(review);}
-  if(read){const original=make('button','Read original conversation');original.type='button';original.onclick=read;actions.append(original);}
+  if(read){const original=make('button','Read original conversation','native-read');original.type='button';original.onclick=read;actions.append(original);}
   box.append(actions);return box;
 }
 function resetNative() {

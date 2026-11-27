@@ -1,8 +1,9 @@
 """Bounded literal recall of native histories, independent of Desk bindings."""
 import time
 
-from .recall import (MAX_ITEM_CHARS, VISIBLE_TYPES, _item_text, _snippet,
-                     _timestamp, canonical_cwd, normalize)
+from .recall import (MAX_ITEM_CHARS, VISIBLE_TYPES, PAGE_ORDER, _desk_query,
+                     _item_text, _search_result, _timestamp, _validate_page,
+                     canonical_cwd, normalize)
 
 
 MAX_THREAD_CHARS = 2_000_000
@@ -255,7 +256,14 @@ class NativeRecallIndex:
         with self.store.lock:
             return self._stats(scoped)
 
-    def search(self, query, cwd=None, limit=30, *, exclude_thread_ids=()):
+    def projects(self):
+        """Exact retained native folders, independent of query or result page."""
+        with self.store.lock:
+            return [row[0] for row in self.store.db.execute(
+                '''SELECT DISTINCT cwd FROM native_recall_threads
+                   WHERE indexed_at IS NOT NULL AND cwd IS NOT NULL ORDER BY cwd''')]
+
+    def _search_options(self, query, cwd, limit, offset):
         if not isinstance(query, str) or not 2 <= len(query.strip()) <= 200:
             raise ValueError('Enter a recall phrase of 2–200 characters')
         query = query.strip()
@@ -263,30 +271,61 @@ class NativeRecallIndex:
             query.encode('utf-8')
         except UnicodeEncodeError:
             raise ValueError('Enter valid Unicode recall text') from None
-        if type(limit) is not int or not 1 <= limit <= 50:
-            raise ValueError('Choose a recall limit from 1 to 50')
+        _validate_page(limit, offset)
+        return query, _scope(cwd), normalize(query)
+
+    def _search_query(self, scoped, needle, excluded=(), *, exclude_bound=False):
+        joined = '''FROM native_recall_items i JOIN native_recall_threads t ON t.thread_id=i.thread_id
+            WHERE (? IS NULL OR t.cwd=?) AND instr(i.normalized_text,?)>0'''
+        options = (scoped, scoped, needle)
+        if excluded:
+            joined += ' AND t.thread_id NOT IN (' + ','.join('?' for _ in excluded) + ')'
+            options += excluded
+        if exclude_bound:
+            # Every local binding owns visibility of its native evidence, even
+            # when archived or currently outside the selected project scope.
+            joined += ' AND NOT EXISTS (SELECT 1 FROM sessions b WHERE b.thread_id=t.thread_id)'
+        total = self.store.db.execute('SELECT count(*) ' + joined, options).fetchone()[0]
+        sql = '''SELECT NULL session_id,t.title name,t.cwd cwd,'default' profile,
+            0 archived,'native-activity' kind,t.thread_id thread_id,i.turn_id turn_id,
+            i.item_id item_id,NULL followup_id,i.visible_text text,i.updated updated,
+            i.item_type item_type,t.provider provider,1 source,t.thread_id sort_id,
+            i.position position ''' + joined
+        return sql, options, total
+
+    def search(self, query, cwd=None, limit=30, offset=0, *, exclude_thread_ids=()):
+        query, scoped, needle = self._search_options(query, cwd, limit, offset)
         if isinstance(exclude_thread_ids, (str, bytes)):
             raise ValueError('Choose original thread identifiers to exclude')
         excluded = tuple(dict.fromkeys(exclude_thread_ids))
         if any(not isinstance(v, str) or not 0 < len(v) <= 200 for v in excluded):
             raise ValueError('Choose original thread identifiers to exclude')
-        scoped, needle = _scope(cwd), normalize(query)
         with self.store.lock:
-            joined = '''FROM native_recall_items i JOIN native_recall_threads t ON t.thread_id=i.thread_id
-                WHERE (? IS NULL OR t.cwd=?) AND instr(i.normalized_text,?)>0'''
-            options = (scoped, scoped, needle)
-            if excluded:
-                joined += ' AND t.thread_id NOT IN (' + ','.join('?' for _ in excluded) + ')'
-                options += excluded
-            total = self.store.db.execute('SELECT count(*) ' + joined, options).fetchone()[0]
-            cursor = self.store.db.execute('''SELECT t.thread_id,t.cwd,t.title,t.provider,
-                i.turn_id,i.item_id,i.item_type,i.visible_text,i.updated ''' + joined + '''
-                ORDER BY i.updated DESC,t.thread_id,i.position,i.turn_id,i.item_id LIMIT ?''', (*options, limit))
-            results = []
-            for thread_id, project, title, provider, turn, item, kind, text, updated in cursor:
-                snippet, match = _snippet(text, needle)
-                results.append({'kind': 'native-activity', 'thread_id': thread_id, 'cwd': project,
-                                'title': title, 'provider': provider, 'turn_id': turn, 'item_id': item,
-                                'item_type': kind, 'snippet': snippet, 'match_text': match, 'updated': updated})
-            return {'query': query, 'cwd': scoped, 'limit': limit, 'total': total,
-                    'truncated': total > len(results), 'results': results, 'coverage': self._stats(scoped)}
+            sql, options, total = self._search_query(scoped, needle, excluded)
+            cursor = self.store.db.execute(sql + PAGE_ORDER, (*options, limit, offset))
+            results = [_search_result(row, needle) for row in cursor]
+            return {'query': query, 'cwd': scoped, 'limit': limit, 'offset': offset,
+                    'total': total, 'truncated': total > len(results),
+                    'has_more': offset + len(results) < total,
+                    'results': results, 'coverage': self._stats(scoped)}
+
+    def search_combined(self, query, cwd=None, include_archived=False, limit=30, offset=0):
+        """Page once across Desk preparation/evidence and unbound native history."""
+        query, scoped, needle = self._search_options(query, cwd, limit, offset)
+        if type(include_archived) is not bool:
+            raise ValueError('Choose whether to include archived sessions')
+        with self.store.lock:
+            desk_sql, desk_options, desk_total, coverage = _desk_query(
+                self.store, scoped, include_archived, needle)
+            native_sql, native_options, native_total = self._search_query(
+                scoped, needle, exclude_bound=True)
+            cursor = self.store.db.execute(
+                desk_sql + ' UNION ALL ' + native_sql + PAGE_ORDER,
+                (*desk_options, *native_options, limit, offset))
+            results = [_search_result(row, needle, combined=True) for row in cursor]
+            total = desk_total + native_total
+            coverage['native'] = self._stats(scoped)
+            return {'query': query, 'cwd': scoped, 'archived': include_archived,
+                    'limit': limit, 'offset': offset, 'total': total,
+                    'truncated': total > len(results), 'has_more': offset + len(results) < total,
+                    'results': results, 'coverage': coverage}

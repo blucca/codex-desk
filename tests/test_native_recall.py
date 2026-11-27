@@ -381,6 +381,43 @@ class NativeRecallTests(unittest.TestCase):
         self.assertEqual(result['results'][0]['match_text'], 'target decision')
         self.assertLessEqual(len(result['results'][0]['snippet']), 422)
 
+    def test_projects_include_indexed_folders_outside_first_result_page_before_search(self):
+        newer, older = self.root / 'newer-project', self.root / 'older-project'
+        self.index.replace_snapshot(snapshot([agent('ISSUE-732 retained decision', f'item-{i}') for i in range(31)],
+            identifier='newer', cwd=str(newer), updatedAt=1795625100,
+            turns=[{'id': 'newer-turn', 'completedAt': 1795625100,
+                    'items': [agent('ISSUE-732 retained decision', f'item-{i}') for i in range(31)]}]))
+        self.index.replace_snapshot(snapshot([agent('ISSUE-732 original answer')], identifier='older', cwd=str(older)))
+        expected = sorted([str(newer), str(older)])
+        self.assertEqual(self.index.projects(), expected)
+        hits = self.index.search('ISSUE-732')
+        self.assertEqual((hits['total'], len(hits['results'])), (32, 30))
+        self.assertEqual({hit['cwd'] for hit in hits['results']}, {str(newer)})
+        self.assertEqual(self.index.search('ISSUE-732', cwd=str(older))['total'], 1)
+        self.assertFalse(older.exists())
+        self.reopen()
+        before = list(self.store.db.iterdump())
+        self.assertEqual(self.index.projects(), expected)
+        self.assertEqual(list(self.store.db.iterdump()), before)
+
+    def test_projects_deduplicate_effective_snapshot_metadata_and_skip_unindexed_folders(self):
+        original, moved, unindexed = (self.root / name for name in ('original', 'moved', 'metadata-only'))
+        self.index.replace_snapshot(snapshot([agent('retained decision')], identifier='one',
+                                            cwd=str(original / '..' / 'original')))
+        self.index.replace_snapshot(snapshot([agent('another decision')], identifier='two', cwd=str(original)))
+        self.index.replace_snapshot({'id': 'metadata-only', 'cwd': str(unindexed)})
+        self.assertEqual(self.index.projects(), [str(original)])
+        self.index.replace_snapshot({'id': 'one', 'name': 'Metadata without folder'})
+        self.assertEqual(self.index.projects(), [str(original)])
+        self.index.replace_snapshot({'id': 'one', 'cwd': str(moved)})
+        self.assertEqual(self.index.search('retained decision')['results'][0]['cwd'], str(moved))
+        self.assertEqual(self.index.projects(), sorted([str(moved), str(original)]))
+        self.index.replace_snapshot(snapshot([agent('no reported project decision')], identifier='unreported', cwd=None))
+        self.index.replace_snapshot({'id': 'unreported', 'cwd': str(moved)})
+        self.assertEqual(self.index.projects(), sorted([str(moved), str(original)]))
+        self.reopen()
+        self.assertEqual(self.index.projects(), sorted([str(moved), str(original)]))
+
     def test_input_validation(self):
         for query in (None, 2, '', 'x', 'a' * 201, '\ud800x'):
             with self.assertRaises(ValueError):

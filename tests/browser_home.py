@@ -77,17 +77,28 @@ async def check():
                     await page.wait_for_timeout(4200)
                     assert [c[0] for c in native_calls]==['thread/list'],native_calls
                     assert 'unavailable' in await page.locator('#home-status').inner_text()
-                    assert 'Work in a removed folder' not in await page.locator('#home-list').inner_text()
+                    assert 'Work in a removed folder' in await page.locator('#home-list').inner_text()
+                    removed=page.locator('#home-list .native-row').filter(has=page.get_by_text('Work in a removed folder',exact=True))
+                    assert await removed.locator('button').all_text_contents()==['Read original conversation']
+                    saved_before=desk.store.sessions()
+                    await removed.get_by_role('button',name='Read original conversation',exact=True).click()
+                    await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+                    assert 'All 12 tests passed.' in await page.locator('#history-reader-body').inner_text()
+                    assert desk.store.sessions()==saved_before and not opened
+                    assert not any(method=='POST' for method,path in http_calls)
+                    await page.locator('#history-reader-back').click()
+                    assert await removed.locator('.native-read').evaluate('(n)=>document.activeElement===n')
+                    results.append({'case':'first-screen-removed-folder-read-only','width':width,'noImportOrResume':True})
                     assert not any(method=='POST' for method,path in http_calls),http_calls
                     assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
                     if width==1250:
                         await page.locator('#home-list small').evaluate_all("els=>els.forEach(e=>e.textContent='/projects/demo-app · openai')")
                         await page.screenshot(path=str(evidence/'home.png'))
-                    await page.locator('#home-list button').first.click(); await page.locator('#task').wait_for()
+                    await page.locator('#home-list').get_by_role('button',name='Resume conversation',exact=True).first.click(); await page.locator('#task').wait_for()
                     assert 'All 12 tests passed.' in await page.locator('#activity').inner_text()
                     await page.locator('#activity details summary').first.click()
                     assert '12 checkout tests passed' in await page.locator('#activity').inner_text()
-                    assert [c[0] for c in native_calls]==['thread/list','thread/read','thread/resume']
+                    assert [c[0] for c in native_calls]==['thread/list','thread/read','thread/read','thread/resume']
                     binding=desk.store.sessions()[0]; assert binding['thread_id']=='native-0' and binding['profile']=='default'
                     assert await page.locator('#welcome').is_hidden()
                     assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
@@ -119,7 +130,7 @@ async def check():
                     context,page=await visit(); opened.clear()
                     if pending=='read':
                         await page.wait_for_function('document.querySelector("#home-list").children.length===6')
-                        await page.locator('#home-list button').nth(1).click()
+                        await page.locator('#home-list').get_by_role('button',name='Resume conversation',exact=True).nth(1).click()
                         await page.wait_for_function('Array.from(document.querySelectorAll("#home-list button")).every(b=>b.disabled)')
                     assert await asyncio.to_thread(controls['entered'].wait,5)
                     await page.locator('.session').first.click(); await page.locator('#task').wait_for()

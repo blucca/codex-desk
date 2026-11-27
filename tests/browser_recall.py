@@ -144,12 +144,12 @@ async def check(width, playwright, evidence):
             native_before = json.dumps(threads, sort_keys=True)
             actual_recall = desk.recall
 
-            def controlled_recall(q, cwd=None, include_archived=False, limit=30):
+            def controlled_recall(q, cwd=None, include_archived=False, limit=30, offset=0):
                 recalls.append({'q': q, 'cwd': cwd, 'archived': include_archived, 'limit': limit})
                 wait_hold('query', q)
                 if q == 'fixture-error':
                     raise RuntimeError('Fixture saved-content store unavailable')
-                return actual_recall(q, cwd, include_archived, limit)
+                return actual_recall(q, cwd, include_archived, limit, offset)
 
             desk.recall = controlled_recall
             server = desk_server.ThreadingHTTPServer(('127.0.0.1', 0), desk_server.handler(desk))
@@ -435,7 +435,18 @@ async def check(width, playwright, evidence):
                 await search('bulk decision', '', False)
                 assert await page.locator('.recall-result').count() == 30
                 assert 'Showing 30 of 34' in await page.locator('#recall-summary').inner_text()
-                assert 'narrow the query or project' in await page.locator('#recall-summary').inner_text()
+                assert await page.locator('#recall-next').is_visible()
+                first_page=await page.locator('.recall-result').evaluate_all("ns=>ns.map(n=>JSON.stringify(n.dataset))")
+                await page.locator('#recall-next').click()
+                await page.wait_for_function("!$('recall-search').disabled && $('recall-summary').textContent.includes('Items 31–34')")
+                assert await page.locator('.recall-result').count()==4
+                second_page=await page.locator('.recall-result').evaluate_all("ns=>ns.map(n=>JSON.stringify(n.dataset))")
+                assert not set(first_page).intersection(second_page)
+                assert await page.locator('#recall-next').is_disabled()
+                await page.locator('#recall-previous').click()
+                await page.wait_for_function("!$('recall-search').disabled && $('recall-summary').textContent.includes('Items 1–30')")
+                assert await page.locator('.recall-result').evaluate_all("ns=>ns.map(n=>JSON.stringify(n.dataset))")==first_page
+                checkpoint('all later matching items are reachable through stable nonoverlapping result pages without task execution')
                 await search('no-match-anywhere')
                 assert await page.locator('.recall-result').count() == 0
                 assert 'Native history is not indexed yet' in await page.locator('#recall-summary').inner_text()

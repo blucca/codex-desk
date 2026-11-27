@@ -255,8 +255,8 @@ class Store:
     def recall_snapshot(self, identifier, thread):
         with self.lock, self.db:
             recall.save_snapshot(self, identifier, thread)
-    def recall(self, q, cwd=None, include_archived=False, limit=30):
-        return recall.search(self, q, cwd, include_archived, limit)
+    def recall(self, q, cwd=None, include_archived=False, limit=30, offset=0):
+        return recall.search(self, q, cwd, include_archived, limit, offset)
     def events(self, identifier, after=0):
         with self.lock:
             return [{"seq": r[0], "event": json.loads(r[1])} for r in self.db.execute(

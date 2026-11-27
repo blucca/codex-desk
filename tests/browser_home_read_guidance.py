@@ -78,20 +78,15 @@ async def check(width, case, playwright, evidence):
             message = await page.locator('#home-status').inner_text()
             assert [call['method'] for call in calls] == ['thread/list']
             assert not any(call['method'] == 'POST' for call in http)
-            assert await page.locator('#home-list .native-row').count() == (1 if case == 'mixed' else 0)
+            assert await page.locator('#home-list .native-row').count() == ({'mixed':2,'unavailable':1,'empty':0}[case])
             assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             await page.screenshot(path=str(evidence / f'home-{case}-{width}.png'))
             if case == 'empty':
                 guidance = 'No saved conversations' in message and 'Open a project' in message
             else:
-                phrase = ('read the original conversations' if case == 'unavailable'
-                          else 'read their original conversations')
-                guidance = phrase in message and (case != 'unavailable' or 'only to resume' in message)
-                # Follow the offered catalog entry entirely through the shipped UI.
-                await page.locator('#home-browse').focus()
-                await page.keyboard.press('Enter')
-                await page.locator('#native-list .native-row').first.wait_for()
-                row = page.locator('#native-list .native-row').filter(
+                guidance = 'Read original evidence' in message and 'unavailable' in message
+                # The first screen now exposes read-only evidence directly.
+                row = page.locator('#home-list .native-row').filter(
                     has=page.get_by_text(old['name'], exact=True))
                 await row.get_by_role('button', name='Read original conversation', exact=True).focus()
                 await page.keyboard.press('Enter')
@@ -101,9 +96,9 @@ async def check(width, case, playwright, evidence):
                 assert await page.evaluate('selected===null')
                 assert await page.locator('#task').is_hidden()
                 assert not desk.store.sessions()
-                assert [call['method'] for call in calls] == ['thread/list', 'thread/list', 'thread/read']
+                assert [call['method'] for call in calls] == ['thread/list', 'thread/read']
                 await page.keyboard.press('Escape')
-                await page.wait_for_function("!$('history-reader').open && $('history').open")
+                await page.wait_for_function("!$('history-reader').open && !$('welcome').hidden")
                 assert await row.get_by_role('button', name='Read original conversation', exact=True).evaluate(
                     '(node)=>node===document.activeElement')
             assert not any(call['method'] == 'POST' for call in http)

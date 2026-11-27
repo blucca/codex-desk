@@ -269,7 +269,7 @@ async def check(width, playwright, evidence):
             try:
                 await page.goto(url)
                 await page.wait_for_function("$('home-list').children.length===6")
-                assert await page.locator('#home-list button').all_text_contents() == ['Resume conversation'] * 6
+                assert await page.locator('#home-list .native-read').count() == 6
                 await page.locator(f'.session-row[data-session="{active_id}"] .session').click()
                 await page.wait_for_function("selected==='active-session' && nativeThreadId==='active-thread' && !opening && !$('task').hidden")
                 assert await page.locator('#prompt').input_value() == draft_text
@@ -309,6 +309,7 @@ async def check(width, playwright, evidence):
                 await page.screenshot(path=str(evidence / f'original-match-{width}.png'))
                 checkpoint('deleted-project answer opens exact original turn/item, highlighted with neighbouring evidence')
 
+
                 assert 'ORIGINAL TEXT EARLIEST' not in await target.locator('pre').inner_text()
                 earlier, later = target.get_by_role('button', name='Earlier text'), target.get_by_role('button', name='Later text')
                 for _ in range(8):
@@ -336,6 +337,46 @@ async def check(width, playwright, evidence):
                 assert 'Original neighbouring context 94' in await page.locator('#history-reader-body').text_content()
                 await bounded(); await unchanged()
                 checkpoint('long original text and neighbouring pages remain bounded and replace rather than accumulate DOM')
+
+                async def find_original(phrase):
+                    await page.locator('#history-reader-find-query').fill(phrase)
+                    await page.locator('#history-reader-find-query').press('Enter')
+                    await page.wait_for_function("$('history-reader-find-form').getAttribute('aria-busy')==='false'")
+                native_reads_before=len(paths('/api/native/thread'))
+                await find_original('ORIGINAL TEXT LATEST')
+                assert await page.locator('.history-reader-target').get_attribute('data-item-id')=='target-command'
+                assert await page.locator('.history-reader-target mark').inner_text()=='ORIGINAL TEXT LATEST'
+                assert 'ORIGINAL TEXT EARLIEST' not in await page.locator('.history-reader-target pre').inner_text()
+                await page.context.grant_permissions(['clipboard-read','clipboard-write'])
+                await page.locator('.history-reader-target .history-reader-copy-text').click()
+                await page.wait_for_function("document.querySelector('.history-reader-target .history-reader-copy-status').textContent.includes('copied')")
+                copied=await page.evaluate('navigator.clipboard.readText()')
+                assert 'ORIGINAL TEXT EARLIEST' in copied and 'ORIGINAL TEXT LATEST' in copied
+                assert len(copied)>20000 and context[45]['aggregatedOutput'] in copied
+                await page.locator('.history-reader-target .history-reader-copy-source').click()
+                await page.wait_for_function("document.querySelector('.history-reader-target .history-reader-copy-status').textContent.includes('Source reference copied')")
+                copied_source=await page.evaluate('navigator.clipboard.readText()')
+                assert all(value in copied_source for value in ('deleted-context','turn-deleted-context-1','target-command',str(deleted_project)))
+                await find_original('Cafe\u0301')
+                assert await page.locator('.history-reader-target mark').inner_text()=='Café'
+                await find_original('Original neighbouring context')
+                assert await page.locator('.history-reader-target').get_attribute('data-item-id')=='context-1'
+                await page.keyboard.press('F3')
+                assert await page.locator('.history-reader-target').get_attribute('data-item-id')=='context-2'
+                await page.keyboard.press('Shift+F3')
+                assert await page.locator('.history-reader-target').get_attribute('data-item-id')=='context-1'
+                await page.keyboard.press('Shift+F3')
+                assert await page.locator('.history-reader-target').get_attribute('data-item-id')=='context-94'
+                assert 'Page 3 of 3' in await page.locator('#history-reader-coverage').inner_text()
+                await find_original('NO READER MATCH HERE')
+                assert 'No matches' in await page.locator('#history-reader-find-status').inner_text()
+                assert await page.locator('.history-reader-target').count()==0
+                await find_original('OLD ANSWER')
+                assert await page.locator('.history-reader-target').get_attribute('data-item-id')=='target-command'
+                assert len(paths('/api/native/thread'))==native_reads_before
+                await bounded();await unchanged()
+                await page.screenshot(path=str(evidence / f'original-find-copy-{width}.png'))
+                checkpoint('full readable-item Find crosses pages/windows, exact Unicode offsets and F3 wrap; clipboard copies full evidence/source without re-read or preparation change')
 
                 await back()
                 assert await page.locator('#recall-query').input_value() == 'old answer'

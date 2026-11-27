@@ -73,7 +73,7 @@ For later launches, use `codex-desk` in the activated environment, or `.\.venv\S
 
 1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
 2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
-3. Enter a word or phrase from the answer, command output or tool result, then **Search**. You can search while indexing: when the explicit scan completes, an unchanged submitted query in the active search dialog refreshes once. Edits stay unsent; choose **Search** after changing the phrase or scope. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Your selected task and draft stay unchanged; **Back to search** keeps the query and results.
+3. Enter a word or phrase from the answer, command output or tool result, then **Search**. You can search while indexing: when the explicit scan completes, an unchanged submitted query in the active search dialog refreshes once. Edits stay unsent; choose **Search** after changing the phrase or scope. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Use **Next matches** / **Previous matches** to reach later results. Your selected task and draft stay unchanged; **Back to search** keeps the query, page and results. In the reader, **Find in this original conversation** locates text across every supplied item and long-output window; **Previous match** / **Next match** (F3 / Shift+F3) visits each occurrence. **Copy full item text** and **Copy source reference** let you reuse the exact evidence in today's work.
 4. Ready to work on it? Choose **Continue this conversation** to resume the **original native thread** using **Current Codex settings**. Continuing requires the saved project folder to exist. Prepare the next instruction, then send it when ready.
 
 Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-cached activity, drafts and prepared follow-ups. **Index coverage and text limits** shows cached coverage and shortened or omitted text; this is a bounded recent-history cache. Reindexing refreshes the recent window and skips unchanged snapshots. For older conversations beyond that window, browse titles and open the conversation first.
@@ -82,7 +82,7 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 ## Bring your existing work
 
-1. **Your recent Codex work** appears on the first screen, including the project folder. Click **Resume conversation** to open the one you want.
+1. **Your recent Codex work** appears on the first screen, including the project folder. Choose **Read original conversation** to inspect evidence without opening a task, including when its project folder is gone. Click **Resume conversation** when you want to continue work in an available folder.
 2. Read the saved messages, command results and tool evidence. Write your next task and wait for **Draft saved locally**, or choose **Save as follow-up**. Send it when ready; Work and Plan modes use native Codex.
 3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft. After stopping Desk with **Ctrl+C**, relaunch with the same command and any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to return.
 
@@ -100,7 +100,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
-- **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. Choose when to send them.
+- **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. **Prepared work** reviews saved drafts and queued instructions across projects without starting native work, including removed folders. Explicitly append or replace draft text to reuse an instruction; save locally, then choose when to open and send it.
 - **Review before changing provider.** Carry editable visible task evidence into a distinct target-provider conversation, preserving the original.
 - **Find a saved decision.** Search readable history and inspect the original answer before deciding whether to continue the task.
 
