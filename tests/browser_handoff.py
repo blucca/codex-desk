@@ -15,6 +15,7 @@ import threading
 if os.environ.get('DESK_USE_INSTALLED') != '1':
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from codex_desk.server import Desk, handler, ThreadingHTTPServer
+from handoff_native_fixture import HandoffNative
 from playwright.async_api import async_playwright
 
 
@@ -61,16 +62,8 @@ async def check():
                 return {'data': list(histories.values()), 'nextCursor': None}
 
         desk.catalog = lambda: Catalog()
-        desk.open = lambda identifier: {'thread': {'id': 'target-' + identifier, 'turns': []}}
-        captured = []
-
-        def capture_turn(identifier, text, mode='native'):
-            captured.append({'session': identifier, 'cwd': desk.store.get(identifier)['cwd'],
-                             'text': text, 'mode': mode})
-            desk.store.update(identifier, status='completed', thread_id='target-' + identifier)
-            return {'turn': {'id': 'captured-' + identifier, 'status': 'completed'}}
-
-        desk.turn = capture_turn
+        native = HandoffNative(desk, {t['id']: t for t in histories.values()})
+        captured = native.starts
         server = ThreadingHTTPServer(('127.0.0.1', 0), handler(desk))
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
@@ -126,7 +119,7 @@ async def check():
                         await page.fill('#handoff-goal', 'Verify only project B build')
                         await page.fill('#handoff-cwd', str(folder / 'missing'))
                         await page.click('#handoff-start')
-                        await page.wait_for_function("!$('handoff-start').disabled")
+                        await page.wait_for_function("!handoffStarts.has('native-b')")
                         failure = await page.evaluate("""() => ({
                             open:$('preview').open,errorVisible:!$('handoff-error').hidden,
                             goal:$('handoff-goal').value,evidence:$('handoff-text').value,
@@ -136,6 +129,9 @@ async def check():
                         await review('b')
                         failed_reopen_evidence = await page.input_value('#handoff-text')
                         failed_reopen_goal = await page.input_value('#handoff-goal')
+                        await page.click('#handoff-recover')
+                        await page.wait_for_function("!$('handoff-new').disabled")
+                        await page.click('#handoff-new')
                         await page.fill('#handoff-cwd', str(projects['b']))
                         await page.click('#handoff-start')
                         await page.wait_for_function("!$('preview').open && !$('task').hidden")
@@ -192,7 +188,8 @@ async def check():
                                       'private-root-error-metadata'):
                             assert value not in target['text'], result
                         assert not result['javascriptErrors'] and not result['mobileOverflow'], result
-                    assert len(captured) == 2 and not desk.runtimes
+                    assert len(captured) == 2
+                    assert sum(call['operation'] == 'native-open' for call in native.calls) == 2
                 finally:
                     await browser.close()
         finally:

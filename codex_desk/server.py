@@ -18,6 +18,8 @@ from . import __version__
 from .runtime import (Runtime, Store, profiles, save_profile, update_profile, task_name,
                       first_task, session_name, MissingRolloutError, NativeRequestRejected, NativeRequestUnknown)
 from .handoff import build_handoff
+from .handoff_dispatch import (start_handoff, handoff_status, record_handoff_admission,
+    validate_handoff_home, HandoffConflict)
 from .native_recall import NativeRecallIndex
 from .history_scan import NativeHistoryScanner
 from .drafts import load_draft, save_draft, DraftConflict
@@ -58,6 +60,7 @@ class Desk:
         self.followup_sends = {}
     def open(self, identifier):
         with self.lock:
+            validate_handoff_home(self, identifier)
             runtime = self.runtimes.get(identifier)
             if runtime and runtime.process.poll() is None:
                 return runtime.thread_result
@@ -189,10 +192,12 @@ class Desk:
         reservation = None
         try:
             with self.lock:
+                validate_handoff_home(self, identifier)
                 reservation = reserve_followup(self.store, identifier, data['id'], data['revision'], first_only=True)
                 if reservation is None:
                     raise FollowupConflict(followup_snapshot(self.store, identifier))
                 self.followup_sends[identifier] = reservation['token']
+                record_handoff_admission(self, identifier, reservation)
             records = self.store.events(identifier)
             cursor = records[-1]['seq'] if records else 0
             invoked, result, error, runtime = False, None, None, None
@@ -222,8 +227,10 @@ class Desk:
             outcome = 'accepted' if result is not None else 'rejected' if rejected else 'unknown'
             if outcome == 'accepted':
                 self.record_admission_mode(identifier, reservation['mode'])
-            receipt = record_followup_receipt(self.store, identifier, reservation['token'],
-                reservation['entry_id'], reservation['revision'], outcome)
+            with self.lock:
+                receipt = record_followup_receipt(self.store, identifier, reservation['token'],
+                    reservation['entry_id'], reservation['revision'], outcome)
+                record_handoff_admission(self, identifier, reservation, receipt, result, error)
             if outcome == 'unknown' and runtime is not None:
                 # Retire an unconfirmed writer before explicit rejection can
                 # make another admission possible. Late retired events cannot
@@ -261,6 +268,7 @@ class Desk:
                     data['revision'], data['outcome'])
                 if data['outcome'] == 'accepted':
                     self.record_admission_mode(identifier, snapshot['reservation']['mode'])
+                record_handoff_admission(self, identifier, snapshot['reservation'], receipt)
                 return {**followup_snapshot(self.store, identifier), 'receipt': receipt}
         finally:
             gate.release()
@@ -392,6 +400,14 @@ def handler(desk, access_token=None):
                         raise ValueError('Choose whether to include archived preparation')
                     return self.reply(preparation_snapshot(desk.store, archived in ('true', '1'),
                                                           params.get('cwd', [None])[0]))
+                if url.path == '/api/handoff/request':
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2)
+                    if set(params) != {'token'} or len(params['token']) != 1:
+                        raise ValueError('Use one reviewed handoff request ID')
+                    result = handoff_status(desk, params['token'][0])
+                    if result is None:
+                        return self.reply({'error': 'No saved target for this handoff request'}, 404)
+                    return self.reply(result)
                 if url.path == '/api/followups':
                     params = parse_qs(url.query)
                     return self.reply(followup_snapshot(desk.store, params['session'][0]))
@@ -497,6 +513,8 @@ def handler(desk, access_token=None):
                     result = desk.import_thread(data['thread'], data['profile'])
                 elif path == '/api/handoff':
                     result = {'text': build_handoff(desk.history(data['thread']))}
+                elif path == '/api/handoff/start' and 'token' in data:
+                    result = start_handoff(desk, data)
                 elif path == '/api/handoff/start':
                     text = data['text'].strip()
                     goal = data['goal'].strip()
@@ -523,7 +541,7 @@ def handler(desk, access_token=None):
                 else:
                     return self.reply({'error': 'Not found'}, 404)
                 self.reply(result)
-            except (DraftConflict, FollowupConflict) as error:
+            except (DraftConflict, FollowupConflict, HandoffConflict) as error:
                 self.reply({'error': str(error), 'current': error.current}, 409)
             except FollowupDispatchError as error:
                 self.reply({'error': str(error), **error.snapshot}, 400)
