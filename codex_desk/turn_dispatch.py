@@ -65,16 +65,28 @@ def _payload(data):
 
 def _records(desk, session):
     intents, receipts = {}, {}
-    for record in desk.store.events(session):
-        event = record['event']
-        if event.get('method') not in (_INTENT, _RECEIPT):
-            continue
+    # SQLite selects the two private methods before Python materializes native
+    # deltas. JSON method selection preserves imported key order/escaping.
+    with desk.store.lock:
+        rows = desk.store.db.execute('''SELECT payload FROM events WHERE session_id=?
+            AND json_extract(payload,'$.method') IN (?,?) ORDER BY seq''',
+            (session, _INTENT, _RECEIPT)).fetchall()
+    for raw, in rows:
+        event = json.loads(raw)
         params = event.get('params', {})
         if event['method'] == _INTENT:
             intents[params['token']] = params
         else:
             receipts[params['token']] = params
     return intents, receipts
+
+
+def turn_cursor(desk, session):
+    """Capture the native-proof boundary without decoding prior activity."""
+    with desk.store.lock:
+        row = desk.store.db.execute(
+            'SELECT seq FROM events WHERE session_id=? ORDER BY seq DESC LIMIT 1', (session,)).fetchone()
+        return row[0] if row else 0
 
 
 def _other_session(desk, session, token):
@@ -87,31 +99,38 @@ def _other_session(desk, session, token):
                  and json.loads(raw).get('params', {}).get('token') == token), None)
 
 
-def _validate_binding(desk, intent):
-    if _binding(desk, intent['payload']['session']) != intent['binding']:
-        raise ValueError('Reopen the original native home and session binding to review this task request')
+def _require_binding(current):
+    if current['request']['binding_mismatch']:
+        raise TurnConflict(current, 'Reopen the original native home and session binding before retrying or resolving this task request')
 
 
 def _snapshot(desk, intent, receipt):
-    _validate_binding(desk, intent)
     session, token = intent['payload']['session'], intent['token']
     state = dict(receipt or {'token': token, 'status': 'pending', 'attempt': 1})
     state.pop('token', None)
     gate = desk.admissions.get(session)
     if state['status'] == 'pending' and (gate is None or not gate.locked()):
         state.update(status='needs_review', error='No completed admission receipt. Review this captured task before sending another task.')
-    state.update(payload=dict(intent['payload']), binding=dict(intent['binding']))
+    current_binding = _binding(desk, session)
+    state.update(payload=dict(intent['payload']), binding=dict(intent['binding']),
+                 current_binding=current_binding, binding_mismatch=current_binding != intent['binding'])
     if state['status'] == 'accepted':
         state['draft'] = draft_snapshot(desk.store, session)
     return {'session': session, 'token': token, 'request': state}
 
 
-def turn_status(desk, session, token):
+def turn_status(desk, session, token=None):
     """Cold private receipt read: no native open, dispatch, draft or event write."""
-    token = _token(token)
+    if token is not None:
+        token = _token(token)
     with desk.lock:
         _binding(desk, session)
         intents, receipts = _records(desk, session)
+        if token is None:
+            # Discover only unresolved work. Completed or known rejected tasks
+            # do not hijack a fresh page's deliberate new preparation.
+            token = next((key for key in reversed(intents)
+                          if receipts.get(key, {}).get('status', 'pending') in ('pending', 'needs_review')), None)
         intent = intents.get(token)
         return _snapshot(desk, intent, receipts.get(token)) if intent else None
 
@@ -158,6 +177,7 @@ def start_turn(desk, data):
                 raise TurnConflict(current, 'Use a new request ID for a changed task or draft revision')
             if not data.get('retry'):
                 return current
+            _require_binding(current)
             if current['request']['status'] != 'rejected':
                 raise TurnConflict(current, 'Only a known rejected task can be explicitly retried')
         else:
@@ -201,8 +221,7 @@ def start_turn(desk, data):
                         raise ValueError('The retained native target changed before admission')
                     intent = {**intent, 'binding': attached}
                     desk.store.event(session, {'method': _INTENT, 'params': intent})
-                records = desk.store.events(session)
-                cursor = records[-1]['seq'] if records else 0
+                cursor = turn_cursor(desk, session)
             invoked = True
             result = runtime.turn(payload['text'], payload['mode'])
             turn = result.get('turn') if isinstance(result, dict) else None
@@ -246,6 +265,7 @@ def resolve_turn(desk, data):
             if intent is None:
                 raise ValueError('No saved ordinary task request')
             current = _snapshot(desk, intent, receipt)
+            _require_binding(current)
             # Our newly acquired gate must not turn an abandoned pending
             # receipt back into a live dispatch.
             status = receipt['status'] if receipt else 'pending'

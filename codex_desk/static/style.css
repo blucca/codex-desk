@@ -152,3 +152,7 @@ button[aria-disabled="true"]{opacity:.5;cursor:default}
 #history-reader-body{flex-shrink:0;min-height:min(38dvh,320px)}
 
 .turn-request{padding:12px 14px;margin:12px 0;border:1px solid #405367;border-radius:8px}.turn-request h3{margin:0 0 8px}.turn-request p{overflow-wrap:anywhere}.turn-request .actions{flex-wrap:wrap}
+
+.turn-request-binding>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.turn-request-binding h4,.turn-request-binding h5{margin:10px 0 6px}.turn-request-binding pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font-size:12px;padding:10px;background:#151c25;border-radius:6px}
+
+.turn-request-captured{margin:10px 0}.turn-request-captured summary{cursor:pointer;font-weight:600}.turn-request-captured pre{max-height:18rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#151c25;border:1px solid #405367;border-radius:6px;font:inherit;font-size:13px;line-height:1.5}

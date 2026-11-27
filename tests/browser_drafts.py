@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from codex_desk import server as desk_server
 from codex_desk.drafts import load_draft
-from codex_desk.runtime import Runtime, save_profile
+from codex_desk.runtime import Runtime, NativeRequestRejected, save_profile
 from playwright.async_api import async_playwright
 
 
@@ -68,12 +68,14 @@ async def check():
 
             def request(self, method, params):
                 native_calls.append({'method': method, 'session': self.id, 'params': params})
+                if method == 'thread/list':
+                    return {'data': [], 'nextCursor': None}
                 if method == 'thread/resume':
                     return {'thread': threads[self.id], 'model': 'fixture', 'modelProvider': 'desk_provider'}
                 assert method == 'turn/start', 'Unexpected native request: ' + method
                 text = params['input'][0]['text']
                 if text == 'Fixture rejected task A':
-                    raise RuntimeError('Fixture turn rejected; keep preparation')
+                    raise NativeRequestRejected('Fixture turn rejected; keep preparation')
                 if text in holds:
                     entered, release = holds[text]
                     entered.set()
@@ -244,15 +246,34 @@ async def check():
                         checkpoint('actual Desk and SQLite restart retains both preparations')
 
                         await prepare(page, 'session-a', 'Fixture rejected task A', 'native')
-                        await page.locator('#send').click()
-                        await page.wait_for_function("submitting.size===0 && !$('error').hidden")
-                        assert 'Fixture turn rejected' in await page.locator('#error').inner_text()
+                        async with page.expect_response(lambda response:
+                                urlsplit(response.url).path == '/api/turn') as response:
+                            await page.locator('#send').click()
+                        reply = await response.value
+                        assert reply.status == 200
+                        rejected = await reply.json()
+                        assert rejected['request']['status'] == 'rejected', rejected
+                        await page.wait_for_function("submitting.size===0 && turnRequest(selected)?.status==='rejected' && !$('turn-request-error').hidden")
+                        assert 'Fixture turn rejected' in await page.locator('#turn-request-error').inner_text()
+                        assert rejected['request']['payload']['text'] == 'Fixture rejected task A'
+                        assert rejected['request']['payload']['mode'] == 'native'
+                        assert await page.evaluate('turnRequest(selected).token') == rejected['token']
                         await exact(page, 'session-a', 'Fixture rejected task A', 'native')
-                        await saved(page, 'session-a', 'Fixture rejected task A', 'native')
+                        retained = await saved(page, 'session-a', 'Fixture rejected task A', 'native')
+                        assert rejected['request']['payload']['revision'] == retained['revision']
+                        assert await page.evaluate('turnRequest(selected).body.writer===draftWriter && turnRequest(selected).body.sequence===draftEdits.get(selected)')
+                        await page.locator('#send').click()
+                        await page.wait_for_function('!turnRequest(selected).reading')
                         assert len(turns()) == 1
-                        checkpoint('rejected turn preserves its exact draft')
+                        await exact(page, 'session-a', 'Fixture rejected task A', 'native')
+                        checkpoint('known rejected receipt preserves exact provenance and repeated Run only checks')
 
                         await prepare(page, 'session-a', 'Accepted exact task A', 'plan')
+                        assert await page.evaluate('turnRequest(selected).token') == rejected['token']
+                        assert len(turns()) == 1
+                        await page.locator('#turn-request-new').click()
+                        await page.wait_for_function('!turnRequest(selected)')
+                        await exact(page, 'session-a', 'Accepted exact task A', 'plan')
                         await page.locator('#send').click()
                         await page.wait_for_function("submitting.size===0 && $('prompt').value===''")
                         await saved(page, 'session-a', '', 'plan')
@@ -267,13 +288,23 @@ async def check():
                         await saved(page, 'session-a', newer_a, 'native')
                         await open_session(page, 'session-b')
                         await prepare(page, 'session-b', newer_b, 'plan')
+                        await page.locator('#prompt').focus()
                         await release_send(page, release)
                         await exact(page, 'session-b', newer_b, 'plan')
+                        assert await page.evaluate("document.activeElement===$('prompt')")
                         assert load_draft(desk.store, 'session-a')['text'] == newer_a
                         await open_session(page, 'session-a')
                         await exact(page, 'session-a', newer_a, 'native')
                         assert len(turns()) == 3
                         checkpoint('delayed A acceptance retains newer A and selected B')
+
+                        # Retained acceptance cannot turn a newer editor into an
+                        # implicit replay. A new task requires explicit identity.
+                        await page.wait_for_function("turnRequest(selected)?.status==='accepted'")
+                        await page.locator('#turn-request-new').click()
+                        await page.wait_for_function('!turnRequest(selected)')
+                        await exact(page, 'session-a', newer_a, 'native')
+                        assert len(turns()) == 3
 
                         # A newer revision must survive even if edits return to identical text.
                         repeated = 'Same text, newly reviewed preparation A'
@@ -284,8 +315,11 @@ async def check():
                         await page.locator('#prompt').fill(repeated)
                         latest = await saved(page, 'session-a', repeated, 'native')
                         assert sent['revision'] < changed['revision'] < latest['revision']
+                        await page.locator('#prompt').focus()
+                        await page.locator('#prompt').evaluate('(node)=>node.setSelectionRange(3,9)')
                         await release_send(page, release)
                         await exact(page, 'session-a', repeated, 'native')
+                        assert await page.evaluate("document.activeElement===$('prompt') && $('prompt').selectionStart===3 && $('prompt').selectionEnd===9")
                         assert load_draft(desk.store, 'session-a') == latest
                         assert len(turns()) == 4
                         checkpoint('accepted old version does not clear a newer identical-text revision')

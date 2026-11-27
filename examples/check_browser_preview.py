@@ -52,6 +52,10 @@ async function request(path,data){const response=await window.fetch(path,data?{m
 (async()=>{
  load();assert.equal(fixture.threads.length,3);
  const imported=await request('/api/import',{thread:fixture.thread});assert.equal(imported.status,200);const id=imported.body.id;
+ const initial=window.DeskBrowserPreview.snapshot();
+ assert.equal((await request('/api/turn/request?session='+encodeURIComponent(id))).status,404);
+ assert.equal((await request('/api/turn/request?session='+encodeURIComponent(id)+'&token=00000000-0000-4000-8000-000000000000')).status,404);
+ assert.deepEqual(window.DeskBrowserPreview.snapshot(),initial,'Read-only missing Run receipt mutated sample storage');
  await request('/api/draft',{session:id,text:fixture.draft,mode:'plan',revision:0,writer:'sample-page',sequence:1});
  for(const [text,mode] of [[fixture.first,'plan'],[fixture.second,'native']])assert.equal((await request('/api/followups',{session:id,text,mode})).status,200);
  const before=window.DeskBrowserPreview.snapshot();const overview=await request('/api/preparation?archived=false');

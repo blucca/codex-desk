@@ -206,7 +206,7 @@ class TurnRequestIntegrationTests(NativeHTTPFixture):
         self.assertEqual(len(self.requests), 1)
         old_cwd = self.desk.store.get(self.identifier)['cwd']
         self.desk.store.update(self.identifier, cwd=str(self.path / 'different-target'))
-        self.assertEqual(self.request('/api/turn', {**data, 'retry': True})[0], 400)
+        self.assertEqual(self.request('/api/turn', {**data, 'retry': True})[0], 409)
         self.assertEqual(len(self.requests), 1)
         self.desk.store.update(self.identifier, cwd=old_cwd)
         status, retried = self.request('/api/turn', {**data, 'retry': True})
@@ -258,10 +258,14 @@ assert(!net.some(r=>r.path==='/api/open'));
 assert(JSON.parse(storage.get(turnRequestKey)).every(entry=>Object.keys(entry).sort().join(',')==='session,token'));
 ''', retained=[{'session': data['session'], 'token': data['token']}])
         cold.home = self.path / 'other-native-home'
-        self.assertEqual(self.request('/api/turn', {**data, 'retry': True})[0], 400)
+        self.assertEqual(self.request('/api/turn', {**data, 'retry': True})[0], 409)
         self.assertEqual(len(self.requests), 1)
         self.assertEqual((cold.store.sessions(), cold.store.events(self.identifier), load_draft(cold.store, self.identifier), followup_snapshot(cold.store, self.identifier)), before)
-        self.assertEqual(self.read_request(data)[0], 400)
+        status, mismatch = self.read_request(data)
+        self.assertEqual(status, 200)
+        self.assertTrue(mismatch['request']['binding_mismatch'])
+        self.assertEqual(mismatch['request']['binding'], retained['request']['binding'])
+        self.assertEqual(mismatch['request']['status'], 'rejected')
         self.assertEqual(old_desk.store.events(self.identifier), before[1])
 
     def javascript(self, body, retained=None):

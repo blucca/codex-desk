@@ -23,7 +23,7 @@ from .handoff_dispatch import (start_handoff, handoff_status, record_handoff_adm
 from .native_recall import NativeRecallIndex
 from .history_scan import NativeHistoryScanner
 from .drafts import load_draft, save_draft, DraftConflict
-from .turn_dispatch import (start_turn, turn_status, resolve_turn, block_unresolved_turn, TurnConflict)
+from .turn_dispatch import (start_turn, turn_status, resolve_turn, block_unresolved_turn, turn_cursor, TurnConflict)
 from .preparation import preparation_snapshot
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
@@ -134,8 +134,7 @@ class Desk:
             if snapshot['reservation']:
                 raise FollowupConflict(snapshot)
             runtime = self.runtime(identifier)
-            records = self.store.events(identifier)
-            cursor = records[-1]['seq'] if records else 0
+            cursor = turn_cursor(self, identifier)
             try:
                 return runtime.turn(text, mode)
             except NativeRequestUnknown:
@@ -413,9 +412,9 @@ def handler(desk, access_token=None):
                     return self.reply(result)
                 if url.path == '/api/turn/request':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2)
-                    if set(params) != {'session', 'token'} or any(len(values) != 1 for values in params.values()):
-                        raise ValueError('Use one session and ordinary task request ID')
-                    result = turn_status(desk, params['session'][0], params['token'][0])
+                    if set(params) not in ({'session'}, {'session', 'token'}) or any(len(values) != 1 for values in params.values()):
+                        raise ValueError('Use one session and optional ordinary task request ID')
+                    result = turn_status(desk, params['session'][0], params.get('token', [None])[0])
                     if result is None:
                         return self.reply({'error': 'No saved ordinary task request'}, 404)
                     return self.reply(result)

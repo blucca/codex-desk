@@ -2,6 +2,7 @@
 import copy
 import json
 import threading
+import time
 import uuid
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -12,7 +13,7 @@ from codex_desk.drafts import load_draft, save_draft
 from codex_desk.followups import add_followup, followup_snapshot, reserve_followup, record_followup_receipt
 from codex_desk.runtime import NativeRequestRejected, NativeRequestUnknown
 from codex_desk.server import Desk
-from codex_desk.turn_dispatch import turn_status
+from codex_desk.turn_dispatch import turn_status, turn_cursor, _records
 from test_approval_lifecycle import NativeHTTPFixture
 
 
@@ -204,15 +205,19 @@ class TurnDispatchTests(NativeHTTPFixture):
             with self.subTest(field=field):
                 self.desk.store.update(self.identifier, **{field: value})
                 events = self.desk.store.events(self.identifier)
-                self.assertEqual(self.get()[0], 400)
-                self.assertEqual(self.dispatch(retry=True)[0], 400)
+                mismatch = self.get()
+                self.assertEqual(mismatch[0], 200)
+                self.assertTrue(mismatch[1]['request']['binding_mismatch'])
+                self.assertEqual(mismatch[1]['request']['binding'][field], row[field])
+                self.assertEqual(mismatch[1]['request']['current_binding'][field], value)
+                self.assertEqual(self.dispatch(retry=True)[0], 409)
                 self.assertEqual(self.desk.store.events(self.identifier), events)
                 self.desk.store.update(self.identifier, **{field: row[field]})
         home = self.desk.home
         self.desk.home = self.path / 'different-home'
         try:
-            self.assertEqual(self.get()[0], 400)
-            self.assertEqual(self.dispatch(retry=True)[0], 400)
+            self.assertTrue(self.get()[1]['request']['binding_mismatch'])
+            self.assertEqual(self.dispatch(retry=True)[0], 409)
         finally:
             self.desk.home = home
         other = self.desk.store.create(str(self.path), 'default')
@@ -236,7 +241,9 @@ class TurnDispatchTests(NativeHTTPFixture):
             self.desk.store.update(identifier, thread_id='different-native-thread')
             return original_open(identifier)
         with patch.object(self.desk, 'open', side_effect=moved_binding):
-            self.assertEqual(self.dispatch()[0], 400)
+            moved = self.dispatch()
+            self.assertEqual((moved[0], moved[1]['request']['status']), (200, 'rejected'))
+            self.assertTrue(moved[1]['request']['binding_mismatch'])
         self.assertEqual(len(self.requests), 1)
         receipts = [r['event']['params'] for r in self.desk.store.events(self.identifier)
                     if r['event'].get('method') == 'desk/turnReceipt']
@@ -405,3 +412,65 @@ class TurnDispatchTests(NativeHTTPFixture):
         self.assertEqual(self.desk.store.events(self.identifier), events)
         self.assertEqual(self.requests, [])
         self.assertEqual(self.get()[0], 404)
+
+    def test_session_only_discovers_unknown_even_blank_draft_and_mismatch_but_not_known_outcomes(self):
+        self.assertIsNone(turn_status(self.desk, self.identifier))
+        self.runtime.request = lambda *args: (_ for _ in ()).throw(NativeRequestUnknown('Unconfirmed'))
+        self.dispatch()
+        current = load_draft(self.desk.store, self.identifier)
+        save_draft(self.desk.store, self.identifier, '', 'native', current['revision'], 'new-page', 1)
+        self.desk.store.update(self.identifier, thread_id='different-native')
+        events, before = self.desk.store.events(self.identifier), self.desk.store.db.total_changes
+        with patch.object(self.desk, 'open', side_effect=AssertionError('Read opened native')):
+            discovered = turn_status(self.desk, self.identifier)
+            self.assertEqual(discovered['token'], self.payload['token'])
+            self.assertEqual(discovered['request']['status'], 'needs_review')
+            self.assertTrue(discovered['request']['binding_mismatch'])
+            for outcome in ('accepted', 'rejected'):
+                self.assertEqual(self.post('/api/turn/resolve', token=self.payload['token'], outcome=outcome)[0], 409)
+            self.assertEqual(self.dispatch(token=str(uuid.uuid4()))[0], 409)
+        self.assertEqual(self.desk.store.events(self.identifier), events)
+        self.assertEqual(self.desk.store.db.total_changes, before)
+        self.desk.store.update(self.identifier, thread_id='native-original')
+        self.post('/api/turn/resolve', token=self.payload['token'], outcome='rejected')
+        self.assertIsNone(turn_status(self.desk, self.identifier))
+        self.assertEqual(self.get()[1]['request']['status'], 'rejected')
+        self.assert_queues_paused()
+
+    def test_50k_native_stream_projection_preserves_import_shape_and_is_materially_faster(self):
+        rows = []
+        for n in range(50000):
+            event = {'method': 'item/agentMessage/delta', 'params': {
+                'threadId': 'native-original', 'itemId': 'answer-' + str(n // 100),
+                'delta': 'Native project output 保留 ' + str(n) + ' desk/turnIntent is documentation, not admission'}}
+            rows.append((self.identifier, json.dumps(event)))
+        token = self.payload['token']
+        binding = {'session': self.identifier, 'native_home': str(self.path.resolve()),
+                   'profile': 'default', 'cwd': str(self.path), 'thread_id': 'native-original'}
+        # Imported valid JSON can reorder keys and escape the method slash.
+        intent = json.dumps({'params': {'token': token, 'payload': self.payload, 'binding': binding},
+                             'method': 'desk/turnIntent'}, indent=2).replace('desk/turnIntent', 'desk\\/turnIntent')
+        receipt = json.dumps({'params': {'token': token, 'status': 'needs_review', 'attempt': 1},
+                              'method': 'desk/turnReceipt'}, separators=(',', ':'))
+        rows.extend(((self.identifier, intent), (self.identifier, receipt)))
+        with self.desk.store.lock, self.desk.store.db:
+            self.desk.store.db.executemany('INSERT INTO events(session_id,payload) VALUES(?,?)', rows)
+        before = self.desk.store.db.total_changes
+        start = time.process_time()
+        intents, receipts = {}, {}
+        records = self.desk.store.events(self.identifier)
+        for record in records:
+            event = record['event']
+            if event.get('method') in ('desk/turnIntent', 'desk/turnReceipt'):
+                (intents if event['method'] == 'desk/turnIntent' else receipts)[event['params']['token']] = event['params']
+        baseline = time.process_time() - start
+        start = time.process_time()
+        selected = _records(self.desk, self.identifier)
+        projected = time.process_time() - start
+        self.assertEqual(selected, (intents, receipts))
+        self.assertLess(projected, baseline * 0.6)
+        self.assertEqual(turn_cursor(self.desk, self.identifier), records[-1]['seq'])
+        self.assertEqual(turn_cursor(self.desk, 'no-events-session'), 0)
+        with patch.object(self.desk, 'open', side_effect=AssertionError('Projection opened native')):
+            self.assertEqual(turn_status(self.desk, self.identifier)['token'], token)
+        self.assertEqual(self.desk.store.db.total_changes, before)

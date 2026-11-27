@@ -14,9 +14,9 @@ Original reading uses the saved parent thread identity, independently of task ex
 
 Choose **Run task** after saving your Work or Plan draft. Desk captures that exact saved revision and sends it to the selected conversation. An accepted request clears only its original draft; text you edit while it runs stays unsent. Ordered follow-ups remain paused.
 
-If the local reply is lost, **Check Run request** reads the private admission receipt instead of starting another task. The same request keeps its original conversation and Work/Plan intent after a page or server restart. A native started event can confirm admission even when the task has already completed.
+If the local reply is lost, **Check Run request** reads the private admission receipt instead of starting another task. The same request keeps its original conversation and Work/Plan intent after a page or server restart. An existing unconfirmed request is discovered read-only even in a fresh tab with a blank draft and no retained token. A native started event can confirm admission even when the task has already completed.
 
-An unconfirmed request stays in the **Retained Run request** panel. Check its native conversation, then explicitly mark it accepted or rejected. A known rejection offers **Retry original captured task** for the captured task, or **Prepare a new task** without sending. New work, including the same words used again, gets a fresh request identity; later editor text is never the original request's retry body.
+An unconfirmed request stays in the **Retained Run request** panel. Check its native conversation, then explicitly mark it accepted or rejected. A known rejection offers **Retry original captured task** for the captured task, or **Prepare a new task** without sending. If the target changed, the original receipt remains readable with both targets shown. Original retry and admission review stay blocked; review the current target, then explicitly choose **Use current target for a new task** to prepare a fresh request. New work, including the same words used again, gets a fresh request identity; later editor text is never the original request's retry body.
 
 ## Find a saved conversation by title
 

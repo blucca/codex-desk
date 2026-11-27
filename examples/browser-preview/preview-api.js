@@ -81,6 +81,10 @@
     }
     if(path==='/api/open' && post)return {thread:thread(lookup(data.session).thread_id)};
     if(path==='/api/events')return [];
+    if(path==='/api/turn/request' && !post){
+      lookup(params.get('session'));
+      const error=new Error('No saved ordinary task request in this preparation-only sample.');error.status=404;throw error;
+    }
     if(path==='/api/draft'){
       const id=post?data.session:params.get('session');lookup(id);
       const current=state.drafts[id] || {text:'',mode:'native',revision:0};
