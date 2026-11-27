@@ -109,7 +109,7 @@ async def one(browser,width,root,evidence):
     await page.locator('#preparation-close').click()
     await page.locator(f'.session-row[data-session="{b.ORIGINAL}"] .session').click();await page.wait_for_function('id=>selected===id&&!opening',arg=b.ORIGINAL)
     baseline=f.sql()
-    ordinary=page.locator(f'#followup-list .followup-entry[data-followup="{entry['id']}"]')
+    ordinary=page.locator(f"#followup-list .followup-entry[data-followup=\"{entry['id']}\"]")
     await page.locator('#followups summary').click()
     await ordinary.get_by_role('button',name='Edit',exact=True).click()
     field=ordinary.locator('textarea');await field.fill('Ordinary current unsent instruction remains exactly')
