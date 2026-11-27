@@ -215,3 +215,15 @@ html:has(#stop-request-captured[open]:not([hidden])),html:has(#stop-request-prev
 .approval pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}.approval p:empty{display:none}
 
 #preparation h2,#preparation h3,#preparation h4{overflow-wrap:anywhere}
+
+/* Explicit reader refresh preserves its owned view, not browser scroll anchoring. */
+#history-reader{overflow-anchor:none}
+#history-reader> *{flex-shrink:0}
+#history-reader-response{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.5;margin:6px 0}
+
+#evidence-preparation{width:min(880px,95vw);max-height:90vh;overflow:auto}
+#evidence-preparation pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}
+#evidence-preparation textarea{width:100%;box-sizing:border-box}
+#draft-evidence-list{display:flex;flex-wrap:wrap;gap:8px}
+
+#history-reader-saved-evidence pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font-size:12px}

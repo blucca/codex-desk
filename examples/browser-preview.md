@@ -4,6 +4,8 @@
 
 Choose **Find the sample answer** in the preview header to open content search with `retry budget` filled in, or use **Find a decision in past work** and enter it yourself. Then choose **Search** → **Index existing Codex history** → **Read original conversation** → **Back to search** → **Continue this conversation**. Write a Plan draft, save two follow-ups, reorder them, then choose **Prepared work**. Review and append a queued instruction to its own draft, **Save draft and open** to return to that exact unsent Plan, then reload to find the same preparation.
 
+To carry an original excerpt into another task, open **Sample documentation review**, write an unsent Plan, and use **Browse existing Codex sessions** to **Read original conversation** for the checkout sample. Select the retry rule and choose **Review evidence for task** → **Append to draft**. Reload, then expand **Referenced originals in this draft** and choose **Read referenced original** to revisit the same checkout answer and return to the unsent documentation Plan. See the [evidence preparation guide](../docs/evidence-preparation.md).
+
 The preview uses three synthetic conversations, the maintained Desk interface and a sample-only API implemented in the browser. Preparation is saved in namespaced browser storage. **Reset sample** clears only these sample keys. The installed workbench uses native Codex history and its local SQLite database; follow the [installer](../README.md#install-the-preview) for your own work.
 
 ## Rebuild and check
@@ -20,7 +22,7 @@ Serve the output with any static HTTP server. For reproducible desktop and mobil
 python3 examples/check_browser_preview.py --site temp/browser-preview/demo --evidence temp/browser-preview/checks
 ```
 
-Use `--chromium /path/to/chromium` to reuse an installed browser. The checker exercises explicit indexing, exact original IDs, continuation, saved Plan/ordered follow-ups, local review and explicit Save-and-open, reload and scoped reset; it rejects application requests that escape to the static HTTP server.
+Use `--chromium /path/to/chromium` to reuse an installed browser. The checker exercises explicit indexing, exact original IDs, continuation, saved Plan/ordered follow-ups, exact task-response reading, reviewed original A into unsent B, cold source return, local review and explicit Save-and-open, reload and scoped reset; it rejects application requests that escape to the static HTTP server.
 
 `browser-preview/preview-api.js` contains only sample behavior. `build_browser_preview.py` copies maintained assets and applies the preview label, route-relative assets, install actions and a preview-specific selection key. Production runtime files are unchanged.
 
@@ -28,5 +30,6 @@ For iframe hosting, add `--embedded` when building. Installer links then open se
 
 ```sh
 python3 examples/build_browser_preview.py --embedded --out temp/browser-preview/embedded
+python3 examples/check_browser_preview.py --site temp/browser-preview/embedded --evidence temp/browser-preview/embedded-checks
 python3 examples/check_browser_preview_links.py --site temp/browser-preview/demo --embedded-site temp/browser-preview/embedded --evidence temp/browser-preview/link-checks
 ```

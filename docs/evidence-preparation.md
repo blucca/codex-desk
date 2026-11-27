@@ -1,0 +1,96 @@
+# Bring one original excerpt into an unsent task
+
+Keep **B**, the task you are preparing, selected. Read a saved Codex conversation
+**A**, review one excerpt, and append it to B's existing draft. Later, return from
+that saved preparation to the exact turn, item and occurrence in A.
+
+## Read A without leaving B
+
+1. Write B's next task, choose **Work** or **Plan**, and wait for **Draft saved locally**.
+2. Use **Recent work**, title browsing or saved-content search to find A. Choose
+   **Read original conversation**.
+3. Find the relevant answer, command result or tool evidence. **Find in this
+   original conversation** searches the full supplied item text, including later
+   text windows. Use **Next match** when the same words occur more than once.
+4. Select the exact excerpt and choose **Review evidence for task**. For a short item,
+   reviewing without a selection captures the whole item. A long item requires
+   a selection of at most 8,000 Unicode characters.
+
+A's saved project folder can be gone: reading and quoting its original evidence
+use its native history. B's selected conversation, unsent text, mode and queued
+instructions remain in place.
+
+## Review, then append locally
+
+The review shows B's current unsent draft beside A's exact excerpt and captured
+source identity. Check the thread, turn, item, source kind, reported phase/status
+and project folder. Command evidence also shows supplied command/exit facts.
+Add a **Separate next-step note** if needed; the note stays separate from the
+original quote.
+
+Choose **Append to draft**. B keeps its existing text and Work/Plan mode, followed
+by the reviewed note and evidence block. The normal local draft save owns the
+revision. **Return without appending** restores the source reading view instead.
+If the draft changed while you were reviewing, return and review its current
+text. Use the ordinary **Keep mine** or **Load saved draft** controls for a save
+conflict.
+
+The block is readable text with an embedded source reference. It carries the
+opaque native-home namespace, exact native IDs, reader projection and literal
+Unicode code-point span. Repeated phrases, emoji and combining characters keep
+their selected occurrence. The reported phase/status remains the one you reviewed.
+
+## Return to the exact original
+
+Expand **Referenced originals in this draft** and choose **Read referenced original**. Desk reads A
+again in the captured native home, compares the same item's same span, and opens
+the matching text window. The reader shows the **saved reviewed excerpt**
+separately from the fresh original. Return to the prepared task to recover its
+editor selection, scroll position and mode.
+
+If the source changed, its item disappeared, or that home is unavailable, the
+saved quote stays in your preparation. An equal phrase elsewhere is not selected
+as a replacement. **Retry read** reads the same captured source again. Relaunch
+with the original `--codex-home` to read evidence from another native home.
+
+Reuse the same `--state-dir` when restarting Desk. The saved evidence remains in
+the draft; reopening the page restores preparation before you explicitly read A.
+
+## Continue through ordinary preparation
+
+- **Prepared work → Review draft and follow-ups** reads the same saved text independently of today's selected task. **Browse originals for this draft** explicitly chooses that row as the destination; review and append there using its normal save. The draft, saved queue and captured request each offer **Read referenced original**.
+- **Save as follow-up** stores the current instruction, including the evidence
+  block, in the existing queue. Edit/reorder/reuse controls retain ordinary queue
+  revision and admission rules.
+- **Run task** or **Send next** is the later, separate send action. The instruction
+  includes the quote and its readable provenance as ordinary text.
+- A retained Run request keeps the exact captured instruction even after its
+  original draft is cleared or newer preparation is saved. **Review task request**
+  reads that body; retry uses the original captured task rather than later edits.
+
+Keep the embedded block and readable quote together. Editing or removing part of
+the block makes it ordinary draft text; re-review A to create a fresh actionable
+reference. Surrounding task text and a separate next-step note remain editable.
+
+## Runnable examples
+
+The [deterministic lifecycle example](../examples/evidence_preparation.py) uses a
+synthetic source with two identical Unicode quotes and a removed A folder. It
+checks the actual local draft, Prepared snapshot, queue and captured-request
+domain, cold reopen, exact source resolution, and saved-quote retention when the
+source changes or disappears. Its supplied turn transport returns an unconfirmed
+admission for local request review.
+
+From a source checkout with Python 3.11+:
+
+```sh
+DESK_TEST_TEMP="$PWD/temp/evidence-example" PYTHONPATH=. python3 examples/evidence_preparation.py
+```
+
+The [installed browser example](../examples/check_native_evidence_preparation.py)
+drives the actual reader and draft controls at 1250- and 390-pixel widths using
+controlled local native history. It selects the second quote in a long command
+output, reviews/appends locally, returns to its exact text window, and exercises
+changed/missing-source and cold-return paths. Both examples use generated fixture
+content. See [the complete workbench guide](workbench.md) for ordinary preparation
+and admission controls.

@@ -51,6 +51,22 @@ function load(){vm.runInThisContext(source);}
 async function request(path,data){const response=await window.fetch(path,data?{method:'POST',body:JSON.stringify(data)}:{});return {status:response.status,body:await response.json()};}
 (async()=>{
  load();assert.equal(fixture.threads.length,3);
+ const pristine=window.DeskBrowserPreview.snapshot();
+ const home=(await request('/api/native/home')).body.home_namespace;assert.match(home,/^[a-f0-9]{64}$/);
+ const original=fixture.threads[0],turn=original.turns[0];
+ const read=(await request('/api/native/task-response?thread='+original.id+'&turn='+turn.id));assert.equal(read.status,200);
+ assert.deepEqual(read.body.thread,original);assert.equal(read.body.response.item_id,turn.items.at(-1).id);
+ assert.equal(read.body.response.phase,null);assert.equal(read.body.response.selection,'last_assistant_message');
+ const source=await request('/api/native/evidence-source?home='+home+'&thread='+original.id);
+ assert.equal(source.status,200);assert.deepEqual(source.body.thread,original);assert.equal(source.body.home_namespace,home);
+ for(const bad of ['/api/native/home?x=1','/api/native/task-response?thread='+original.id+'&turn='+turn.id+'&turn=other',
+   '/api/native/task-response?thread='+original.id,'/api/native/task-response?thread='+original.id+'&turn=+',
+   '/api/native/evidence-source?home='+('0'.repeat(64))+'&thread='+original.id,
+   '/api/native/evidence-source?home='+home+'&thread=missing'])assert.equal((await request(bad)).status,400,bad);
+ for(const endpoint of ['/api/native','/api/native/thread?id='+original.id,'/api/native/home','/api/native/task-response?thread='+original.id+'&turn='+turn.id,'/api/native/evidence-source?home='+home+'&thread='+original.id])assert.equal((await request(endpoint,{})).status,400);
+ assert.equal((await request('/api/native/task-response?thread='+original.id+'&turn=missing')).body.response.status,'turn_unavailable');
+ assert.deepEqual(window.DeskBrowserPreview.snapshot(),pristine,'Native sample reads changed preparation');
+ load();assert.equal((await request('/api/native/home')).body.home_namespace,home);
  const imported=await request('/api/import',{thread:fixture.thread});assert.equal(imported.status,200);const id=imported.body.id;
  const initial=window.DeskBrowserPreview.snapshot();
  assert.equal((await request('/api/turn/request?session='+encodeURIComponent(id))).status,404);
@@ -259,6 +275,18 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             imports = [r for r in await log() if r["path"] == "/api/import"]
             assert len(imports) == 1 and imports[0]["data"]["thread"] == THREAD, imports
             await checkpoint("continue-same-thread")
+            await page.wait_for_function("!$('native-outcome').hidden")
+            await page.locator('#native-outcome > summary').click()
+            boundary = len(await log())
+            await page.locator('#read-task-response').click()
+            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            assert await page.locator('.history-reader-target').get_attribute('data-turn-id') == TURN
+            assert await page.locator('.history-reader-target').get_attribute('data-item-id') == ITEM
+            response_reads = (await log())[boundary:]
+            assert len([r for r in response_reads if r['path']=='/api/native/task-response']) == 1
+            assert all(r['method']=='GET' for r in response_reads)
+            await page.locator('#history-reader-back').click()
+            await checkpoint('read-exact-sample-task-response')
 
             for count, text, mode in ((1, FIRST, "plan"), (2, SECOND, "native")):
                 await page.locator("#prompt").fill(text)
@@ -345,6 +373,82 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await page.locator("#followups summary").click()
             await checkpoint("preserved-after-reload")
 
+            # Reviewed original A -> different existing unsent B -> exact A.
+            destination_thread = "sample-docs-thread"
+            destination = "desk-" + destination_thread
+            destination_draft = "Plan tomorrow's installation check; retain this unsent task."
+            quote = "Retry only transient failures; preserve the original timeout result."
+            await page.locator("#browse").click()
+            await page.locator('#native-list .native-row').filter(has_text='Sample documentation review').get_by_role('button', name='Resume with current settings', exact=True).click()
+            await page.wait_for_function("id => selected===id && !opening", arg=destination)
+            await page.locator("#prompt").fill(destination_draft)
+            await page.locator("#turn-mode").select_option("plan")
+            await page.wait_for_function("v => DeskBrowserPreview.snapshot().drafts[v.id]?.text===v.text && DeskBrowserPreview.snapshot().drafts[v.id]?.mode==='plan'", arg={"id": destination, "text": destination_draft})
+            for text in ("Check the installation command first.", "Review configuration after the launch command."):
+                await page.locator("#prompt").fill(text)
+                await page.locator("#prepare-followup").click()
+                await page.wait_for_function("!$('prepare-followup').disabled")
+            await page.locator("#prompt").fill(destination_draft)
+            await page.wait_for_function("v => DeskBrowserPreview.snapshot().drafts[v.id]?.text===v.text", arg={"id": destination, "text": destination_draft})
+            before_evidence = await snapshot()
+            await page.locator("#browse").click()
+            await page.locator('#native-list .native-row').filter(has_text='Sample checkout retry decision').locator('.native-read').click()
+            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            original_item = page.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{ITEM}"]')
+            await original_item.locator('pre').evaluate("""(n,quote) => {
+                const walker=document.createTreeWalker(n,NodeFilter.SHOW_TEXT);let node;
+                while(node=walker.nextNode()){const at=node.textContent.indexOf(quote);if(at<0)continue;
+                    const r=document.createRange();r.setStart(node,at);r.setEnd(node,at+quote.length);
+                    const selection=getSelection();selection.removeAllRanges();selection.addRange(r);return;}
+                throw Error('Sample original quote missing');
+            }""", quote)
+            await original_item.locator('.history-reader-review-evidence').click()
+            await page.wait_for_function("$('evidence-preparation').open && !DeskEvidencePreparation.state().pending")
+            reviewed = await page.evaluate("DeskEvidencePreparation.state()")
+            assert reviewed['reference']['quote'] == quote and reviewed['reference']['thread_id'] == THREAD
+            assert reviewed['reference']['turn_id'] == TURN and reviewed['reference']['item_id'] == ITEM
+            assert len(reviewed['reference']['native_home']) == 64
+            assert reviewed['destination']['session'] == destination and reviewed['destination']['mode'] == 'plan'
+            assert await snapshot() == before_evidence, 'Review wrote sample storage'
+            await page.locator('#evidence-preparation-note').fill('Use the retained retry rule in the next installation check.')
+            await page.locator('#evidence-preparation-append').click()
+            await page.wait_for_function("!$('evidence-preparation').open && DeskEvidencePreparation.parse($('prompt').value).length===1")
+            await page.locator('#history-reader-back').click()
+            await page.locator('#history-close').click()
+            evidence_saved = await snapshot()
+            assert evidence_saved['drafts'][destination]['text'].startswith(destination_draft + '\n\nNext-step note:')
+            assert evidence_saved['drafts'][destination]['mode'] == 'plan'
+            assert evidence_saved['followups'] == before_evidence['followups']
+            assert evidence_saved['drafts'][SESSION] == before_evidence['drafts'][SESSION]
+            await checkpoint('review-original-A-append-unsent-B')
+            captured.extend(await log())
+            await page.reload()
+            await page.wait_for_function("id => selected===id && !opening && DeskEvidencePreparation.parse($('prompt').value).length===1", arg=destination)
+            await page.wait_for_function("$('followup-count').textContent==='2'")
+            assert await snapshot() == evidence_saved
+            if not await page.locator('#draft-evidence').evaluate('n=>n.open'):
+                await page.locator('#draft-evidence > summary').click()
+            await page.locator('#draft-evidence-list button').scroll_into_view_if_needed()
+            await page.locator('#prompt').evaluate("n=>{n.focus({preventScroll:true});n.setSelectionRange(5,16,'backward')}")
+            owner = await page.evaluate("({selected,text:$('prompt').value,mode:$('turn-mode').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection})")
+            boundary = len(await log())
+            await page.locator('#draft-evidence-list button').focus()
+            await page.locator('#draft-evidence-list button').press('Enter')
+            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            exact = page.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{ITEM}"]')
+            assert await exact.locator('mark').text_content() == quote
+            assert await page.locator('#history-reader-saved-evidence-quote').text_content() == quote
+            assert await snapshot() == evidence_saved
+            source_reads = (await log())[boundary:]
+            assert len([r for r in source_reads if r['path']=='/api/native/evidence-source']) == 1
+            assert all(r['method']=='GET' for r in source_reads), source_reads
+            await page.locator('#history-reader-back').click()
+            restored = await page.evaluate("({selected,text:$('prompt').value,mode:$('turn-mode').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection})")
+            assert restored == owner, (owner, restored)
+            assert await snapshot() == evidence_saved
+            await checkpoint('cold-saved-B-read-exact-A-return')
+            captured.extend(await log())
+
             # Reset is scoped; unrelated same-origin browser state survives.
             await page.evaluate("window.localStorage.setItem('preview-check-unrelated', 'keep')")
             await page.locator("#prompt").fill("Discard this pending sample draft on reset.")
@@ -369,6 +473,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
                 "native_model_calls": 0, "external_requests": external, "javascript_errors": errors,
                 "console_errors": console_errors, "failed_requests": failures, "horizontal_overflow": False,
                 "unrelated_storage_preserved": True}
+            receipt['evidence_preparation'] = {'source': reviewed['reference'], 'destination': destination, 'cold_exact_return': True, 'read_only_source': True, 'queues_unchanged': True}
             receipt['prepared_work'] = {'query_free_entry': 'show-preparation', 'reviewed_session': SESSION,
                 'copied_texts': copied, 'explicit_append': True, 'saved_mode': 'plan', 'source_queue_unchanged': True,
                 'overview_after_reload': True, 'no_native_open_on_review': True, 'explicit_save_and_open_exact_unsent_plan': True}

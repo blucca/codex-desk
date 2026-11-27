@@ -9,6 +9,7 @@ CONFIGURE=SOURCE[SOURCE.index('  function configure('):SOURCE.index('  root.Desk
 MANUAL=SOURCE[SOURCE.index('  function manualFindNavigation('):SOURCE.index('  function findMatch(')]
 ITEM=SOURCE[SOURCE.index('  function itemNode('):SOURCE.index('  function render(')]
 BOUNDS=SOURCE[SOURCE.index('  function bounds('):SOURCE.index('  function findControls(')]
+VIEW=SOURCE[SOURCE.index('  function captureView()'):SOURCE.index('  function refreshControls()')]
 HANDLERS=r'''
 el('').addEventListener=()=>{};
 function close(){}function read(){}function movePage(){}function submitFind(){}function jumpFind(){}function invalidate(){}
@@ -18,6 +19,38 @@ function close(){}function read(){}function movePage(){}function submitFind(){}f
 @unittest.skipUnless(shutil.which('node'),'Node is required for independent Refresh review')
 class ReaderRefreshReviewTests(unittest.TestCase):
     run_js=refresh_tests.ReaderRefreshTests.run_js
+
+    def test_held_refresh_restores_latest_outer_position_after_item_focus(self):
+        view_handlers=VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
+            '  function restoreView(view,ticket){', 'const restoreOriginalView=function(view,ticket){')
+        self.run_js(r'''
+const document={activeElement:null},pre={scrollTop:72};let headerShift=0;
+const control={focus(options){document.activeElement=this;this.options=options;el('').scrollTop=0;}};
+const item={dataset:{turnId:'turn',itemId:'old',windowStart:'40000'},open:true,
+  getBoundingClientRect:()=>{const top=el('body').getBoundingClientRect().top+145-el('body').scrollTop;return {top,bottom:top+60};},contains:node=>node===control,
+  querySelector:()=>pre,querySelectorAll:()=>[control]};
+const viewItems=()=>[item],elementKey=item=>JSON.stringify([item.dataset.turnId,item.dataset.itemId]);
+const selectedText=()=>null,restoreSelectedText=()=>{};
+el('body').getBoundingClientRect=()=>({top:330+headerShift-el('').scrollTop,bottom:450+headerShift-el('').scrollTop});
+el('body').scrollTop=85;el('').scrollTop=210;document.activeElement=control;
+''' + view_handlers + r'''
+let captured;render=(scroll,snapshot)=>{captured=snapshot;pre.scrollTop=0;el('body').scrollTop=0;el('').scrollTop=0;restoreOriginalView(snapshot,version);};
+response=thread([['old','exact old evidence']]);const pending=refresh();
+el('').scrollTop=310;el('body').scrollTop=105;pre.scrollTop=97;
+release();assert(await pending);
+assert.equal(captured.outer,310,'The real captureView uses latest outer scroll, not the click position');
+assert.equal(el('').scrollTop,310,'The real restoreView restores outer scroll after item focus');
+assert.equal(el('body').scrollTop,105);assert.equal(pre.scrollTop,97);
+assert.equal(captured.items.get(elementKey(item)).start,40000);assert(captured.items.get(elementKey(item)).open);
+assert.strictEqual(document.activeElement,control);assert.deepEqual(control.options,{preventScroll:true});
+assert.equal(captured.anchor.screenTop,60,'captureView records the absolute visible item anchor');
+headerShift=18;el('').scrollTop=0;el('body').scrollTop=0;pre.scrollTop=0;
+restoreOriginalView(captured,version);
+assert.equal(el('').scrollTop,328,'restoreView compensates the changed header geometry after restoring focus and outer scroll');
+assert.equal(item.getBoundingClientRect().top,captured.anchor.screenTop,'The same original item keeps its captured screen position');
+assert.equal(el('body').scrollTop,105);assert.equal(pre.scrollTop,97);
+assert.equal(apiCalls.length,1);
+''')
 
     def test_edited_then_restored_query_is_unsent_until_explicit_find(self):
         self.run_js(HANDLERS+"""

@@ -1,6 +1,7 @@
 """Loopback UI for project-bound native sessions."""
 import argparse
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,7 @@ from .steer_dispatch import start_steer, steer_status, SteerConflict
 from .stop_dispatch import stop_current, stop_status, StopConflict
 from .preparation import preparation_snapshot
 from .native_outcome import outcomes
+from .task_response import identifier as response_identifier, select_task_response
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
 
@@ -47,6 +49,33 @@ class LoopbackHTTPServer(ThreadingHTTPServer):
         self.server_name, self.server_port = self.server_address[:2]
 
 
+class _CatalogBinding:
+    """Only the launch cwd needed by the native read-only transport."""
+    def __init__(self, cwd):
+        self.cwd = str(cwd)
+    def get(self, identifier):
+        if identifier != 'native-catalog':
+            raise ValueError('Use the native history reader')
+        return {'cwd': self.cwd}
+
+
+class _NativeReader(Runtime):
+    """Reuse native RPC/lifecycle handling without a persisted task session."""
+    def __init__(self, binary, home, cwd):
+        super().__init__(_CatalogBinding(cwd), 'native-catalog', binary, home)
+    def request(self, method, params, timeout=30):
+        if method not in ('initialize', 'thread/read'):
+            raise ValueError('Use a native original read')
+        return super().request(method, params, timeout)
+    def _message(self, msg):
+        # No unsolicited task notifications or approval requests belong to
+        # this catalog transport. RPC replies alone feed pending read calls.
+        if 'method' not in msg and 'id' in msg:
+            super()._message(msg)
+    def _mark_exited(self):
+        pass
+
+
 class Desk:
     def __init__(self, binary, home, state):
         self.binary, self.home = binary, Path(home).expanduser().resolve()
@@ -64,6 +93,7 @@ class Desk:
         self.followup_sends = {}
         self.steer_sends = {}
         self.stop_sends = {}
+        self.native_reader = None
     def open(self, identifier):
         with self.lock:
             validate_handoff_home(self, identifier)
@@ -307,6 +337,36 @@ class Desk:
             return runtime
     def history(self, thread_id):
         return self.catalog().request('thread/read', {'threadId': thread_id, 'includeTurns': True})['thread']
+    def native_home_namespace(self):
+        """Opaque identity for this launch's resolved native history home."""
+        return hashlib.sha256(str(self.home).encode('utf-8')).hexdigest()
+    def evidence_source(self, namespace, thread_id):
+        response_identifier(thread_id)
+        if not isinstance(namespace, str) or namespace != self.native_home_namespace():
+            raise ValueError('This evidence belongs to another native home. Relaunch with its original --codex-home to read it.')
+        thread = self.read_native(thread_id)
+        if thread.get('id') != thread_id or not isinstance(thread.get('turns'), list):
+            raise ValueError('Native original does not match this evidence source')
+        return {'thread': thread, 'home_namespace': namespace, 'source': 'native history read'}
+    def read_native(self, thread_id):
+        """One native original read; no Store row, cache or task attachment."""
+        response_identifier(thread_id)
+        with self.lock:
+            runtime = self.native_reader
+            if runtime is None or runtime.closing or runtime.process.poll() is not None:
+                if runtime is not None:
+                    runtime.close()
+                runtime = _NativeReader(self.binary, self.home, self._catalog_fallback_cwd)
+                self.native_reader = runtime
+        result = runtime.request('thread/read', {'threadId': thread_id, 'includeTurns': True})
+        if not isinstance(result, dict) or not isinstance(result.get('thread'), dict):
+            raise ValueError('Native original did not supply its thread')
+        return result['thread']
+    def task_response(self, thread_id, turn_id):
+        response_identifier(thread_id)
+        response_identifier(turn_id)
+        thread = self.read_native(thread_id)
+        return {'thread': thread, 'response': select_task_response(thread, thread_id, turn_id)}
     def import_thread(self, thread_id, profile):
         thread = self.history(thread_id)
         cwd = Path(thread['cwd'])
@@ -340,6 +400,8 @@ class Desk:
         return self.native_index.search_combined(q, cwd, include_archived, limit, offset)
     def close(self):
         self.history_scanner.close()
+        if self.native_reader is not None:
+            self.native_reader.close()
         for runtime in list(self.runtimes.values()):
             runtime.close()
 
@@ -480,18 +542,38 @@ def handler(desk, access_token=None):
                     if scope is not None:
                         result = dict(result, projectScope=scope)
                     return self.reply(result)
+                if url.path == '/api/native/home':
+                    if url.query:
+                        raise ValueError('Use the current launch native home')
+                    return self.reply({'home_namespace': desk.native_home_namespace()})
+                if url.path == '/api/native/evidence-source':
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2,
+                                      strict_parsing=True, errors='strict')
+                    if set(params) != {'home', 'thread'} or any(len(v)!=1 for v in params.values()):
+                        raise ValueError('Use one captured native home and thread')
+                    return self.reply(desk.evidence_source(params['home'][0], params['thread'][0]))
+                if url.path == '/api/native/task-response':
+                    params = parse_qs(url.query, keep_blank_values=True, max_num_fields=2,
+                                      strict_parsing=True, errors='strict')
+                    if set(params) != {'thread', 'turn'} or any(len(values) != 1 for values in params.values()):
+                        raise ValueError('Use one captured native thread and turn ID')
+                    # Validate both exact opaque IDs before creating a reader
+                    # or issuing its one thread/read call. Never trim them.
+                    thread_id = response_identifier(params['thread'][0])
+                    turn_id = response_identifier(params['turn'][0])
+                    return self.reply(desk.task_response(thread_id, turn_id))
                 if url.path == '/api/native/thread':
                     params = parse_qs(url.query)
                     return self.reply(desk.history(params['id'][0]))
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/stop-task.js', '/recall.js', '/home.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence-preparation.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_find.js', '/preparation.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/stop-task.js', '/recall.js', '/home.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'stop-task.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence-preparation.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'stop-task.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()

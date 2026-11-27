@@ -9,7 +9,8 @@ NODE=shutil.which('node')
 HARNESS=r"""
 const assert=require('assert');
 class Element {
-  constructor(){this.textContent='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.selectionStart=0;this.selectionEnd=0;this.scrollTop=0;}
+  constructor(){this.textContent='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.selectionStart=0;this.selectionEnd=0;this.scrollTop=0;this.dataset={};this.children=[];}
+  replaceChildren(...nodes){this.children=nodes;}
   focus(){document.activeElement=this;}
 }
 const elements=new Map(),$=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
@@ -207,7 +208,10 @@ const losing=open('old-startup',{steerReceiptOnly:true});await Promise.resolve()
 await open('chosen-session');probe.resolve(false);await losing;
 assert.strictEqual(selected,'chosen-session');assert.deepStrictEqual(nativeOpened,['chosen-session']);
 """
-        script=HARNESS+(ROOT/'codex_desk/static/steering.js').read_text()+setup+opening+'\n(async()=>{'+body+'})().catch(e=>{console.error(e);process.exitCode=1;});'
+        evidence = (ROOT/'codex_desk/static/evidence-preparation.js').read_text() + '\nconst draftRevisions=new Map();\n'
+        evidence += source[source.index('function taskEvidenceDestination('):source.index('async function saveReviewedEvidence(')]
+        evidence += source[source.index('function syncDraftEvidence('):source.index('DeskEvidencePreparation.configure(')]
+        script=HARNESS+evidence+(ROOT/'codex_desk/static/steering.js').read_text()+setup+opening+'\n(async()=>{'+body+'})().catch(e=>{console.error(e);process.exitCode=1;});'
         result=subprocess.run([NODE,'-e',script],capture_output=True,text=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 

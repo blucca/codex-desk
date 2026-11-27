@@ -23,6 +23,7 @@ class Element {
     this.scrollTop = 0; this.scrollLeft = 0;
   }
   set innerHTML(value) { throw new Error('Diff must be rendered as literal text'); }
+  replaceChildren(...nodes) { this.children=[];this.append(...nodes); }
   append(...nodes) { for (const node of nodes) { node.parentNode = this; this.children.push(node); } }
   remove() {
     if (this.parentNode) {
@@ -405,7 +406,11 @@ class TurnChangesAppProjectionTests(unittest.TestCase):
         poll = source[source.index('async function pollActivity()'):source.index('async function tick()')]
         draw_sync = source[source.index('function draw()'):source.index("  $('archive-session').hidden=false;")] + '}\n'
         draw_sync = 'let nativeOutcomeSignature=' + source.split('nativeOutcomeSignature=', 1)[1].split(',', 1)[0] + ';\n' + draw_sync
-        script = (HARNESS + '\n' + (static / 'native-steps.js').read_text() + '\n'
+        draw_sync = source[source.index('let selectedOriginalReview='):source.index('function selectedOriginalCurrent(')] + draw_sync
+        evidence = (static / 'evidence-preparation.js').read_text() + '\nconst draftRevisions=new Map();\n'
+        evidence += source[source.index('function taskEvidenceDestination('):source.index('async function saveReviewedEvidence(')]
+        evidence += source[source.index('function syncDraftEvidence('):source.index('DeskEvidencePreparation.configure(')]
+        script = (HARNESS + '\n' + evidence + (static / 'native-steps.js').read_text() + '\n'
                   + (static / 'turn-changes.js').read_text() + '\n' + APP_SETUP + '\n'
                   + consume + poll + draw_sync + '\n(async () => {\n' + body
                   + '\n})().catch(error => { console.error(error); process.exitCode = 1; });\n')

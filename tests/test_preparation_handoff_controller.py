@@ -45,6 +45,25 @@ await DeskPreparation.show();assert.equal(n('text').value,world.b.draft.text);as
 assert.equal(n('open').textContent,'Open conversation');
 ''')
 
+    def test_idempotent_save_then_open_accepts_exact_already_saved_receipt(self):
+        self.check(r'''
+await review('a');fill('Reviewed new Plan','plan');await n('save').click();
+const original=clone(world.a.draft),queue=clone(world.a.followups);
+control.post=()=>{world.a.draft=clone(original);return clone(original);};
+await n('save-open').click();
+assert.deepEqual(opened,['a']);assert.equal(n('').open,false);
+assert.deepEqual(world.a.draft,original);assert.deepEqual(world.a.followups,queue);
+''')
+
+    def test_unadvanced_receipt_cannot_confirm_changed_draft(self):
+        self.check(r'''
+await review('a');fill('Changed unsaved task','native');
+control.post=data=>({text:data.text,mode:data.mode,revision:data.revision});
+await n('save-open').click();assert.deepEqual(opened,[]);assert.equal(n('').open,true);
+assert.match(n('draft-status').textContent,/did not confirm/);
+assert.equal(n('text').value,'Changed unsaved task');
+''')
+
     def test_failed_save_keeps_review_and_retry_opens_only_after_save(self):
         self.check(r'''
 await review('a');fill('Reviewed preparation','native');control.failPost=true;
@@ -188,9 +207,10 @@ assert.equal(n('').open,false);assert.equal(calls.filter(c=>c.data).length,1);
     def test_real_workbench_callback_preserves_dirty_draft_and_accepts_clean_handoff(self):
         source = (ROOT / 'codex_desk/static/app.js').read_text()
         callback = source[source.index('function preparationSaved('):source.index('DeskPreparation.configure(')]
+        callback += source[source.index('function syncDraftEvidence('):source.index('DeskEvidencePreparation.configure(')]
         self.check(r'''
 const main={prompt:new Element('textarea'),mode:new Element('select')};
-const $=id=>id==='prompt'?main.prompt:main.mode;
+const $=id=>id==='prompt'?main.prompt:id==='draft-evidence'?null:main.mode;
 const drafts=new Map([['a','Workbench unsaved text']]),draftModes=new Map([['a','plan']]);
 const draftSaved=new Map([['a',clone(world.a.draft)]]),draftRevisions=new Map([['a',1]]);
 const draftTimers=new Map(),draftSaves=new Map(),draftConflicts=new Map(),draftMessages=new Map();

@@ -9,7 +9,7 @@ NODE = shutil.which('node')
 HARNESS = r"""
 const assert = require('assert');
 class Element {
-  constructor(tag='div'){this.tagName=tag.toUpperCase();this.textContent='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.children=[];this.selectionStart=0;this.selectionEnd=0;this.scrollTop=0;}
+  constructor(tag='div'){this.tagName=tag.toUpperCase();this.textContent='';this.value='';this.hidden=false;this.disabled=false;this.open=false;this.children=[];this.dataset={};this.selectionStart=0;this.selectionEnd=0;this.scrollTop=0;}
   append(...nodes){this.children.push(...nodes);}
   replaceChildren(...nodes){this.children=[...nodes];}
   focus(){document.activeElement=this;}
@@ -240,7 +240,10 @@ $('stop-request-captured').open=false; assert(!DeskStopTask.reading()); $('stop-
     def app_open_check(self, setup, body, prefix=''):
         source = (ROOT/'codex_desk/static/app.js').read_text()
         opening = source[source.index('async function open('):source.index('function profileInfo()')]
-        script = HARNESS + prefix + (ROOT/'codex_desk/static/stop-task.js').read_text() + SETUP + setup + opening + '\n(async()=>{' + body + '})().catch(error=>{console.error(error);process.exitCode=1;});'
+        evidence = (ROOT/'codex_desk/static/evidence-preparation.js').read_text() + '\nconst draftRevisions=new Map();\n'
+        evidence += source[source.index('function taskEvidenceDestination('):source.index('async function saveReviewedEvidence(')]
+        evidence += source[source.index('function syncDraftEvidence('):source.index('DeskEvidencePreparation.configure(')]
+        script = HARNESS + prefix + evidence + (ROOT/'codex_desk/static/stop-task.js').read_text() + SETUP + setup + opening + '\n(async()=>{' + body + '})().catch(error=>{console.error(error);process.exitCode=1;});'
         result = subprocess.run([NODE, '-e', script], capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

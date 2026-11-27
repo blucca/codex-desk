@@ -17,7 +17,7 @@ class ReaderRefreshTests(unittest.TestCase):
 const assert=require('assert/strict'),root={DeskHistoryFind:require(FIND)};
 const elements=new Map();function el(id){if(!elements.has(id))elements.set(id,{hidden:false,disabled:false,value:'',textContent:''});return elements.get(id);}
 const PAGE_ENTRIES=40;const str=x=>typeof x==='string'?x:'';let version=1,refreshVersion=0,refreshing=false,loading=false,findVersion=0,finding=false,findGroups=[],findTotal=0,findCursor=-1,findSubmitted=false,findQuery='';
-let source={id:'original',name:'First original'},requested={thread_id:'original'},rows=[{turn:{id:'turn'},item:{id:'old',type:'agentMessage',text:'exact old evidence'}}],page=0,targetIndex=-1;
+let options=null;let source={id:'original',name:'First original'},requested={thread_id:'original'},rows=[{turn:{id:'turn'},item:{id:'old',type:'agentMessage',text:'exact old evidence'}}],page=0,targetIndex=-1;
 let live=true,view={items:new Map(),anchor:null,first:JSON.stringify(['turn','old']),page:0,scroll:17},renders=[],findMessages=[],apiCalls=[];
 function current(ticket){return live && ticket===version;}function available(){return current(version);}
 function captureView(){return view;}function render(scroll,v){renders.push({scroll,view:v,source:source.id,rows:rows.map(x=>x.item.id)});}
@@ -31,15 +31,23 @@ const thread=(items)=>({id:'original',name:'Updated original',cwd:'/retained',tu
         result=subprocess.run(['node','-e',script],capture_output=True,text=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
+    def test_referenced_refresh_preserves_home_and_exact_quote_resolver(self):
+        self.run_js("""options={savedReference:{native_home:'a'.repeat(64),thread_id:'original',turn_id:'turn',item_id:'old',quote:'exact old evidence'}};
+let resolved=0;root.DeskEvidencePreparation={resolve(reference,home,original,project){++resolved;assert.equal(home,reference.native_home);assert.equal(original.id,'original');return {available:true};}};
+response={home_namespace:options.savedReference.native_home,thread:thread([['old','exact old evidence']])};let pending=refresh();release();assert(await pending);
+assert.equal(apiCalls[0],'/api/native/evidence-source?home='+options.savedReference.native_home+'&thread=original');assert.equal(resolved,1);
+const retained=source;response={home_namespace:'b'.repeat(64),thread:thread([['old','foreign home']])};pending=refresh();release();assert.equal(await pending,false);assert.strictEqual(source,retained);assert.equal(resolved,1);""")
+
     def test_pending_duplicate_keeps_snapshot_and_latest_unsent_query(self):
         self.run_js("""response=thread([['old','exact old evidence'],['new','fresh result']]);const old=source,oldRows=rows;
-const pending=refresh();assert.strictEqual(source,old);assert.strictEqual(rows,oldRows);assert(refreshing);await refresh();assert.equal(apiCalls.length,1);
-view={...view,scroll:88,page:0};el('find-query').value='new unsent phrase';release();assert(await pending);
-assert.equal(source.name,'Updated original');assert.equal(rows.length,2);assert.equal(el('find-query').value,'new unsent phrase');assert.equal(renders.at(-1).view.scroll,88);assert.equal(findTotal,0);assert(!refreshing);""")
+view.outer=31;const pending=refresh();assert.strictEqual(source,old);assert.strictEqual(rows,oldRows);assert(refreshing);await refresh();assert.equal(apiCalls.length,1);
+view={...view,scroll:88,outer:244,page:0};el('find-query').value='new unsent phrase';release();assert(await pending);
+assert.equal(source.name,'Updated original');assert.equal(rows.length,2);assert.equal(el('find-query').value,'new unsent phrase');assert.equal(renders.at(-1).view.scroll,88);assert.equal(renders.at(-1).view.outer,244,'Refresh commits the outer scroll at reply time, not click time');assert.equal(findTotal,0);assert(!refreshing);""")
 
     def test_failed_refresh_keeps_last_original_and_query_then_explicit_retry(self):
         self.run_js("""response=Error('Native original unavailable');const old=source,oldRows=rows;el('find-query').value='keep query';
-let pending=refresh();release();assert.equal(await pending,false);assert.strictEqual(source,old);assert.strictEqual(rows,oldRows);assert.equal(el('find-query').value,'keep query');assert(!el('error').hidden);assert(!el('retry').hidden);assert(!el('retry').disabled);
+let errorText='';Object.defineProperty(el('error'),'textContent',{get:()=>errorText,set:value=>{errorText=value;el('').scrollTop=0;}});
+el('').scrollTop=31;let pending=refresh();el('').scrollTop=244;release();assert.equal(await pending,false);assert.strictEqual(source,old);assert.strictEqual(rows,oldRows);assert.equal(el('find-query').value,'keep query');assert(!el('error').hidden);assert(!el('retry').hidden);assert(!el('retry').disabled);assert.equal(el('').scrollTop,244,'Error layout restores the latest outer reading position');
 response=thread([['old','exact old evidence']]);pending=refresh();release();assert(await pending);assert(el('error').hidden);assert.equal(apiCalls.length,2);""")
 
     def test_recomputes_submitted_query_with_compressed_spans_exact_anchor(self):

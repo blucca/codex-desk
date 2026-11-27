@@ -46,7 +46,7 @@ async function loadDraft(id,current=generation){
   await draftLoads.get(id);
   if(current===generation && selected===id){$('prompt').value=drafts.get(id) || '';if(draftModes.has(id)){$('turn-mode').value=draftModes.get(id);modeSelected=id;}draftStatus(id);}
 }
-function persistDraft(id,{identify=false}={}){
+function persistDraft(id,{identify=false,onSaved=null}={}){
   clearTimeout(draftTimers.get(id));draftTimers.delete(id);
   const previous=draftSaves.get(id) || Promise.resolve();
   const pending=previous.then(async()=>{
@@ -60,7 +60,7 @@ function persistDraft(id,{identify=false}={}){
     try{
       const next=await api('/api/draft',{session:id,text,mode,revision:draftRevisions.get(id),writer:draftWriter,sequence});
       draftRevisions.set(id,next.revision);draftSaved.set(id,next);draftIdentities.set(id,{revision:next.revision,sequence});
-      draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);return true;
+      draftMessages.set(id,'Draft saved locally. Nothing has been sent.');draftStatus(id);if(onSaved)onSaved({...next});return true;
     }catch(e){
       if(e.status===409 && e.current){draftConflicts.set(id,e.current);draftMessages.set(id,'This session’s draft changed in another tab. Choose which preparation to keep.');}
       else draftMessages.set(id,'Draft not saved: '+e.message);
@@ -75,7 +75,7 @@ function scheduleDraft(id){
   draftTimers.set(id,setTimeout(()=>persistDraft(id),350));
 }
 $('draft-keep').onclick=()=>{const id=selected,current=draftConflicts.get(id);if(!current)return;draftRevisions.set(id,current.revision);draftSaved.set(id,current);draftConflicts.delete(id);draftEdits.set(id,(draftEdits.get(id) || 0)+1);persistDraft(id);};
-$('draft-load').onclick=()=>{const id=selected,current=draftConflicts.get(id);if(!current)return;draftRevisions.set(id,current.revision);draftSaved.set(id,current);drafts.set(id,current.text);draftModes.set(id,current.mode);draftConflicts.delete(id);draftEdits.set(id,(draftEdits.get(id) || 0)+1);$('prompt').value=current.text;$('turn-mode').value=current.mode;modeSelected=id;draftMessages.set(id,'Saved draft loaded. Nothing has been sent.');draftStatus(id);};
+$('draft-load').onclick=()=>{const id=selected,current=draftConflicts.get(id);if(!current)return;draftRevisions.set(id,current.revision);draftSaved.set(id,current);drafts.set(id,current.text);draftModes.set(id,current.mode);draftConflicts.delete(id);draftEdits.set(id,(draftEdits.get(id) || 0)+1);$('prompt').value=current.text;$('turn-mode').value=current.mode;modeSelected=id;draftMessages.set(id,'Saved draft loaded. Nothing has been sent.');draftStatus(id);syncDraftEvidence();DeskEvidencePreparation.sync();};
 window.addEventListener('pagehide',()=>{
   if(selected)rememberDraft(selected);
   // A debounced save can already be waiting behind an in-flight response.
@@ -384,14 +384,17 @@ function syncSelectedOriginal(){
   }
   const button=$('read-original'),session=state.sessions.find(s=>s.id===selected),binding=selectedOriginalBinding();
   button.hidden=!session;button.disabled=!binding || !!selectedOriginalReview?.pending;
+  if($('read-task-response'))$('read-task-response').disabled=!binding || !!selectedOriginalReview?.pending || $('history-reader').open;
   button.title=opening?'Wait for the native conversation binding.':!binding?'Native conversation not available yet.':'Read this conversation without opening or sending a task.';
 }
-async function readSelectedOriginal({find=false,returnFocus=$('read-original')}={}){
+async function readSelectedOriginal({find=false,taskResponse=false,returnFocus=$('read-original')}={}){
   const binding=selectedOriginalBinding();if(!binding || selectedOriginalReview?.pending || $('history-reader').open)return false;
-  const intent={...binding,pending:true,returnFocus};selectedOriginalReview=intent;syncSelectedOriginal();
+  const outcome=state.native_outcomes?.[binding.session];
+  if(taskResponse && (!outcome || outcome.thread_id!==binding.thread_id || typeof outcome.turn_id!=='string' || !outcome.turn_id.trim() || outcome.turn_id.length>200))return false;
+  const intent={...binding,turn_id:taskResponse?outcome.turn_id:undefined,pending:true,returnFocus};selectedOriginalReview=intent;syncSelectedOriginal();
   const valid=()=>selectedOriginalCurrent(intent);
   try{
-    const read=await DeskHistoryReader.show({thread_id:binding.thread_id,cwd:binding.cwd},{valid,startAtEnd:true,backLabel:'Return to selected task',onReturn:()=>{
+    const read=await DeskHistoryReader.show({thread_id:binding.thread_id,cwd:binding.cwd,...(taskResponse?{turn_id:intent.turn_id}:{})},{valid,taskResponse,startAtEnd:true,backLabel:'Return to selected task',onReturn:()=>{
       const current=valid();if(selectedOriginalReview===intent)selectedOriginalReview=null;
       syncSelectedOriginal();
       if(current){const target=intent.returnFocus;
@@ -407,6 +410,7 @@ function draw() {
   $('approvals').hidden=opening;
   DeskHome.sync();
   syncSelectedOriginal();
+  syncDraftEvidence();DeskEvidencePreparation.sync();
   const running=state.sessions.filter(s=>['running','approval','starting'].includes(s.status)).length;
   document.title=(running?`(${running} active) `:'')+'Codex Desk';
   $('activity-controls').hidden=!selected;
@@ -414,6 +418,9 @@ function draw() {
   const outcome=state.native_outcomes?.[selected];
   const visibleOutcome=outcome && outcome.thread_id===s.thread_id;
   $('native-outcome').hidden=!visibleOutcome;
+  const responseButton=$('read-task-response');
+  responseButton.disabled=!visibleOutcome || !selectedOriginalBinding() || !!selectedOriginalReview?.pending || $('history-reader').open;
+  responseButton.title='Read the response supplied for this displayed native parent turn. No task is sent.';
   const outcomeKey=visibleOutcome?JSON.stringify([selected,outcome]):'';
   if(outcomeKey!==nativeOutcomeSignature){
     nativeOutcomeSignature=outcomeKey;
@@ -730,7 +737,7 @@ async function open(id,{revealLatest=true,keepError=false,steerReceiptOnly=false
       for(const row of rows){after=row.seq;consume(row.event);}
       await refresh();if(current!==generation)return;
       localStorage.setItem('codex-desk-session',id);
-      opening=false;$('welcome').hidden=true;$('task').hidden=false;$('handoff').hidden=false;draw();DeskSteering.opened();DeskStopTask.opened();
+      opening=false;$('welcome').hidden=true;$('task').hidden=false;syncDraftEvidence();$('handoff').hidden=false;draw();DeskSteering.opened();DeskStopTask.opened();
       return true;
     }
     const stopRetained=await DeskStopTask.opened();if(current!==generation)return;
@@ -747,7 +754,7 @@ async function open(id,{revealLatest=true,keepError=false,steerReceiptOnly=false
       for(const row of rows){after=row.seq;consume(row.event);}
       await refresh();if(current!==generation)return;
       localStorage.setItem('codex-desk-session',id);
-      opening=false;$('welcome').hidden=true;$('task').hidden=false;$('handoff').hidden=false;draw();
+      opening=false;$('welcome').hidden=true;$('task').hidden=false;syncDraftEvidence();$('handoff').hidden=false;draw();
       return true;
     }
     const opened=await api('/api/open',{session:id});
@@ -770,7 +777,7 @@ async function open(id,{revealLatest=true,keepError=false,steerReceiptOnly=false
     await refresh();
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
-    opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;DeskSteering.opened();DeskStopTask.opened();
+    opening=false;draw();$('task').hidden=false;syncDraftEvidence();$('handoff').hidden=false;DeskSteering.opened();DeskStopTask.opened();
     if(revealLatest)requestAnimationFrame(()=>{if(current===generation && ($('native-steps').hidden || !$('native-steps').open) && ($('turn-changes').hidden || !$('turn-changes').open) && ($('native-outcome').hidden || !$('native-outcome').open) && !DeskSteering.reading() && !DeskStopTask.reading() && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
     return true;
   } catch(e) {
@@ -865,18 +872,91 @@ $('project').addEventListener('close',()=>{if(!$('project').open)resetProject();
 $('create').onsubmit=async e=>{e.preventDefault();await findProject();};
 $('project-more').onclick=()=>findProject(projectCursor);
 $('project-new').onclick=()=>{if($('create').reportValidity())return openProjectChoice(()=>api('/api/sessions',{cwd:$('cwd').value,profile:$('profile').value,name:$('session-name').value.trim() || null}));};
-$('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
-$('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);}};
+$('prompt').oninput=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);syncDraftEvidence();DeskEvidencePreparation.sync();}};
+$('turn-mode').onchange=()=>{if(selected){rememberDraft(selected);scheduleDraft(selected);DeskEvidencePreparation.sync();}};
 DeskStopTask.configure({$,api,make,selection:()=>({session:selected,thread:nativeThreadId,generation,opening,connected:Object.hasOwn(state.pending || {},selected),status:state.sessions.find(s=>s.id===selected)?.status})});
 DeskSteering.configure({$,api,selection:()=>({session:selected,thread:nativeThreadId,generation,opening,connected:Object.hasOwn(state.pending || {},selected),status:state.sessions.find(s=>s.id===selected)?.status})});
 DeskFollowups.configure({api,make,selected:()=>selected,refresh,afterDraw:drawTurnRequest});
-DeskHistoryReader.configure({api});
-$('read-original').onclick=()=>readSelectedOriginal();
+let preparedEvidenceOwner=null;
+function evidenceDestination(){
+  if(preparedEvidenceOwner){
+    const current=DeskPreparation.evidenceDestination();
+    return current && current.session===preparedEvidenceOwner.session && current.generation===preparedEvidenceOwner.generation && current.writer===preparedEvidenceOwner.writer?current:null;
+  }
+  return taskEvidenceDestination();
+}
+function taskEvidenceDestination(){
+  const session=state.sessions.find(s=>s.id===selected),id=selected;
+  if(!session || opening || !draftRevisions.has(id) || $('task').hidden)return null;
+  return {session:id,generation,revision:draftRevisions.get(id),sequence:draftEdits.get(id)||0,
+    writer:draftWriter,text:$('prompt').value,mode:$('turn-mode').value,name:session.name,cwd:session.cwd,
+    busy:opening || submitting.has(id) || draftSaves.has(id) || draftTimers.has(id) || draftConflicts.has(id)};
+}
+async function saveReviewedEvidence(payload,capture){
+  if(!DeskEvidencePreparation.sameDestination(capture,evidenceDestination()))throw Error('The destination changed. Review its current draft.');
+  if(capture.kind==='prepared')return DeskPreparation.saveReviewedEvidence(payload,capture);
+  const id=capture.session;
+  // Reserve this page's next sequence before later typing can autosave.
+  draftEdits.set(id,payload.sequence);drafts.set(id,payload.text);draftModes.set(id,payload.mode);
+  $('prompt').value=payload.text;syncDraftEvidence();
+  let receipt=null;
+  const pending=persistDraft(id,{identify:true,onSaved:next=>{receipt=next;}});
+  const saved=await pending;
+  if(!saved){const conflict=draftConflicts.get(id),e=Error(draftMessages.get(id)||'The reviewed draft was not saved.');if(conflict){e.status=409;e.current=conflict;}throw e;}
+  // Confirm this accepted write, not whatever later draft save is now current.
+  if(!receipt || receipt.text!==payload.text || receipt.mode!==payload.mode)throw Error('Newer local edits remain saved. Review the draft before another append.');
+  return receipt;
+}
+function syncDraftEvidence(){
+  const panel=$('draft-evidence');if(!panel)return;
+  const destination=taskEvidenceDestination();
+  if(!destination){panel.hidden=true;panel.dataset.signature='';$('draft-evidence-list').replaceChildren();return;}
+  const references=DeskEvidencePreparation.parse(destination.text);
+  const signature=JSON.stringify([selected,generation,references.map(x=>x.reference)]);
+  if(panel.dataset.signature===signature)return;
+  panel.dataset.signature=signature;panel.hidden=!references.length;$('draft-evidence-list').replaceChildren();
+  for(const {reference} of references){
+    const button=make('button','Read referenced original · '+(reference.title||reference.item_id));button.type='button';
+    button.onclick=async()=>{
+      preparedEvidenceOwner=null;const owner=evidenceDestination();if(!owner || $('history-reader').open)return;
+      const editor=$('prompt'),view={start:editor.selectionStart,end:editor.selectionEnd,direction:editor.selectionDirection,scroll:editor.scrollTop,window:window.scrollY};
+      button.disabled=true;$('draft-evidence-status').textContent='Reading the captured original source…';
+      await DeskEvidencePreparation.readReference(reference,{owner,ownerCurrent:capture=>{
+        const current=evidenceDestination();return !!current && current.session===capture.session && current.generation===capture.generation;
+      },onReturn:()=>{if(evidenceDestination()?.session===owner.session && generation===owner.generation){editor.focus({preventScroll:true});if(editor.value===owner.text){editor.setSelectionRange(view.start,view.end,view.direction);editor.scrollTop=view.scroll;}window.scrollTo({top:view.window,behavior:'instant'});}},
+      onError:error=>{$('draft-evidence-status').textContent=error.message;}});
+      if(button.isConnected)button.disabled=false;
+    };
+    $('draft-evidence-list').append(button);
+  }
+}
+DeskEvidencePreparation.configure({api,destination:evidenceDestination,save:saveReviewedEvidence,
+  textForItem:DeskHistoryReader.textForItem,
+  apply:(receipt,capture,payload)=>{if(capture.kind==='prepared')return true;if(selected===capture.session && generation===capture.generation){syncDraftEvidence();draftStatus();}return drafts.get(capture.session)===payload.text;},
+  onConflict:(capture,current)=>{if(capture.kind==='prepared')return;if(current){draftConflicts.set(capture.session,current);draftStatus(capture.session);}},
+  onError:e=>{$('draft-evidence-status').textContent=e.message;error(e);},
+  showOriginal:(target,callbacks)=>DeskHistoryReader.show({thread_id:target.thread_id,turn_id:target.turn_id,item_id:target.item_id,
+    ...(callbacks.resolution.available?{match_text:callbacks.savedReference.quote,match_start:callbacks.resolution.start_utf16}:{})},callbacks)
+});
+DeskHistoryReader.configure({api,onEvidence:payload=>{
+  const destination=evidenceDestination();
+  if(!destination)throw Error('Select an existing task to prepare with this original evidence.');
+  if(destination.busy)throw Error('Wait for this task draft to finish saving before reviewing evidence.');
+  if(!payload.selection_utf16){
+    const turn=payload.thread.turns.find(turn=>turn.id===payload.turn_id),item=turn?.items?.find(item=>item.id===payload.item_id);
+    if(Array.from(DeskHistoryReader.textForItem(item)).length>DeskEvidencePreparation.MAX_QUOTE)throw Error('Select up to 8,000 characters from this original item first.');
+  }
+  return DeskEvidencePreparation.reviewLoaded({thread:payload.thread,thread_id:payload.thread.id,
+    turn_id:payload.turn_id,item_id:payload.item_id,start_utf16:payload.selection_utf16?.start,
+    end_utf16:payload.selection_utf16?.end},{valid:payload.valid,onReturn:payload.onReturn});
+}});
+$('read-original').onclick=()=>{preparedEvidenceOwner=null;return readSelectedOriginal();};
+$('read-task-response').onclick=()=>{preparedEvidenceOwner=null;return readSelectedOriginal({taskResponse:true,returnFocus:$('read-task-response')});};
 document.addEventListener('keydown',event=>{
   if(event.key!=='F3' || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey)return;
   const target=event.target;
   if(document.querySelector('dialog[open]') || target?.isContentEditable || target?.closest?.('input, textarea, select, [contenteditable]') || !(target===document.body || target?.closest?.('main')) || !selectedOriginalBinding())return;
-  event.preventDefault();readSelectedOriginal({find:true,returnFocus:target===document.body?$('read-original'):target});
+  event.preventDefault();preparedEvidenceOwner=null;readSelectedOriginal({find:true,returnFocus:target===document.body?$('read-original'):target});
 });
 DeskRecall.configure({api,make,state:()=>state,selected:()=>selected,generation:()=>generation,
   loaded:()=>!opening && !!nativeThreadId && !$('task').hidden,open,refresh,profileLabel,
@@ -992,10 +1072,13 @@ function preparationSaved(id,saved){
   draftRevisions.set(id,saved.revision);draftSaved.set(id,saved);
   drafts.set(id,saved.text);draftModes.set(id,saved.mode);
   draftMessages.set(id,'Draft saved locally. Nothing has been sent.');
-  if(selected===id){$('prompt').value=saved.text;$('turn-mode').value=saved.mode;modeSelected=id;draftStatus(id);}
+  if(selected===id){$('prompt').value=saved.text;$('turn-mode').value=saved.mode;modeSelected=id;draftStatus(id);syncDraftEvidence();}
   return true;
 }
 DeskPreparation.configure({api,make,profileLabel,onSaved:preparationSaved,
+  onBrowseEvidence:capture=>{preparedEvidenceOwner=capture;$('history').showModal();return nativeList();},
+  onEvidenceChange:()=>DeskEvidencePreparation.sync(),
+  readEvidenceReference:(reference,callbacks)=>DeskEvidencePreparation.readReference(reference,callbacks),
   navigationIdentity:()=>JSON.stringify([selected,generation]),
   openConversation:async id=>{await open(id);return selected===id && !opening && !$('task').hidden;}});
 $('show-preparation').onclick=()=>DeskPreparation.show();
@@ -1151,7 +1234,7 @@ async function showHandoff(thread,cwd,valid=()=>true) {
     $('history').close();$('preview').showModal();handoffVisible=true;
   }catch(e){if(current===generation && version===handoffVersion && valid())error(e);}
 }
-$('browse').onclick=()=>{$('history').showModal();nativeList();};
+$('browse').onclick=()=>{preparedEvidenceOwner=null;$('history').showModal();nativeList();};
 $('history-search').oninput=resetNative;
 $('history-search-form').onsubmit=e=>{e.preventDefault();nativeList();};
 $('history').addEventListener('close',()=>{if(!$('history').open)resetNative();});

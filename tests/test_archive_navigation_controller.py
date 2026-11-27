@@ -63,6 +63,10 @@ class ArchiveNavigationControllerTests(unittest.TestCase):
         shipped += source[source.index('async function refresh()'):source.index('async function open(id,')]
         native_readouts = (APP.parent / 'native-steps.js').read_text() + '\nDeskNativeSteps.configure({$,make});\n'
         native_readouts += (APP.parent / 'turn-changes.js').read_text() + '\nDeskTurnChanges.configure({$,writeText:async()=>{}});\nconst DeskSteering={select(){},sync(){},consume(){},restoreThread(){},opened(){},reading:()=>false};\n'
+        native_readouts += (APP.parent / 'evidence-preparation.js').read_text()
+        native_readouts += '\nconst draftRevisions=new Map(),draftEdits=new Map(),draftSaves=new Map(),draftTimers=new Map(),draftConflicts=new Map(),draftWriter="archive-page";\n'
+        shipped += source[source.index('function taskEvidenceDestination('):source.index('async function saveReviewedEvidence(')]
+        shipped += source[source.index('function syncDraftEvidence('):source.index('DeskEvidencePreparation.configure(')]
         code = SETUP + '\n' + native_readouts + shipped + '\n(async()=>{\n' + body + r'''
 unchanged();process.stdout.write(JSON.stringify({passed:true}));
 })().catch(error=>{process.stderr.write(error.stack);process.exitCode=1;});

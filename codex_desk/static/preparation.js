@@ -20,7 +20,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
 (function(root){
   const el=id=>document.getElementById('preparation'+(id?'-'+id:''));
   const editors=new Map(), projects=new Set(), writer=crypto.randomUUID();
-  let options,rows=new Map(),selected=null,displayed=null,listVersion=0,selectionVersion=0,saveVersion=0,reading=false,returnOrigin=null;
+  let options,rows=new Map(),selected=null,displayed=null,listVersion=0,selectionVersion=0,saveVersion=0,reading=false,returnOrigin=null,evidenceView=null;
   const scope=()=>({cwd:el('project').value,archived:el('archived').checked});
   const sameScope=(a,b)=>a.cwd===b.cwd && a.archived===b.archived;
   const make=(tag,text,cls)=>options.make(tag,text,cls);
@@ -72,9 +72,66 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     el('keep').disabled=el('load').disabled=!editor?.conflict || editor.saving;
     el('draft-status').textContent=editor?.conflict?'This draft changed elsewhere. Your edits are kept; choose Keep mine or Load saved.':
       (editor?.message || 'Review preparation. Nothing has been sent.');
+    drawEvidence(editor);options?.onEvidenceChange?.();
     const reuse=editor?.reuse;el('reuse').hidden=!reuse;
     el('reuse-text').textContent=reuse?modeLabel(reuse.mode)+' instruction to reuse:\n'+reuse.text:'';
     el('append').disabled=el('replace').disabled=!ready || editor.saving || !!editor.conflict;
+  }
+  function evidenceDestination(){
+    if(!el('').open)return null;
+    remember();const editor=editors.get(selected);
+    if(!editor?.ready)return null;
+    return {session:selected,generation:'prepared:'+selectionVersion+':'+(options.navigationIdentity?.() || ''),
+      revision:editor.revision,sequence:editor.sequence,writer,text:editor.text,mode:editor.mode,
+      name:name(editor.row),cwd:editor.row.cwd,kind:'prepared',
+      busy:reading || !!editor.loading || editor.saving || !!editor.opening || !!editor.conflict};
+  }
+  function sameEvidenceOwner(owner){
+    const current=evidenceDestination();return !!current && current.session===owner.session && current.generation===owner.generation && current.writer===owner.writer;
+  }
+  async function saveReviewedEvidence(payload,capture){
+    if(!root.DeskEvidencePreparation.sameDestination(capture,evidenceDestination()) ||
+       payload.session!==capture.session || payload.writer!==capture.writer || payload.revision!==capture.revision ||
+       payload.mode!==capture.mode || payload.sequence!==capture.sequence+1)throw Error('The Prepared destination changed. Review its current draft.');
+    const editor=editors.get(selected);
+    // Reserve before invoking the ordinary revisioned write. Later typing starts
+    // from this appended text and gets a later sequence, even during the reply.
+    editor.sequence=payload.sequence;editor.text=payload.text;editor.mode=payload.mode;drawEditor();
+    let receipt=null;const saved=await save(next=>{receipt=next;});
+    if(!saved){const failure=Error(editor.message || 'The reviewed Prepared draft was not saved.');if(editor.conflict){failure.status=409;failure.current={...editor.conflict};}throw failure;}
+    if(!receipt || receipt.text!==payload.text || receipt.mode!==payload.mode)throw Error('The local save did not confirm this reviewed Prepared draft.');
+    return receipt;
+  }
+  function readEvidence(reference,source){
+    const owner=evidenceDestination();if(!owner || !options.readEvidenceReference)return false;
+    remember();const editor=editors.get(selected),view={...editor.view},scroll=el('').scrollTop;
+    source.disabled=true;
+    return Promise.resolve(options.readEvidenceReference(reference,{owner,ownerCurrent:sameEvidenceOwner,
+      backLabel:'Return to Prepared work',onReturn:()=>{
+        if(!sameEvidenceOwner(owner))return;
+        // Keep queue/request review controls in their original row. Only restore
+        // an editor range if its text still equals the captured unsent draft.
+        el('').scrollTop=scroll;
+        const current=editors.get(owner.session);
+        if(source.isConnected!==false && !source.disabled){source.focus({preventScroll:true});}
+        else focusEditor();
+        if(current.text===view.text){el('text').setSelectionRange?.(view.start,view.end,view.direction);el('text').scrollTop=view.scroll;}
+      },onError:failure=>error(failure.message,owner.session)})).finally(()=>{if(source.isConnected!==false)source.disabled=false;});
+  }
+  function evidenceButtons(text,container){
+    if(!options.readEvidenceReference || !root.DeskEvidencePreparation)return;
+    for(const {reference} of root.DeskEvidencePreparation.parse(text)){
+      const read=button('Read referenced original · '+(reference.title || reference.item_id),()=>readEvidence(reference,read));
+      read.dataset.control='read-evidence';container.append(read);
+    }
+  }
+  function drawEvidence(editor){
+    if(!evidenceView)return;
+    evidenceView.browse.disabled=!editor?.ready || reading || !!editor?.loading || editor.saving || !!editor.opening || !!editor.conflict;
+    const signature=JSON.stringify([selected,selectionVersion,editor?.text]);
+    if(evidenceView.signature===signature)return;
+    evidenceView.signature=signature;evidenceView.list.replaceChildren();
+    if(editor?.ready)evidenceButtons(editor.text,evidenceView.list);
   }
   function drawProjects(){
     const choice=el('project').value;
@@ -285,7 +342,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     if(reservation){
       const box=make('section','','preparation-reservation');
       box.append(make('h4',reservation.state==='unknown'?'Start unconfirmed':'Start receipt pending'),
-        make('p','Captured instruction. Open this conversation to review its activity and start receipt.','muted'),make('pre',reservation.text));
+        make('p','Captured instruction. Open this conversation to review its activity and start receipt.','muted'),make('pre',reservation.text));evidenceButtons(reservation.text,box);
       box.append(action('Copy captured instruction',()=>copy(editor.row.id,reservation.text,'Captured instruction'),'copy-captured'));container.append(box);
     }
     if(editor.queueMessage)container.append(make('p',editor.queueMessage,'muted'));
@@ -296,7 +353,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     for(const entry of entries){
       const box=make('article','','preparation-followup');box.dataset.followup=entry.id;
       const state={queued:'Prepared',reserved:'Awaiting start receipt',needs_review:'Needs start review',unavailable:'No longer queued'}[entry.state] || 'State unreported';
-      box.append(make('h4',entry.order+'. '+modeLabel(entry.mode)+' · '+state),make('pre',entry.text));
+      box.append(make('h4',entry.order+'. '+modeLabel(entry.mode)+' · '+state),make('pre',entry.text));evidenceButtons(entry.text,box);
       const actions=make('div','','actions');
       actions.append(action('Copy instruction',()=>copy(editor.row.id,entry.text,'Instruction'),'copy-followup',entry));
       if(entry.state==='queued'){
@@ -415,14 +472,16 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     }catch(e){if(ticket===listVersion && el('').open){error(e.message);el('status').textContent='Prepared work could not be refreshed. Existing local edits are kept.';}return false;}
     finally{if(ticket===listVersion){reading=false;controls();}}
   }
-  async function save(){
+  async function save(onSaved=null){
     remember();const editor=editors.get(selected);if(!editor?.ready || editor.saving || editor.conflict)return false;
     const id=editor.row.id,captured={text:editor.text,mode:editor.mode,revision:editor.revision,sequence:editor.sequence};
     if(captured.text.length>200000){editor.message='Draft exceeds 200,000 characters. Shorten it before saving.';controls();return false;}
+    const unchanged=captured.text===editor.saved.text && captured.mode===editor.saved.mode && captured.revision===editor.saved.revision;
     editor.saving=true;editor.openReady=true;editor.message='Saving draft…';el('error').hidden=true;controls();
     try{
       const next=draft(await options.api('/api/draft',{session:id,...captured,writer}));
-      ++saveVersion;
+      if(next.text!==captured.text || next.mode!==captured.mode || (next.revision<captured.revision || (next.revision===captured.revision && !unchanged)))throw Error('The local save receipt did not confirm this draft. Refresh preparation to check it.');
+      ++saveVersion;if(typeof onSaved==='function')onSaved({...next});
       editor.saved=next;editor.revision=next.revision;
       if(!editor.conflict || editor.conflict.revision<=next.revision)editor.conflict=null;
       editor.message=changed(editor)?'Saved the reviewed draft. Newer edits are kept; choose Save draft again.':'Draft saved locally. Nothing has been sent.';
@@ -437,7 +496,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
       }
       if(visible(id))drawList();return true;
     }catch(e){
-      if(e.status===409 && e.current){try{editor.conflict=draft(e.current);editor.message='Draft changed elsewhere. Your edits are kept.';}catch(invalid){editor.message=invalid.message;}}
+      if(e.status===409 && e.current){try{const current=draft(e.current);if(!editor.conflict || current.revision>editor.conflict.revision)editor.conflict=current;editor.message='Draft changed elsewhere. Your edits are kept.';}catch(invalid){editor.message=invalid.message;}}
       else editor.message='Draft not saved: '+e.message;
       error(editor.message,id);return false;
     }finally{editor.saving=false;if(visible(id))drawEditor();}
@@ -543,7 +602,12 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   }
   function configure(value){
     options=value;el('mode').value='native';
-    root.DeskPreparedRequest.configure({api:options.api});
+    root.DeskPreparedRequest.configure({api:options.api,make:options.make,readEvidenceReference:options.readEvidenceReference});
+    if(options.onBrowseEvidence && !evidenceView){
+      const panel=make('section'),browse=button('Browse originals for this draft',()=>{const capture=evidenceDestination();if(capture && !capture.busy)return options.onBrowseEvidence(capture);}),list=make('div');
+      panel.id='preparation-evidence';browse.id='preparation-browse-evidence';list.id='preparation-evidence-list';
+      panel.append(browse,list);el('editor').append(panel);evidenceView={panel,browse,list,signature:null};
+    }
     el('refresh').onclick=refresh;el('close').onclick=()=>{remember();el('').close();restoreOrigin();};
     el('project').onchange=el('archived').onchange=refresh;
     el('text').oninput=edit;el('mode').onchange=edit;
@@ -556,14 +620,14 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     el('').addEventListener('cancel',()=>remember());
     el('').addEventListener('close',()=>{
       if(el('').open)return;
-      remember();++listVersion;++selectionVersion;reading=false;root.DeskPreparedRequest.close('prepared');
+      remember();++listVersion;++selectionVersion;reading=false;root.DeskPreparedRequest.close('prepared');options.onEvidenceChange?.();
       // Native dialog refocus can reset a textarea's range. Restore only the
       // unchanged origin, after close, never an editor loaded by Open.
       restoreOrigin();
     });
     controls();
   }
-  root.DeskPreparation={configure,show};
+  root.DeskPreparation={configure,show,evidenceDestination,saveReviewedEvidence,sameEvidenceOwner};
 })(typeof globalThis==='undefined'?this:globalThis);
 
 /* Independent UUID request review; its activation belongs to Prepared or recall. */
@@ -603,6 +667,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
       el('captured-title').textContent=capture.title;el('captured-text').textContent=capture.text;el('captured-text').scrollTop=0;
       if(identityChanged)disclosure.open=true;capturedView=capture;
     }
+    drawCapturedEvidence(capture,busy);
     // Avoid replacing read-only text on routine checks: disclosure, scroll and
     // the user's selected range remain owned by this captured request.
     const original=root.DeskTurnReview.bindingText(receipt?.binding),current=root.DeskTurnReview.bindingText(receipt?.current_binding);
@@ -635,6 +700,39 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
     // never in another editor behind the modal.
     if(['accepted','rejected'].some(id=>document.activeElement===el(id) && el(id).hidden))el('return').focus({preventScroll:true});
   }
+  let capturedEvidencePanel=null,capturedEvidenceSignature='';
+  function drawCapturedEvidence(capture,busy){
+    if(!options.readEvidenceReference || !options.make || !root.DeskEvidencePreparation)return;
+    if(!capturedEvidencePanel){capturedEvidencePanel=options.make('div','');capturedEvidencePanel.className='captured-evidence-references';el('captured').append(capturedEvidencePanel);}
+    const signature=JSON.stringify([active.generation,capture?.text]);
+    if(signature!==capturedEvidenceSignature){
+      capturedEvidenceSignature=signature;capturedEvidencePanel.replaceChildren();
+      for(const {reference} of root.DeskEvidencePreparation.parse(capture?.text || '')){
+        const button=options.make('button','Read referenced original · '+(reference.title || reference.item_id));button.type='button';
+        button.onclick=()=>readCapturedEvidence(reference,button);capturedEvidencePanel.append(button);
+      }
+    }
+    for(const button of capturedEvidencePanel.children)button.disabled=!!busy;
+  }
+  async function readCapturedEvidence(reference,button){
+    const ticket=active;if(!ticket || !valid(ticket))return false;
+    const request=ticket.request;if(request.reading || request.writing || request.originalReading)return false;
+    const text=request.body?.text;if(!root.DeskEvidencePreparation.parse(text).some(row=>JSON.stringify(row.reference)===JSON.stringify(reference)))return false;
+    const pre=el('captured-text'),disclosure=el('captured'),view={scroll:el('').scrollTop,textScroll:pre.scrollTop,disclosure:disclosure.open,
+      range:(()=>{const selection=root.getSelection?.();return selection?.rangeCount && pre.contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;})()};
+    stopOriginal();const reader={ticket,callbacks:null};originalReader=reader;
+    const owned=()=>originalReader===reader && valid(ticket) && request.body?.text===text;
+    request.originalReading=true;request.error=null;draw();
+    try{
+      return await options.readEvidenceReference(reference,{owner:{session:request.session,token:request.token,generation:ticket.generation},ownerCurrent:owned,valid:owned,
+        backLabel:'Return to task request',onReader:callbacks=>{if(owned())reader.callbacks=callbacks;},onReturn:()=>{
+          if(!owned())return;originalReader=null;request.originalReading=false;draw();
+          disclosure.open=view.disclosure;el('').scrollTop=view.scroll;pre.scrollTop=view.textScroll;
+          if(button.isConnected!==false)button.focus({preventScroll:true});
+          const selection=root.getSelection?.();if(view.range && selection){selection.removeAllRanges();selection.addRange(view.range);}
+        },onError:failure=>{if(owned()){request.error=failure;draw();}}});
+    }finally{if(owned()){request.originalReading=false;draw();}}
+  }
   async function read(ticket=active){
     if(!ticket || !valid(ticket) || ticket.request.writing)return false;
     const request=ticket.request,readVersion=++request.readVersion,revision=request.revision;
@@ -656,7 +754,7 @@ Native conversation: ${binding.thread_id || '(not attached)'}`;
   }
   function stopOriginal(){
     const reader=originalReader;originalReader=null;
-    if(reader)root.DeskHistoryReader?.close(reader.callbacks);
+    if(reader?.callbacks)root.DeskHistoryReader?.close(reader.callbacks);
   }
   async function readOriginal(){
     const ticket=active;if(!ticket || !valid(ticket) || !root.DeskHistoryReader)return false;
