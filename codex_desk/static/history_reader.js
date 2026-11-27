@@ -23,7 +23,7 @@
     resetFind();
     el('body').replaceChildren();if(callback)callback();
   }
-  function close() {if(el('').open)el('').close();invalidate();}
+  function close(expected=null) {if(expected && options!==expected)return false;if(el('').open)el('').close();invalidate();return true;}
   function available(ticket=version) {
     if(current(ticket))return true;
     if(ticket===version && el('').open)close();
@@ -432,7 +432,7 @@
   }
   function configure(value) {
     api=value.api;
-    el('back').onclick=el('close').onclick=close;
+    el('back').onclick=el('close').onclick=()=>close();
     el('retry').onclick=()=>{el('retry').disabled=true;source?refresh():read();};
     if(el('refresh'))el('refresh').onclick=refresh;
     el('previous').onclick=()=>movePage(-1);

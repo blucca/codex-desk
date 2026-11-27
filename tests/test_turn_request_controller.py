@@ -92,7 +92,8 @@ class TurnRequestControllerTests(unittest.TestCase):
             setup = setup[:begin] + 'document.getElementById=$;\n' + (APP.parent / 'followups.js').read_text() + '\n' + setup[end:]
             setup = setup.replace("  if(path==='/api/state')", "  if(path.startsWith('/api/followups?'))return {entries:queues.map((entry,index)=>({...entry,order:index+1,revision:1,state:'queued'})),reservation:null};\n  if(path==='/api/state')", 1)
             configuration = next(line for line in source.splitlines() if line.startswith('DeskFollowups.configure(')) + '\n'
-        code = setup + '\n' + '\n'.join(fragments) + '\n' + configuration + r'''
+        presenter = (APP.parent / 'preparation.js').read_text().split('/* Local preparation review;')[0]
+        code = setup + '\n' + presenter + '\n' + '\n'.join(fragments) + '\n' + configuration + r'''
 (async()=>{
 state={sessions:clone(sessions),profiles:[]};
 ''' + ('' if cold else "selected='a';generation=7;nativeThreadId='native-a';await loadDraft('a',generation);draw();\n") + body + r'''

@@ -3,6 +3,7 @@
 from .drafts import _read as _read_draft
 from .followups import _entries, _reservation
 from .recall import canonical_cwd
+from .turn_records import unresolved_requests
 
 
 def preparation_snapshot(store, include_archived=False, cwd=None):
@@ -25,6 +26,7 @@ def preparation_snapshot(store, include_archived=False, cwd=None):
             tables = {row[0] for row in store.db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' "
                 "AND name IN ('drafts','followups','followup_reservations')")}
+            turn_requests = unresolved_requests(store, include_archived, scoped)
             prepared = []
             if 'drafts' in tables:
                 prepared.append("EXISTS (SELECT 1 FROM drafts d WHERE d.session_id=s.id "
@@ -33,6 +35,8 @@ def preparation_snapshot(store, include_archived=False, cwd=None):
                 prepared.append('EXISTS (SELECT 1 FROM followups f WHERE f.session_id=s.id)')
             if 'followup_reservations' in tables:
                 prepared.append('EXISTS (SELECT 1 FROM followup_reservations p WHERE p.session_id=s.id)')
+            if turn_requests:
+                prepared.append('s.id IN (' + ','.join('?' for _ in turn_requests) + ')')
             if not prepared:
                 return {'sessions': []}
             cursor = store.db.execute(
@@ -40,7 +44,7 @@ def preparation_snapshot(store, include_archived=False, cwd=None):
                    FROM sessions s WHERE s.id<>'native-catalog' AND (? OR s.archived=0)
                    AND (? IS NULL OR recall_cwd(s.cwd)=?) AND ('''
                 + ' OR '.join(prepared) + ') ORDER BY coalesce(s.updated,0) DESC,s.id',
-                (int(include_archived), scoped, scoped))
+                (int(include_archived), scoped, scoped, *turn_requests))
             sessions = []
             for identifier, name, project, profile, archived, status, updated, mode in cursor:
                 draft = _read_draft(store, identifier, mode) if 'drafts' in tables else None
@@ -49,11 +53,15 @@ def preparation_snapshot(store, include_archived=False, cwd=None):
                 followups = {'entries': _entries(store, identifier) if 'followups' in tables else [],
                              'reservation': _reservation(store, identifier)
                              if 'followup_reservations' in tables else None}
-                if draft is None and not followups['entries'] and followups['reservation'] is None:
+                request = turn_requests.get(identifier)
+                if draft is None and not followups['entries'] and followups['reservation'] is None and request is None:
                     continue
-                sessions.append({'id': identifier, 'name': name, 'cwd': canonical_cwd(project),
+                row = {'id': identifier, 'name': name, 'cwd': canonical_cwd(project),
                                  'profile': profile, 'archived': bool(archived), 'status': status,
-                                 'updated': updated, 'draft': draft, 'followups': followups})
+                                 'updated': updated, 'draft': draft, 'followups': followups}
+                if request is not None:
+                    row['turn_request'] = request
+                sessions.append(row)
             return {'sessions': sessions}
         finally:
             store.db.execute('RELEASE SAVEPOINT prepared_work_snapshot')

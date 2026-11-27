@@ -303,7 +303,8 @@ async function until(fn,message){for(let i=0;i<150;i++){if(await fn())return;awa
                   fragment('async function pollActivity()', 'async function tick()'),
                   '\n'.join(line for line in source.splitlines() if line.startswith("$('prompt').oninput=") or line.startswith("$('turn-mode').onchange=") or line.startswith('DeskFollowups.configure('))]
         followups = (PRODUCT / 'codex_desk/static/followups.js').read_text()
-        return dom + setup + '\n' + followups + '\n' + '\n'.join(chunks) + '\n' + r'''
+        presentation = (PRODUCT / 'codex_desk/static/preparation.js').read_text()
+        return dom + setup + '\n' + presentation + '\n' + followups + '\n' + '\n'.join(chunks) + '\n' + r'''
 (async()=>{
 selected=session;generation=3;nativeThreadId='native-original';state=await api('/api/state');
 await loadDraft(session,generation);DeskFollowups.select(session);await DeskFollowups.refresh(session);$('prompt').focus();draw();

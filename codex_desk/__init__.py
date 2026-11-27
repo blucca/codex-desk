@@ -1,3 +1,3 @@
 """Project-bound native Codex workbench."""
 
-__version__ = "0.1.0a44"
+__version__ = "0.1.0a45"

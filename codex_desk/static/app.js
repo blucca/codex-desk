@@ -139,21 +139,15 @@ function applyTurnReceipt(request,result){
   request.status=receipt.status;request.result=result;request.notFound=false;request.error=null;++request.receiptVersion;
   if(receipt.status==='accepted' && !request.conflict && !receipt.binding_mismatch && reconcileTurnDraft(request,receipt.draft))retireTurnRequest(request);
 }
-function turnBindingText(binding){
-  if(!binding)return 'Target unavailable';
-  return `Native home: ${binding.native_home}
-Project: ${binding.cwd}
-Profile: ${binding.profile}
-Native conversation: ${binding.thread_id || '(not attached)'}`;
-}
-function sameTurnBinding(a,b){return !!a && !!b && ['session','native_home','cwd','profile','thread_id'].every(key=>a[key]===b[key]);}
+function turnBindingText(binding){return DeskTurnReview.bindingText(binding);}
+function sameTurnBinding(a,b){return DeskTurnReview.sameBinding(a,b);}
 function drawCapturedTurn(request){
-  const body=request?.result?.request?.payload || request?.body,disclosure=$('turn-request-captured');
+  const body=DeskTurnReview.captured(request),disclosure=$('turn-request-captured');
   disclosure.hidden=!body;
   if(!body)return;
   if(turnCapturedView?.session===request.session && turnCapturedView.token===request.token && turnCapturedView.text===body.text && turnCapturedView.mode===body.mode)return;
   const identityChanged=turnCapturedView?.session!==request.session || turnCapturedView?.token!==request.token;
-  $('turn-request-captured-title').textContent=`Captured ${body.mode==='plan'?'Plan':'Work'} task`;
+  $('turn-request-captured-title').textContent=body.title;
   $('turn-request-captured-text').textContent=body.text;
   $('turn-request-captured-text').scrollTop=0;
   if(identityChanged)disclosure.open=['pending','needs_review','rejected'].includes(request.status);
@@ -579,7 +573,7 @@ async function open(id,{revealLatest=true,keepError=false}={}) {
     if(current!==generation)return;
     await preparation;if(current!==generation)return;
     opening=false;draw();$('task').hidden=false;$('handoff').hidden=false;
-    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && !$('history-reader').open)goLatest();});
+    if(revealLatest)requestAnimationFrame(()=>{if(current===generation && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();});
     return true;
   } catch(e) {
     if(current===generation){opening=false;draw();error(e);}
@@ -755,7 +749,7 @@ async function pollActivity(){
   if(selected && !opening){
     const rows=await api(`/api/events?session=${selected}&after=${after}`);
     if(current!==generation)return;
-    const follow=nearLatest() && !$('recent-work').open && !$('history-reader').open;let changed=0;
+    const follow=nearLatest() && !$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open;let changed=0;
     for(const r of rows){
       after=r.seq;consume(r.event);
       if(['item/started','item/completed','item/agentMessage/delta','item/commandExecution/outputDelta','item/mcpToolCall/progress','error'].includes(r.event.method))++changed;
@@ -763,7 +757,7 @@ async function pollActivity(){
     if(changed){
       if(follow)requestAnimationFrame(()=>{
         if(current!==generation)return;
-        if(!$('recent-work').open && !$('history-reader').open)goLatest();
+        if(!$('recent-work').open && !$('history-reader').open && !$('preparation').open && !$('preparation-request').open)goLatest();
         else{latestUpdates+=changed;latestLabel();}
       });
       else{latestUpdates+=changed;latestLabel();}
@@ -795,6 +789,7 @@ function preparationSaved(id,saved){
   return true;
 }
 DeskPreparation.configure({api,make,profileLabel,onSaved:preparationSaved,
+  navigationIdentity:()=>JSON.stringify([selected,generation]),
   openConversation:async id=>{await open(id);return selected===id && !opening && !$('task').hidden;}});
 $('show-preparation').onclick=()=>DeskPreparation.show();
 DeskHome.configure({api,row:nativeRow,selected:()=>selected,generation:()=>generation,open,

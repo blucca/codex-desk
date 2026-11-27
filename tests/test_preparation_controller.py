@@ -15,7 +15,11 @@ const ids=['preparation','preparation-title','preparation-project','preparation-
   'preparation-editor','preparation-editor-title','preparation-editor-binding','preparation-text',
   'preparation-mode','preparation-draft-status','preparation-conflict','preparation-keep','preparation-load',
   'preparation-save','preparation-save-open','preparation-copy','preparation-open','preparation-followups','preparation-reuse',
-  'preparation-reuse-text','preparation-append','preparation-replace','preparation-reuse-cancel'];
+  'preparation-reuse-text','preparation-append','preparation-replace','preparation-reuse-cancel',
+  'preparation-request','preparation-request-title','preparation-request-identity','preparation-request-status',
+  'preparation-request-error','preparation-request-captured','preparation-request-captured-title',
+  'preparation-request-captured-text','preparation-request-original-binding','preparation-request-current-binding',
+  'preparation-request-read-original','preparation-request-read-status','preparation-request-refresh','preparation-request-return','preparation-request-accepted','preparation-request-rejected'];
 class Element{
   constructor(tag,id=''){this.tagName=tag.toUpperCase();this.id=id;this.value='';this.checked=false;this.hidden=false;this.disabled=false;this.open=false;this.dataset={};this.children=[];this.listeners={};this.attributes={};this.text='';}
   append(...nodes){for(const n of nodes){n.parentElement=this;this.children.push(n);}}
@@ -30,6 +34,7 @@ class Element{
   close(){this.open=false;this.dispatch('close');}
   focus(options){if(this.disabled)return;document.activeElement=this;this.focusOptions=options;}
   querySelectorAll(selector){return this.children.flatMap(child=>[...(selector==='button'&&child.tagName==='BUTTON'?[child]:[]),...child.querySelectorAll(selector)]);}
+  setSelectionRange(start,end,direction='none'){this.selectionStart=start;this.selectionEnd=end;this.selectionDirection=direction;}
   scrollIntoView(){}
   click(){if(this.disabled)return;return this.onclick?.({preventDefault(){}});}
 }

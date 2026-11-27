@@ -1,8 +1,26 @@
+/* Pure captured-request presentation, shared with the selected Run widget. */
+(function(root){
+  function bindingText(binding){
+    if(!binding)return 'Target unavailable';
+    return `Native home: ${binding.native_home}
+Project: ${binding.cwd}
+Profile: ${binding.profile}
+Native conversation: ${binding.thread_id || '(not attached)'}`;
+  }
+  function sameBinding(a,b){return !!a && !!b && ['session','native_home','cwd','profile','thread_id'].every(key=>a[key]===b[key]);}
+  function captured(request){
+    const body=request?.result?.request?.payload || request?.body;
+    return body?{session:request.session,token:request.token,text:body.text,mode:body.mode,
+      title:`Captured ${body.mode==='plan'?'Plan':'Work'} task`}:null;
+  }
+  root.DeskTurnReview={bindingText,sameBinding,captured};
+})(typeof globalThis==='undefined'?this:globalThis);
+
 /* Local preparation review; native work starts only through an explicit Open callback. */
 (function(root){
   const el=id=>document.getElementById('preparation'+(id?'-'+id:''));
   const editors=new Map(), projects=new Set(), writer=crypto.randomUUID();
-  let options,rows=new Map(),selected=null,listVersion=0,selectionVersion=0,saveVersion=0,reading=false;
+  let options,rows=new Map(),selected=null,listVersion=0,selectionVersion=0,saveVersion=0,reading=false,returnOrigin=null;
   const scope=()=>({cwd:el('project').value,archived:el('archived').checked});
   const sameScope=(a,b)=>a.cwd===b.cwd && a.archived===b.archived;
   const make=(tag,text,cls)=>options.make(tag,text,cls);
@@ -89,18 +107,29 @@
         const item=make('article','','preparation-session');item.dataset.session=row.id;
         item.append(make('h4',name(row)),make('p',options.profileLabel(row.profile)+' · '+row.status+(row.archived?' · Archived locally':''),'muted'));
         const summary=[row.draft?.text?modeLabel(row.draft.mode)+' draft':'No saved draft',queued+' prepared follow-up'+(queued===1?'':'s'),
-          row.followups?.reservation || entries.some(entry=>entry.state!=='queued')?'Start review pending':''].filter(Boolean).join(' · ');
+          row.followups?.reservation || entries.some(entry=>entry.state!=='queued')?'Start review pending':'',
+          row.turn_request?modeLabel(row.turn_request.mode)+' task request · '+(row.turn_request.status==='pending'?'Receipt pending':'Needs review'):''].filter(Boolean).join(' · ');
         item.append(make('p',summary,'muted'));
-        const review=button('Review draft and follow-ups',()=>select(row.id));
-        review.dataset.session=row.id;review.dataset.control='review';
-        review.setAttribute('aria-label','Review preparation in '+name(row));
-        if(row.id===selected)review.setAttribute('aria-current','true');
-        if(row.id===focusId && focusControl==='review')restore=review;
-        item.append(review);group.append(item);
+        if(row.draft || entries.length || row.followups?.reservation){
+          const review=button('Review draft and follow-ups',()=>select(row.id));
+          review.dataset.session=row.id;review.dataset.control='review';
+          review.setAttribute('aria-label','Review preparation in '+name(row));
+          if(row.id===selected)review.setAttribute('aria-current','true');
+          if(row.id===focusId && focusControl==='review')restore=review;
+          item.append(review);
+        }
+        if(row.turn_request){
+          const request=button('Review task request',()=>reviewRequest(row));
+          request.dataset.session=row.id;request.dataset.control='request';request.dataset.token=row.turn_request.token;
+          request.setAttribute('aria-label','Review task request in '+name(row));
+          if(row.id===focusId && focusControl==='request' && focus.dataset.token===row.turn_request.token)restore=request;
+          item.append(request);
+        }
+        group.append(item);
       }
       list.append(group);
     }
-    if(restore)restore.focus({preventScroll:true});
+    if(restore && !el('request').open)restore.focus({preventScroll:true});
   }
   async function copy(id,text,label){
     const editor=editors.get(id);if(editor){editor.message='Copying…';if(visible(id))controls();}
@@ -204,7 +233,8 @@
       if(!Array.isArray(data.sessions))throw new Error('Prepared work could not be read. Choose Refresh.');
       const incoming=new Map();
       for(const row of data.sessions){
-        if(!row || typeof row.id!=='string' || typeof row.cwd!=='string')throw new Error('Prepared conversation identity is unavailable. Choose Refresh.');
+        if(!row || typeof row.id!=='string' || typeof row.cwd!=='string' ||
+          (row.turn_request && !root.DeskPreparedRequest.validIdentity(row.id,row.turn_request.token)))throw new Error('Prepared conversation identity is unavailable. Choose Refresh.');
         if(row.draft)draft(row.draft);
         incoming.set(row.id,row);projects.add(row.cwd);updateRow(row);
       }
@@ -218,7 +248,7 @@
         if(savedAt!==saveVersion){el('status').textContent='A draft was saved while Refresh was reading. Choose Refresh for the latest list; your edits are kept.';return false;}
       }
       rows=incoming;drawProjects();drawList();drawEditor();
-      el('status').textContent=rows.size?rows.size+' conversation'+(rows.size===1?'':'s')+' with saved preparation. Review locally; nothing has been sent.':'No saved drafts or prepared follow-ups in this scope.';
+      el('status').textContent=rows.size?rows.size+' conversation'+(rows.size===1?'':'s')+' with saved preparation or task requests. Review locally.':'No saved drafts, prepared follow-ups or task requests in this scope.';
       return true;
     }catch(e){if(ticket===listVersion && el('').open){error(e.message);el('status').textContent='Prepared work could not be refreshed. Existing local edits are kept.';}return false;}
     finally{if(ticket===listVersion){reading=false;controls();}}
@@ -317,12 +347,40 @@
     }
     return openConversation();
   }
+  function reviewRequest(row){
+    remember();
+    const origin={session:row.id,token:row.turn_request.token,scroll:el('').scrollTop};
+    return root.DeskPreparedRequest.show(row,()=>{
+      if(!el('').open)return;
+      const source=[...el('list').querySelectorAll('button')].find(node=>node.dataset.session===origin.session &&
+        node.dataset.control==='request' && node.dataset.token===origin.token);
+      el('').scrollTop=origin.scroll;
+      (source || el('refresh')).focus({preventScroll:true});
+      if(!source)el('refresh').scrollIntoView({block:'nearest'});
+    });
+  }
+  function restoreOrigin(){
+    const origin=returnOrigin;returnOrigin=null;
+    if(!origin || origin.identity!==options.navigationIdentity?.() || origin.node?.isConnected===false || origin.node?.disabled)return;
+    const node=origin.node;
+    if(!node || (origin.value!==undefined && node.value!==origin.value))return;
+    node.focus({preventScroll:true});
+    if(Number.isInteger(origin.start) && Number.isInteger(origin.end))node.setSelectionRange?.(origin.start,origin.end,origin.direction);
+    if(typeof origin.scroll==='number')node.scrollTop=origin.scroll;
+  }
   function show(){
     if(!options)throw new Error('Prepared work is not configured.');
-    if(!el('').open)el('').showModal();drawEditor();return refresh();
+    if(!el('').open){
+      const node=document.activeElement;
+      returnOrigin={node,identity:options.navigationIdentity?.(),value:node?.value,start:node?.selectionStart,
+        end:node?.selectionEnd,direction:node?.selectionDirection,scroll:node?.scrollTop};
+      el('').showModal();
+    }
+    drawEditor();return refresh();
   }
   function configure(value){
     options=value;el('mode').value='native';
+    root.DeskPreparedRequest.configure({api:options.api,onResolved:()=>{++saveVersion;return refresh();}});
     el('refresh').onclick=refresh;el('close').onclick=()=>el('').close();
     el('project').onchange=el('archived').onchange=refresh;
     el('text').oninput=edit;el('mode').onchange=edit;
@@ -332,8 +390,188 @@
     el('reuse-cancel').onclick=cancelReuse;
     el('open').onclick=openConversation;
     el('save-open').onclick=saveAndOpen;
-    el('').addEventListener('close',()=>{remember();++listVersion;++selectionVersion;reading=false;});
+    el('').addEventListener('close',()=>{
+      if(el('').open)return;
+      remember();++listVersion;++selectionVersion;reading=false;root.DeskPreparedRequest.close();
+      // Native dialog refocus can reset a textarea's range. Restore only the
+      // unchanged origin, after close, never an editor loaded by Open.
+      restoreOrigin();
+    });
     controls();
   }
   root.DeskPreparation={configure,show};
+})(typeof globalThis==='undefined'?this:globalThis);
+
+/* Ordinary Prepared request review owns no selected-task or draft state. */
+(function(root){
+  const el=id=>document.getElementById('preparation-request'+(id?'-'+id:''));
+  const states=new Map(),statuses=['pending','needs_review','accepted','rejected'];
+  let options,active=null,generation=0,capturedView=null,originalReader=null;
+  function validIdentity(session,token){return typeof session==='string' && !!session &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);}
+  const valid=ticket=>active===ticket && ticket.generation===generation && el('').open && document.getElementById('preparation').open;
+  function binding(value,session){return value?.session===session && ['native_home','cwd','profile'].every(key=>typeof value[key]==='string') &&
+    (value.thread_id===null || typeof value.thread_id==='string');}
+  function apply(request,result){
+    const receipt=result?.request,body=receipt?.payload;
+    if(result?.session!==request.session || result?.token!==request.token || !statuses.includes(receipt?.status) ||
+       body?.session!==request.session || body?.token!==request.token || typeof body.text!=='string' || !['native','plan'].includes(body.mode) ||
+       !Number.isInteger(body.revision) || body.revision<0 || typeof body.writer!=='string' || !Number.isInteger(body.sequence) ||
+       !binding(receipt.binding,request.session) || !binding(receipt.current_binding,request.session) || typeof receipt.binding_mismatch!=='boolean')
+      throw Error('The task request receipt did not match this review. Choose Refresh request.');
+    if(request.body && ['session','token','text','mode','revision','writer','sequence'].some(key=>request.body[key]!==body[key]))
+      throw Error('The captured task changed for this request ID. Its earlier exact text is kept; choose Refresh request.');
+    request.body=Object.freeze({...body});request.result=result;request.status=receipt.status;request.error=null;++request.revision;
+  }
+  function mismatched(request){
+    const receipt=request.result?.request;
+    return !receipt || receipt.binding_mismatch || !root.DeskTurnReview.sameBinding(receipt.binding,receipt.current_binding);
+  }
+  function draw(){
+    if(!active || !valid(active))return;
+    const request=active.request,receipt=request.result?.request,busy=request.reading || request.writing || request.originalReading,mismatch=mismatched(request);
+    el('title').textContent='Task request in '+active.name;
+    el('identity').textContent='Request ID: '+request.token;
+    const capture=root.DeskTurnReview.captured(request),disclosure=el('captured');disclosure.hidden=!capture;
+    if(capture && (capturedView?.session!==capture.session || capturedView.token!==capture.token || capturedView.text!==capture.text || capturedView.mode!==capture.mode)){
+      const identityChanged=capturedView?.session!==capture.session || capturedView?.token!==capture.token;
+      el('captured-title').textContent=capture.title;el('captured-text').textContent=capture.text;el('captured-text').scrollTop=0;
+      if(identityChanged)disclosure.open=true;capturedView=capture;
+    }
+    // Avoid replacing read-only text on routine checks: disclosure, scroll and
+    // the user's selected range remain owned by this captured request.
+    const original=root.DeskTurnReview.bindingText(receipt?.binding),current=root.DeskTurnReview.bindingText(receipt?.current_binding);
+    if(el('original-binding').textContent!==original)el('original-binding').textContent=original;
+    if(el('current-binding').textContent!==current)el('current-binding').textContent=current;
+    let message=request.writing?'Recording your review of this original task request…':
+      request.reading?'Reading the original task request…':
+      request.status==='pending'?'Run receipt pending. Refresh request to check whether admission completed.':
+      request.status==='needs_review'?'Run unconfirmed. Review the original conversation’s activity, then record whether this captured task started.':
+      request.status==='accepted'?'Run accepted. This request is complete.':
+      request.status==='rejected'?'Run rejected. This request is complete.':'Task request unavailable. Choose Refresh request.';
+    if(receipt && mismatch)message+=' The original and current targets differ. Restore the original target, then Refresh request before recording a review.';
+    if(request.message)message+=' '+request.message;
+    el('status').textContent=message;
+    const failure=request.error?.message || receipt?.error || '';
+    el('error').hidden=!failure;el('error').textContent=failure;
+    el('refresh').disabled=!!request.writing;
+    const readable=originalBinding(request);
+    el('read-original').disabled=!!busy || !readable || !root.DeskHistoryReader;
+    el('read-status').textContent=request.originalReading?'Reading the captured original conversation…':
+      !receipt?'Refresh this request to read its original conversation.':
+      receipt.binding.native_home!==receipt.current_binding.native_home?'Restore the original native home before reading this conversation.':
+      !readable?'No original native conversation was captured for this request.':
+      'Reads the captured original conversation only. Your selected task stays in place.';
+    for(const outcome of ['accepted','rejected']){
+      el(outcome).hidden=request.status!=='needs_review';
+      el(outcome).disabled=!!busy || !!request.error || mismatch || !request.body;
+    }
+    // A resolved action may become hidden. Keep keyboard focus in this viewer,
+    // never in another editor behind the modal.
+    if(['accepted','rejected'].some(id=>document.activeElement===el(id) && el(id).hidden))el('return').focus({preventScroll:true});
+  }
+  async function read(ticket=active){
+    if(!ticket || !valid(ticket) || ticket.request.writing)return false;
+    const request=ticket.request,readVersion=++request.readVersion,revision=request.revision;
+    request.reading=true;request.error=null;request.message=null;draw();
+    try{
+      const result=await options.api('/api/turn/request?session='+encodeURIComponent(request.session)+'&token='+encodeURIComponent(request.token));
+      if(!valid(ticket) || readVersion!==request.readVersion || revision!==request.revision)return false;
+      apply(request,result);return true;
+    }catch(e){
+      if(valid(ticket) && readVersion===request.readVersion && revision===request.revision)request.error=e;
+      return false;
+    }finally{if(valid(ticket) && readVersion===request.readVersion){request.reading=false;draw();}}
+  }
+  function originalBinding(request){
+    const receipt=request.result?.request,origin=receipt?.binding;
+    if(!origin || origin.native_home!==receipt.current_binding.native_home ||
+      typeof origin.thread_id!=='string' || !origin.thread_id.trim() || origin.thread_id.length>200)return null;
+    return {...origin};
+  }
+  function stopOriginal(){
+    const reader=originalReader;originalReader=null;
+    if(reader)root.DeskHistoryReader?.close(reader.callbacks);
+  }
+  async function readOriginal(){
+    const ticket=active;if(!ticket || !valid(ticket) || !root.DeskHistoryReader)return false;
+    const request=ticket.request;
+    if(request.reading || request.writing || request.originalReading || !originalBinding(request))return false;
+    const originalVersion=request.originalReadVersion=(request.originalReadVersion || 0)+1;
+    request.originalReading=true;draw();
+    try{
+      // Re-read the UUID before choosing a native home/thread; overview and
+      // prior receipts never authorize reading a different retained home.
+      if(!await read(ticket) || !valid(ticket))return false;
+      const origin=originalBinding(request);if(!origin)return false;
+      stopOriginal();
+      const pre=el('captured-text'),disclosure=el('captured');
+      const view={scroll:el('').scrollTop,textScroll:pre.scrollTop,disclosure:disclosure.open,
+        range:(()=>{const selection=root.getSelection?.();return selection?.rangeCount && el('').contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;})()};
+      const owned=()=>originalReader===reader && valid(ticket) &&
+        root.DeskTurnReview.sameBinding(origin,originalBinding(request));
+      const reader={ticket,callbacks:{valid:()=>owned(),startAtEnd:true,backLabel:'Return to task request',onReturn:()=>{
+        const current=owned();if(originalReader===reader)originalReader=null;
+        if(!current)return;
+        ++request.originalReadVersion;request.originalReading=false;draw();
+        el('').scrollTop=view.scroll;pre.scrollTop=view.textScroll;disclosure.open=view.disclosure;
+        el('read-original').focus({preventScroll:true});
+        const selection=root.getSelection?.();if(view.range && selection){selection.removeAllRanges();selection.addRange(view.range);}
+      }}};
+      originalReader=reader;
+      return await root.DeskHistoryReader.show({thread_id:origin.thread_id,cwd:origin.cwd},reader.callbacks);
+    }catch(e){if(valid(ticket))request.error=e;return false;}
+    finally{if(valid(ticket) && request.originalReadVersion===originalVersion){request.originalReading=false;draw();}}
+  }
+  async function resolve(outcome){
+    const ticket=active;if(!ticket || !valid(ticket))return false;
+    const request=ticket.request;
+    if(!['accepted','rejected'].includes(outcome) || request.status!=='needs_review' || request.reading || request.writing || request.originalReading || request.error || mismatched(request) || !request.body)return false;
+    const writeVersion=++request.writeVersion;
+    ++request.readVersion;++request.revision;request.writing=true;request.error=null;request.message=null;draw();
+    try{
+      const result=await options.api('/api/turn/resolve',{session:request.session,token:request.token,outcome});
+      if(!valid(ticket) || writeVersion!==request.writeVersion)return false;
+      apply(request,result);
+      if(options.onResolved){
+        const refreshed=await options.onResolved({session:request.session,token:request.token});
+        if(!valid(ticket) || writeVersion!==request.writeVersion)return false;
+        if(refreshed===false)request.message='Review recorded. Refresh saved work after Return to update the list.';
+      }
+      return true;
+    }catch(e){
+      if(valid(ticket) && writeVersion===request.writeVersion){
+        if(e.current){try{apply(request,e.current);}catch{}}
+        request.error=e;
+      }
+      return false;
+    }finally{if(valid(ticket) && writeVersion===request.writeVersion){request.writing=false;draw();}}
+  }
+  function finish(){
+    const previous=active;if(!previous)return;
+    active=null;++generation;stopOriginal();++previous.request.readVersion;++previous.request.writeVersion;
+    previous.request.reading=previous.request.writing=previous.request.originalReading=false;
+    return previous.onReturn;
+  }
+  function close(){
+    const onReturn=finish();if(el('').open)el('').close();onReturn?.();
+  }
+  function show(row,onReturn){
+    if(!options || !validIdentity(row.id,row.turn_request?.token))throw Error('The task request identity is unavailable. Choose Refresh saved work.');
+    // A re-open creates a new activation even for the same UUID; a late GET or
+    // resolve from a closed viewer is never allowed to repaint the new one.
+    if(active)finish();
+    const token=row.turn_request.token,key=JSON.stringify([row.id,token]);
+    let request=states.get(key);
+    if(!request){request={session:row.id,token,body:null,result:null,status:null,revision:0,readVersion:0,writeVersion:0,reading:false,writing:false};states.set(key,request);}
+    active={request,generation:++generation,name:row.name || row.cwd || row.id,onReturn};
+    if(!el('').open)el('').showModal();draw();el('title').focus({preventScroll:true});return read(active);
+  }
+  function configure(value){
+    options=value;
+    el('refresh').onclick=()=>read();el('return').onclick=close;el('read-original').onclick=readOriginal;
+    for(const outcome of ['accepted','rejected'])el(outcome).onclick=()=>resolve(outcome);
+    el('').addEventListener('close',()=>{if(!el('').open)finish()?.();});
+  }
+  root.DeskPreparedRequest={configure,show,close,validIdentity};
 })(typeof globalThis==='undefined'?this:globalThis);

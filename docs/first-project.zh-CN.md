@@ -105,3 +105,9 @@ uvx --refresh --prerelease allow codex-desk@latest
 在已选任务的顶部点击 **Read original conversation**，或从任务活动区域按 F3。原文从最新一页打开；Find 能检索全部可读原文，包括其他页和长工具输出。原文内 F3／Shift+F3 跳到下一处／上一处命中。任务输入框里的 F3 不触发这个入口。
 
 **Refresh original** 只重新读取同一个原生会话，不运行任务。加载和失败时保留上次成功读取的内容；当前查询、已知条目和文本窗口保持原位。修改或取消过的 Find 不会被自动重新提交。返回任务保留未发送的 Work／Plan 草稿和排队指令；项目目录缺失或续接失败时，有保存的原生会话标识仍可读取原文。关闭原文后本次阅读视图结束。
+
+## 从另一个任务审阅未确认的 Run 请求
+
+在侧栏选择 **Prepared work**，再选择 **Review task request**。这里显示原始捕获的 Work/Plan 指令、原目标、当前目标和请求状态；不会打开原生任务，也不会改动当前任务或其他未保存草稿。
+
+核实原任务是否启动后，选择 **It started — record accepted** 或 **It did not start — record rejected**，只记录该原始请求。**Refresh request** 重新读取同一个请求，**Return to Prepared work** 返回原审阅入口。原生目录或会话绑定改变时，恢复原绑定后才能记录结果。

@@ -50,9 +50,15 @@ If another tab changes the same draft, choose **Keep this tab draft** or **Load 
 
 ### Review preparation without opening native work
 
-Keyboard navigation stays with the preparation you are reviewing. Refresh and save receipts retain the focused instruction action. **Use in this session draft** moves focus to the instruction review; **Cancel reuse** returns to its source action, while Append, Replace and draft-conflict choices return to the draft editor. A delayed draft read keeps focus on any control you moved to while waiting.
+Keyboard navigation stays with the preparation you are reviewing. Refresh and save receipts retain the focused instruction action. **Use in this session draft** moves focus to the instruction review; **Cancel reuse** returns to its source action, while Append, Replace and draft-conflict choices return to the draft editor. A delayed draft read keeps focus on any control you moved to while waiting. Live output updates behind Prepared work accumulate in **Latest output ↓** instead of moving the page under your review.
 
-Choose **Prepared work** in the sidebar to see nonempty saved drafts, queued instructions and pending-start reviews across projects. Filter by folder or include locally archived sessions. **Review draft** opens its local Work/Plan editor even when that project folder is missing; the active conversation and its draft stay selected. **Save draft locally** is explicit. A revision conflict keeps your editor and offers **Keep mine and save** or **Load saved draft**.
+Choose **Prepared work** in the sidebar to see nonempty saved drafts, queued instructions, pending-start reviews and unconfirmed Run requests across projects. Filter by folder or include locally archived sessions. **Review draft** opens its local Work/Plan editor even when that project folder is missing; the active conversation and its draft stay selected. **Save draft locally** is explicit. A revision conflict keeps your editor and offers **Keep mine and save** or **Load saved draft**.
+
+**Review task request** opens an independent read-only view of an unconfirmed Run request, even when its original draft and follow-ups have been cleared. It shows the exact captured Work/Plan instruction, original target, current target and latest admission status. **Refresh request** reads the same request again. Your selected task and any unsaved preparation editor stay in place; **Return to Prepared work** returns to the original review action.
+
+Choose **Read original conversation** to inspect that captured native thread in the existing reader, independently of the selected task. **Return to task request** keeps the captured instruction, disclosure, selection and reading position. A changed native home or missing captured thread leaves the target evidence available without reading a different original.
+
+After checking whether the original task actually started, choose **It started — record accepted** or **It did not start — record rejected**. These choices record that original request only; neither sends another task. A changed native home or conversation binding keeps both targets visible and blocks these choices until the original binding is restored. Resolved requests leave the list on Refresh; newer saved drafts and queued follow-ups remain available separately. Pending admission stays read-only until it has finished or needs review.
 
 Queued text is read-only in this overview. **Use in draft** offers **Append to draft** or **Replace draft text**; the queue remains unchanged and reuse is unsaved until you choose Save. **Copy draft text** copies the current reviewed text. **Save draft and open** saves the reviewed text and mode, then opens that conversation. A failed save, a conflict, newer edits or switching reviews keeps you in local preparation. If you type newer edits while the native conversation is opening, the editor stays open with those unsaved edits. If the workbench has different unsaved text, review its draft conflict first. **Open without these edits** leaves unsaved review text here and opens the conversation separately. Opening needs an available native project; it runs no task until you use the normal task controls. Pending starts remain captured review entries, not a new send opportunity.
 
@@ -74,7 +80,7 @@ Expanded entries show reported agent paths/IDs, lifecycle events, models, prompt
 
 Write a task, choose **Work** or **Plan**, then click **Save as follow-up**. This saves preparation for the current Desk conversation and provider, even while another task runs. Expand **Prepared follow-ups** to edit, remove, reorder or clear the saved instructions.
 
-While editing a follow-up, choose **Save changes** or **Cancel edit** before editing another row.
+While editing a follow-up, choose **Save changes** or **Cancel edit** before editing another row. Refreshing another entry or receiving a save reply keeps the active editor, caret and reading position. Typing after Save stays unsent, even if you return to the same words or switch to Plan while the reply waits.
 
 When the current turn finishes, choose **Send next**. It submits one reviewed saved instruction to this conversation, not whichever project you select while its response arrives. Remaining instructions stay paused. Opening a page or restarting Desk never sends a queued task.
 

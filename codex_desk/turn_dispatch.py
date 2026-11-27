@@ -12,6 +12,7 @@ from .drafts import MAX_DRAFT_CHARS, clear_admitted_draft, draft_snapshot
 from .followups import FollowupConflict, followup_snapshot
 from .handoff_dispatch import validate_handoff_home
 from .runtime import NativeRequestRejected
+from .turn_records import request_records
 
 _INTENT = 'desk/turnIntent'
 _RECEIPT = 'desk/turnReceipt'
@@ -64,21 +65,7 @@ def _payload(data):
 
 
 def _records(desk, session):
-    intents, receipts = {}, {}
-    # SQLite selects the two private methods before Python materializes native
-    # deltas. JSON method selection preserves imported key order/escaping.
-    with desk.store.lock:
-        rows = desk.store.db.execute('''SELECT payload FROM events WHERE session_id=?
-            AND json_extract(payload,'$.method') IN (?,?) ORDER BY seq''',
-            (session, _INTENT, _RECEIPT)).fetchall()
-    for raw, in rows:
-        event = json.loads(raw)
-        params = event.get('params', {})
-        if event['method'] == _INTENT:
-            intents[params['token']] = params
-        else:
-            receipts[params['token']] = params
-    return intents, receipts
+    return request_records(desk.store, session).get(session, ({}, {}))
 
 
 def turn_cursor(desk, session):

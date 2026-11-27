@@ -124,7 +124,9 @@ class PreparationTests(unittest.TestCase):
         self.assertTrue(all(statement.lstrip().upper().startswith(('SELECT', 'SAVEPOINT', 'RELEASE'))
                             for statement in statements))
         self.assertFalse(any(name in statement for statement in statements
-                             for name in ('events', 'recall_items', 'native_recall_items')))
+                             for name in ('recall_items', 'native_recall_items')))
+        event_reads = [statement for statement in statements if 'FROM events' in statement]
+        self.assertTrue(all("json_extract(e.payload,'$.method') IN ('desk/turnIntent','desk/turnReceipt')" in statement for statement in event_reads))
         self.assertEqual(list(self.store.db.iterdump()), before)
         self.assertEqual(self.store.db.total_changes, changes)
 
