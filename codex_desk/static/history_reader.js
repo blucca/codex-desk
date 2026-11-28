@@ -14,7 +14,9 @@
   let loading=false,originalItems=0,unsupportedItems=0,turnOnlyRows=0;
   let findVersion=0,finding=false,findSubmitted=false,findQuery='',findGroups=[],findTotal=0,findCursor=-1;
   let taskReview=null;
-  let readingHome=null,readingStorage=null,readingRestoreEpoch=0,readingUnavailable=false;
+  let findMatches=null;
+  const FIND_MATCH_PAGE=20;
+  let readingHome=null,readingStorage=null,readingRestoreEpoch=0,readingIntentEpoch=0,readingUnavailable=false,readingCharacterNotice=null;
   let originalFrontier=null,frontierStorage=null;
 
   let nativeIdCopy=null;
@@ -98,9 +100,49 @@
   function explicitReadingTarget() {
     return !!(requested?.turn_id || requested?.item_id || requested?.match_text || options?.taskResponse || options?.savedReference);
   }
+  function commandOutputStart(item) {
+    if(item?.type!=='commandExecution' || typeof item.aggregatedOutput!=='string')return null;
+    return textFor({...item,aggregatedOutput:''}).length;
+  }
+  function outputPosition(at,before,after) {
+    return Number.isSafeInteger(at) && at>=before?at+after-before:at;
+  }
+  function outputSpan(span,before,after) {
+    if(!span || !Number.isSafeInteger(before) || !Number.isSafeInteger(after) || span.start<before)return span;
+    return {...span,start:outputPosition(span.start,before,after),end:outputPosition(span.end,before,after)};
+  }
+  function resizeOriginalCharacters(before,current) {
+    const items=new Map(Array.from(current.items,([key,saved])=>{
+      const prior=before.items.get(key);
+      return [key,prior?.character && prior.start===saved.start && prior.open===saved.open
+        ?{...saved,character:prior.character}:saved];
+    }));
+    const at=before.anchor?.key,prior=at?before.items.get(at):null;
+    return {...current,items,...(prior?.character && items.get(at)?.character===prior.character?{anchor:before.anchor}:{})};
+  }
+  function mapOutputAnchor(span,view,fresh) {
+    if(!span)return span;
+    const matches=fresh.filter(row=>rowKey(row)===span.key);
+    return matches.length===1?outputSpan(span,view.items.get(span.key)?.commandOutputStart,commandOutputStart(matches[0].item)):span;
+  }
+  function mapOriginalOutput(view,fresh) {
+    // Follow native output positions, not the mutable generated Status/Exit prefix.
+    // Existing v1 evidence references retain their literal projection/span rules.
+    const supplied=new Map();
+    for(const row of fresh){const key=rowKey(row);if(key)supplied.set(key,supplied.has(key)?null:row);}
+    let selection=view.selection;
+    const items=new Map(Array.from(view.items,([key,saved])=>{
+      const after=commandOutputStart(supplied.get(key)?.item),before=saved.commandOutputStart;
+      if(after===null || !Number.isSafeInteger(before))return [key,saved];
+      if(selection?.key===key)selection=outputSpan(selection,before,after);
+      return [key,{...saved,commandOutputStart:after,start:outputPosition(saved.start,before,after),
+        ...(saved.character?{character:{...saved.character,offset:outputPosition(saved.character.offset,before,after)}}:{})}];
+    }));
+    return {...view,items,...(view.selection?{selection}:{})};
+  }
   function saveOriginalReading() {
-    if(!source || loading || readingUnavailable || !readingHome || explicitReadingTarget() || (options?.valid && !options.valid()))return;
-    const view=taskReview?.passage?.view || captureView();
+    if(!source || loading || readingUnavailable || (readingCharacterNotice?.intent===readingIntentEpoch) || !readingHome || explicitReadingTarget() || (options?.valid && !options.valid()))return;
+    const view=taskReview?.passage?.view || (findMatches?.active?findMatches.passageView:null) || captureView();
     if(!view.anchor)return;
     try{
       const identity=key=>{const [turn_id,item_id]=JSON.parse(key);return {turn_id,item_id};};
@@ -108,7 +150,8 @@
         anchor:{...identity(view.anchor.key),offset:view.anchor.offset,screen_top:view.anchor.screenTop},
         window_scroll:{top:view.outer,left:view.outerLeft || 0},reader_scroll:{top:view.scroll,left:view.scrollLeft || 0},
         item_views:Array.from(view.items,([key,row])=>({...identity(key),open:row.open,window_start:row.start,scroll_top:row.scroll,scroll_left:row.left || 0,
-          ...(row.character?{visible_character:row.character}:{})})),turn_views:[]});
+          ...(row.character?{visible_character:row.character}:{}),
+          ...(Number.isSafeInteger(row.commandOutputStart)?{command_output_start:row.commandOutputStart}:{})})),turn_views:[]});
     }catch{}
   }
   function originalReadingView() {
@@ -120,11 +163,12 @@
     if(!resolved.available){readingUnavailable=true;el('status').textContent='Previous original reading place unavailable in this fresh native read.';return null;}
     const saved=resolved.view,key=JSON.stringify([saved.anchor.turn_id,saved.anchor.item_id]);
     const index=rows.findIndex(row=>rowKey(row)===key);page=Math.floor(index/PAGE_ENTRIES);
-    return {items:new Map(saved.item_views.map(row=>[JSON.stringify([row.turn_id,row.item_id]),
+    return mapOriginalOutput({items:new Map(saved.item_views.map(row=>[JSON.stringify([row.turn_id,row.item_id]),
       {start:row.window_start,open:row.open,scroll:row.scroll_top,left:row.scroll_left,
-        ...(row.visible_character?{character:row.visible_character}:{})}])),
+        ...(row.visible_character?{character:row.visible_character}:{}),
+        ...(Number.isSafeInteger(row.command_output_start)?{commandOutputStart:row.command_output_start}:{})}])),
       anchor:{key,offset:saved.anchor.offset,screenTop:saved.anchor.screen_top},scroll:saved.reader_scroll.top,scrollLeft:saved.reader_scroll.left,
-      outer:saved.window_scroll.top,outerLeft:saved.window_scroll.left,page};
+      outer:saved.window_scroll.top,outerLeft:saved.window_scroll.left,page},rows);
   }
   function settleOriginalReading(view,ticket) {
     // Keep source availability independent of metadata lookup, and finish
@@ -134,7 +178,7 @@
       if(current(ticket) && readingEpoch===readingRestoreEpoch && findEpoch===findVersion)restoreView(view,ticket);});
   }
   function invalidate() {
-    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;resetOriginalFrontier();
+    saveOriginalReading();readingHome=null;readingUnavailable=false;readingCharacterNotice=null;++readingRestoreEpoch;resetOriginalFrontier();
     ++version;++refreshVersion;refreshing=false;const callback=options?.onReturn;
     options=null;source=null;requested=null;rows=[];loading=false;targetIndex=-1;unavailableThread=null;taskReview=null;taskControls();resetNativeIdCopy();
     el('response').hidden=true;el('response').textContent='';el('original').hidden=true;el('saved-evidence').hidden=true;el('saved-evidence-quote').textContent='';
@@ -211,8 +255,10 @@
     else el('find-status').textContent=findSubmitted
       ? 'No matches in the readable original text for this phrase.'
       : 'Search the complete readable text in this original, including other item pages and text windows.';
+    findMatchesControls();
   }
   function resetFind() {
+    resetFindMatches();
     ++findVersion;finding=false;findSubmitted=false;findQuery='';findGroups=[];findTotal=0;findCursor=-1;
     el('find-query').value='';findControls();
   }
@@ -222,27 +268,97 @@
       findControls('Find canceled by navigation. Choose Find to search this original.');}
     else findControls();
   }
-  function findMatch() {
-    if(findCursor<0)return null;
-    let left=0,right=findGroups.length;
-    while(left<right){const mid=(left+right)>>>1;if(findGroups[mid].first<=findCursor)left=mid+1;else right=mid;}
-    const group=findGroups[left-1],span=group?.spans.at(findCursor-group.first);
-    return span?{index:group.index,...span}:null;
+  function findMatch() {return root.DeskHistoryFind.occurrence(findGroups,findCursor);}
+  function findMatchesValid() {
+    return !!findMatches && findMatches.source===source && findMatches.groups===findGroups &&
+      findMatches.query===findQuery && findSubmitted && !finding && findTotal>0 &&
+      el('find-query').value.trim()===findQuery && current(version) && (!taskReview || taskReview.mode==='item');
   }
-  function jumpFind(direction=1) {
+  function findMatchesControls() {
+    const show=el('find-matches-show'),back=el('find-matches-return'),panel=el('find-matches');if(!show || !panel)return;
+    const ready=!!source && !loading && current(version) && (!taskReview || taskReview.mode==='item');
+    show.hidden=!ready || !findSubmitted;show.disabled=!ready || finding || !findTotal || el('find-query').value.trim()!==findQuery;
+    const valid=findMatchesValid();panel.hidden=!valid || !findMatches.active;
+    if(back){back.hidden=!valid || findMatches.active;back.disabled=!valid;}
+  }
+  function resetFindMatches() {
+    findMatches=null;const panel=el('find-matches');if(panel)panel.hidden=true;
+    el('find-match-list')?.replaceChildren();if(el('find-matches-return'))el('find-matches-return').hidden=true;
+  }
+  function matchListView() {
+    const active=document.activeElement;
+    return {scroll:el('find-match-list').scrollTop,outer:el('').scrollTop,
+      action:active?.dataset.findAction || null};
+  }
+  function restoreMatchList(view) {
+    if(!view)return;el('find-match-list').scrollTop=view.scroll;el('').scrollTop=view.outer;
+    const target=Array.from(el('find-matches').querySelectorAll('[data-find-action]')).find(n=>n.dataset.findAction===view.action);
+    if(target && !target.disabled)target.focus({preventScroll:true});
+  }
+  function renewFindMatches(previous,active=false) {
+    if(!previous || !findSubmitted || !findTotal || previous.query!==findQuery)return null;
+    return {source,groups:findGroups,query:findQuery,offset:Math.min(previous.offset,Math.floor((findTotal-1)/FIND_MATCH_PAGE)*FIND_MATCH_PAGE),
+      active,chosen:findCursor,passageView:captureView(),view:null};
+  }
+  function showFindMatches() {
+    if(!source || !available() || finding || !findSubmitted || !findTotal || el('find-query').value.trim()!==findQuery || (taskReview && taskReview.mode!=='item'))return false;
+    if(!findMatchesValid())findMatches={source,groups:findGroups,query:findQuery,
+      offset:Math.floor(Math.max(0,findCursor)/FIND_MATCH_PAGE)*FIND_MATCH_PAGE,active:false,chosen:findCursor,view:null};
+    findMatches.passageView=captureView();findMatches.active=true;renderFindMatches();return true;
+  }
+  function dismissFindMatches() {
+    if(!findMatchesValid())return false;
+    findMatches.view=matchListView();findMatches.active=false;findMatchesControls();
+    restoreView(findMatches.passageView,version);el('find-matches-show').focus({preventScroll:true});return true;
+  }
+  function renderFindMatches() {
+    if(!findMatchesValid() || !findMatches.active)return;
+    const state=findMatches,ticket=version,epoch=findVersion,list=el('find-match-list');list.replaceChildren();
+    const valid=()=>findMatches===state && findMatchesValid() && current(ticket) && epoch===findVersion;
+    const last=Math.min(findTotal,state.offset+FIND_MATCH_PAGE);
+    el('find-matches-status').textContent=`Showing Find matches ${state.offset+1}–${last} of ${findTotal} for “${findQuery}”. This supplied original only.`;
+    for(let cursor=state.offset;cursor<last;cursor++) {
+      const hit=root.DeskHistoryFind.occurrence(findGroups,cursor),row=rows[hit.index],text=textFor(row.item);
+      const article=node('article',undefined,'history-reader-find-match');article.dataset.matchIndex=String(cursor);
+      article.dataset.turnId=str(row.turn.id);article.dataset.itemId=str(row.item.id);
+      article.dataset.matchStart=String(hit.start);article.dataset.matchEnd=String(hit.end);
+      article.append(node('p',`Match ${cursor+1} · ${labels[row.item.type] || 'Native item'} · Occurrence ${hit.occurrence} of ${hit.item_total} in this item
+Turn ${str(row.turn.id)||'unreported'} · Item ${str(row.item.id)||'unreported'}
+Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
+      let start=Math.max(0,hit.start-60),end=Math.min(text.length,hit.end+100);
+      if(start && /[\uDC00-\uDFFF]/.test(text[start]) && /[\uD800-\uDBFF]/.test(text[start-1]))--start;
+      if(end<text.length && /[\uD800-\uDBFF]/.test(text[end-1]) && /[\uDC00-\uDFFF]/.test(text[end]))--end;
+      const preview=node('pre',undefined,'history-reader-task-match-preview');markText(preview,text.slice(start,end),hit.start-start,hit.end-start);article.append(preview);
+      const button=node('button',`Read match ${cursor+1}`);button.type='button';button.dataset.findAction='match:'+cursor;
+      button.onclick=()=>{if(!valid())return;state.view=matchListView();state.chosen=cursor;state.active=false;findMatchesControls();jumpFind(1,cursor);};
+      article.append(button);list.append(article);
+    }
+    for(const [direction,id] of [[-1,'find-matches-previous'],[1,'find-matches-next']]){
+      const button=el(id),next=state.offset+direction*FIND_MATCH_PAGE;button.disabled=next<0 || next>=findTotal;
+      button.onclick=()=>{if(!valid())return;state.offset=next;state.view=null;renderFindMatches();};
+    }
+    findMatchesControls();
+    if(state.view)restoreMatchList(state.view);
+    else{list.scrollTop=0;el('find-matches-status').focus({preventScroll:true});el('find-matches').scrollIntoView({block:'start',behavior:'instant'});}
+  }
+  function jumpFind(direction=1,cursor=null) {
     readingUnavailable=false;
     if(!source || !available() || finding || !findTotal)return;
-    if(findCursor<0){
+    if(cursor!==null){if(!Number.isSafeInteger(cursor) || cursor<0 || cursor>=findTotal)return;findCursor=cursor;}
+    else if(findCursor<0){
       const group=direction>0?findGroups.find(group=>group.index>=page*PAGE_ENTRIES)
         :findGroups.findLast(group=>group.index<(page+1)*PAGE_ENTRIES);
       findCursor=group?group.first+(direction>0?0:group.spans.length-1):(direction>0?0:findTotal-1);
     } else findCursor=(findCursor+direction+findTotal)%findTotal;
+    ++readingIntentEpoch;
+    if(findMatches?.active){findMatches.view=matchListView();findMatches.active=false;}
     page=Math.floor(findMatch().index/PAGE_ENTRIES);findControls();render();
   }
   async function submitFind(direction=1) {
     if(!source || loading || !available())return;
     const query=el('find-query').value.trim();
     if(query.length<1 || query.length>200){findControls('Enter 1–200 characters to find in this original.');el('find-query').focus();return;}
+    resetFindMatches();
     const ticket=version,search=++findVersion;
     const valid=()=>search===findVersion && current(ticket);
     finding=true;findSubmitted=true;findQuery=query;findGroups=[];findTotal=0;findCursor=-1;findControls();render(false);
@@ -335,7 +451,7 @@
   }
   async function readEmbeddedReference(reference,ticket){
     const parentSource=source,parentRequested={...requested},parentOptions=options,view=captureView(),parentTask=taskReview;
-    const search={query:el('find-query').value,submitted:findSubmitted,findQuery,groups:findGroups,total:findTotal,cursor:findCursor,page};
+    const search={query:el('find-query').value,submitted:findSubmitted,findQuery,groups:findGroups,total:findTotal,cursor:findCursor,page,matches:findMatches};
     const result=await api('/api/native/evidence-source?home='+encodeURIComponent(reference.native_home)+'&thread='+encodeURIComponent(reference.thread_id));
     if(!current(ticket))return false;
     if(result?.home_namespace!==reference.native_home)throw Error('This evidence belongs to a different native home. The saved excerpt is kept.');
@@ -349,7 +465,7 @@
           if(!ok || options!==restored)return;
           taskReview=parentTask;taskControls();
           el('find-query').value=search.query;findSubmitted=search.submitted;findQuery=search.findQuery;
-          findGroups=search.groups;findTotal=search.total;findCursor=search.cursor;page=search.page;
+          findGroups=search.groups;findTotal=search.total;findCursor=search.cursor;page=search.page;findMatches=search.matches;
           findControls();render(false,view);
         });
       }};
@@ -553,19 +669,23 @@
     if(!saved.character)return true;
     const pre=item.querySelector('.history-reader-text'),start=Number(item.dataset.windowStart)||0;
     if(!item.open || start!==saved.start)return false;
-    const clip=visibleTextClip(pre),rect=characterRect(pre,pre.textContent,saved.character.offset-start);
-    if(!clip || !rect || rect.right<=rect.left || rect.bottom<=rect.top)return false;
+    const rect=characterRect(pre,pre.textContent,saved.character.offset-start);
+    if(!rect || rect.right<=rect.left || rect.bottom<=rect.top)return false;
+    // A source glyph can be valid while chrome/reflow temporarily clips its pre.
+    // Do not turn pending viewport geometry into a missing-source outcome.
+    const clip=visibleTextClip(pre);if(!clip)return null;
     const top=Math.min(Math.max(saved.character.top,1-(rect.bottom-rect.top)),clip.bottom-clip.top-1);
     pre.scrollTop+=rect.top-clip.top-top;return true;
   }
   function captureView(){
     const body=el('body'),items=new Map(),active=document.activeElement;
-    const box=body.getBoundingClientRect();let anchor=null,focus=null;
+    const box=body.getBoundingClientRect(),supplied=new Map(rows.map(row=>[rowKey(row),row.item]));let anchor=null,focus=null;
     for(const item of viewItems()){
       const key=elementKey(item),pre=item.querySelector('.history-reader-text'),rect=item.getBoundingClientRect();
-      const character=captureVisibleCharacter(item,pre);
+      const character=captureVisibleCharacter(item,pre),outputStart=commandOutputStart(supplied.get(key));
       items.set(key,{start:Number(item.dataset.windowStart)||0,open:item.open,scroll:pre?.scrollTop || 0,left:pre?.scrollLeft || 0,
-        ...(character?{character}:{})});
+        ...(character?{character}:{}),
+        ...(Number.isSafeInteger(outputStart)?{commandOutputStart:outputStart}:{})});
       if(!anchor && rect.bottom>box.top)anchor={key,offset:rect.top-box.top,screenTop:rect.top};
       if(item===active || item.contains(active)){
         const controls=Array.from(item.querySelectorAll('button,summary,pre'));
@@ -597,10 +717,27 @@
       const item=items.find(item=>elementKey(item)===view.anchor.key);
       if(item)el('').scrollTop+=item.getBoundingClientRect().top-view.anchor.screenTop;
     }
-    for(const item of items){const saved=view.items.get(elementKey(item));
-      if(saved?.character && !restoreVisibleCharacter(item,saved)){
-        readingUnavailable=true;el('status').textContent='Previous original character unavailable in this fresh text window.';
-      }}
+    const status=el('status'),notice='Previous original character unavailable in this fresh text window.';
+    if(readingCharacterNotice && readingCharacterNotice.intent!==readingIntentEpoch){
+      if(status.textContent===notice)status.textContent=readingCharacterNotice.previous;
+      readingCharacterNotice=null;
+    }
+    const failures=new Map(readingCharacterNotice?.failures || []);
+    for(const item of items){const key=elementKey(item),saved=view.items.get(key);
+      if(!saved?.character)continue;
+      const restored=restoreVisibleCharacter(item,saved),failed=failures.get(key);
+      if(restored===false)failures.set(key,saved);
+      else if(failed && failed.start===saved.start && failed.character.offset===saved.character.offset)failures.delete(key);
+    }
+    if(failures.size){
+      // Chrome may recapture a surviving neighbour/glyph. Only the same failed
+      // target becoming available, or a newer deliberate reading intent, clears it.
+      const previous=status.textContent===notice && readingCharacterNotice?readingCharacterNotice.previous:status.textContent;
+      readingCharacterNotice={previous,failures,intent:readingIntentEpoch};status.textContent=notice;
+    }else if(readingCharacterNotice){
+      if(status.textContent===notice)status.textContent=readingCharacterNotice.previous;
+      readingCharacterNotice=null;
+    }
   }
   function refreshControls(){
     const button=el('refresh');if(!button)return;
@@ -612,7 +749,7 @@
     change();
     if(view && current(ticket))restoreView(view,ticket);
   }
-  async function refreshFind(query,anchor,ticket){
+  async function refreshFind(query,anchor,ticket,previousMatches=null){
     const search=++findVersion,valid=()=>search===findVersion && current(ticket);
     preserveChrome(()=>{finding=true;findGroups=[];findTotal=0;findCursor=-1;findControls();},ticket);
     const groups=[];let total=0;
@@ -632,13 +769,15 @@
         if(index>=0)findCursor=group.first+index;}
       findControls(anchor && findCursor<0?'The previous occurrence is no longer at its original location. Choose Previous/Next match or Find to navigate the refreshed original.':undefined);
       render(false,view);
+      if(previousMatches){findMatches=renewFindMatches(previousMatches,previousMatches.active);if(findMatches?.active)renderFindMatches();else findMatchesControls();}
     }catch{
       if(valid()){finding=false;findControls('The refreshed original could not be searched. Choose Find to retry.');}
     }
   }
   async function refresh(){
     if(!source || loading || refreshing || !available())return false;
-    const ticket=version,request=++refreshVersion;
+    const ticket=version,request=++refreshVersion,readingEpoch=readingIntentEpoch;
+    const originalView=findMatchesValid() && findMatches.active?findMatches.passageView:captureView(),viewport={width:root.innerWidth,height:root.innerHeight};
     preserveChrome(()=>{refreshing=true;refreshControls();el('error').hidden=true;
       el('status').textContent='Refreshing original native conversation. The current snapshot stays readable.';
     },ticket);
@@ -653,9 +792,13 @@
       if(!current(ticket)){if(ticket===version && el('').open)close();return false;}
       if(!thread || thread.id!==requested.thread_id || !Array.isArray(thread.turns))throw Error('The original native read did not return this conversation.');
       // Commit the latest reader intent, not the page/query captured on click.
-      const view=captureView(),oldMatch=findMatch();
+      const previousMatches=findMatchesValid()?findMatches:null;
+      let view=previousMatches?.active?previousMatches.passageView:captureView();const oldMatch=findMatch();
+      if(readingEpoch===readingIntentEpoch && (viewport.width!==root.innerWidth || viewport.height!==root.innerHeight))
+        view=resizeOriginalCharacters(originalView,view);
+      resetFindMatches();
       const anchorKey=oldMatch?rowKey(rows[oldMatch.index]):null;
-      const anchor=anchorKey?{key:anchorKey,start:oldMatch.start,end:oldMatch.end}:null;
+      let anchor=anchorKey?{key:anchorKey,start:oldMatch.start,end:oldMatch.end}:null;
       const query=el('find-query').value.trim(),submitted=findSubmitted && findQuery===query;
       ++findVersion;finding=false;findGroups=[];findTotal=0;findCursor=-1;
       if(savedReference){
@@ -664,6 +807,10 @@
           `Saved reviewed excerpt retained. Fresh original: ${resolved.status}. No other item or occurrence is used as its replacement.`;
       }
       source=thread;rows=flatten(thread);captureOriginalFrontier(ticket);
+      if(!savedReference){
+        anchor=mapOutputAnchor(anchor,view,rows);
+        view=mapOriginalOutput(view,rows);
+      }
       const first=view.anchor?.key || view.first,index=first?rows.findIndex(row=>rowKey(row)===first):-1;
       page=index>=0?Math.floor(index/PAGE_ENTRIES):Math.min(view.page,Math.max(0,Math.ceil(rows.length/PAGE_ENTRIES)-1));
       targetIndex=typeof requested.turn_id==='string' && typeof requested.item_id==='string'
@@ -677,7 +824,7 @@
         el('match').textContent=!visibleTypes.has(row.item.type)?'The requested item has no supported readable text. You can still read the conversation.':
           phrase && (Number.isInteger(requested.match_start)?textFor(row.item).slice(requested.match_start,requested.match_start+phrase.length)!==phrase:!textFor(row.item).includes(phrase))?'The saved phrase is no longer at its captured location in this original native item. You can still read the conversation.':'Showing the matching original native turn and item.';}
       el('error').hidden=el('retry').hidden=true;render(false,view);preserveChrome(()=>findControls(),ticket);
-      if(submitted && query)await refreshFind(query,anchor,ticket);
+      if(submitted && query)await refreshFind(query,anchor,ticket,previousMatches);
       return true;
     }catch(error){
       if(request===refreshVersion && current(ticket)){
@@ -765,7 +912,7 @@
   async function show(result,callbacks={}) {
     if(!api)throw new Error('Native history reader is not configured.');
     if(callbacks.valid && !callbacks.valid())return false;
-    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;resetOriginalFrontier();
+    saveOriginalReading();readingHome=null;readingUnavailable=false;readingCharacterNotice=null;++readingRestoreEpoch;resetOriginalFrontier();
     ++version;++refreshVersion;refreshing=false;loading=false;source=null;rows=[];targetIndex=-1;taskReview=null;taskControls();refreshControls();resetNativeIdCopy();
     resetFind();
     requested={...result};options=callbacks;unavailableThread=null;el('response').hidden=true;el('response').textContent='';el('original').hidden=true;el('saved-evidence').hidden=true;el('saved-evidence-quote').textContent='';
@@ -808,7 +955,7 @@
     }
     return {source,refreshVersion,requested:{...requested},view:captureView(),page,targetIndex,chrome,
       find:{query:el('find-query').value,submitted:findSubmitted && !finding,queryAtSubmit:findQuery,
-        groups:findGroups,total:findTotal,cursor:findCursor,message:finding?'Find canceled by task navigation. Choose Find to search this original.':el('find-status').textContent,
+        groups:findGroups,total:findTotal,cursor:findCursor,matches:findMatches,message:finding?'Find canceled by task navigation. Choose Find to search this original.':el('find-status').textContent,
         anchor:key?{key,start:occurrence.start,end:occurrence.end}:null}};
   }
   function openTaskContext(capture,{instructionMatch=null}={}) {
@@ -1000,23 +1147,32 @@
   async function returnTaskPassage() {
     if(!taskReview || !source || !available())return false;
     const snapshot=taskReview.passage,ticket=version,unchanged=source===snapshot.source;taskReview=null;taskControls();
+    const followOutput=!unchanged && !options?.savedReference;
+    const view=followOutput?mapOriginalOutput(snapshot.view,rows):snapshot.view;
+    const findAnchor=followOutput?mapOutputAnchor(snapshot.find.anchor,snapshot.view,rows):snapshot.find.anchor;
     requested={...snapshot.requested};++findVersion;finding=false;
     targetIndex=rows.findIndex(row=>row.item && row.turn.id===requested.turn_id && row.item.id===requested.item_id);
     const anchor=snapshot.view.anchor?.key || snapshot.view.first,index=anchor?rows.findIndex(row=>rowKey(row)===anchor):-1;
     page=index>=0?Math.floor(index/PAGE_ENTRIES):Math.min(snapshot.page,Math.max(0,Math.ceil(rows.length/PAGE_ENTRIES)-1));
     el('find-query').value=snapshot.find.query;findSubmitted=snapshot.find.submitted;findQuery=snapshot.find.queryAtSubmit;
     findGroups=unchanged?snapshot.find.groups:[];findTotal=unchanged?snapshot.find.total:0;findCursor=unchanged?snapshot.find.cursor:-1;
+    findMatches=unchanged?snapshot.find.matches:null;
     if(unchanged && refreshVersion===snapshot.refreshVersion){for(const [id,value] of Object.entries(snapshot.chrome)){el(id).textContent=value.text;el(id).hidden=value.hidden;}}
     else if(!unchanged){
       el('status').textContent=index<0 && anchor?'The original passage item is no longer supplied. Its captured source identity is retained.':'Returned to the original passage in the refreshed native read.';
       el('match').textContent=targetIndex<0 && requested.item_id?'The captured native turn/item is not present in this original read.':'';
     }
-    findControls(unchanged?snapshot.find.message:undefined);render(false,snapshot.view);
-    if(!unchanged && findSubmitted && findQuery===snapshot.find.query.trim() && findQuery)await refreshFind(findQuery,snapshot.find.anchor,ticket);
+    findControls(unchanged?snapshot.find.message:undefined);render(false,view);
+    if(!unchanged && findSubmitted && findQuery===snapshot.find.query.trim() && findQuery)await refreshFind(findQuery,findAnchor,ticket,snapshot.find.matches);
     return true;
   }
   function configure(value) {
     api=value.api;evidenceReview=value.onEvidence || null;
+    if(el('find-matches-show')){
+      el('find-matches-show').onclick=showFindMatches;el('find-matches-return').onclick=showFindMatches;
+      el('find-matches-close').onclick=dismissFindMatches;
+      for(const id of ['find-matches-show','find-matches-return'])el(id).onmousedown=event=>{if(event.button===0 && selectedText())event.preventDefault();};
+    }
     if(el('copy-native-id')){el('copy-native-id').onclick=()=>copyNativeId();el('copy-native-id').onmousedown=event=>{if(event.button===0 && selectedText())event.preventDefault();};}
     el('back').onclick=el('close').onclick=()=>close();
     el('retry').onclick=()=>{el('retry').disabled=true;source?refresh():read();};
@@ -1031,8 +1187,9 @@
     el('find-form').onsubmit=event=>{event.preventDefault();submitFind();};
     el('find-previous').onclick=()=>jumpFind(-1);el('find-next').onclick=()=>jumpFind(1);
     el('find-query').oninput=()=>{
+      const previousView=findMatches?.active?findMatches.passageView:captureView();resetFindMatches();
       ++findVersion;finding=false;findSubmitted=false;findGroups=[];findTotal=0;findCursor=-1;
-      findControls('Query changed. Choose Find to search this original.');if(source && available())render(false,captureView());
+      findControls('Query changed. Choose Find to search this original.');if(source && available())render(false,previousView);
     };
     el('').addEventListener('keydown',event=>{
       if(event.key!=='F3' || !el('').open || !source || loading || !el('').contains(event.target))return;
@@ -1045,7 +1202,18 @@
     });
     el('body').addEventListener('pointerdown',event=>{if(event.target.closest?.('.history-reader-item'))readingUnavailable=false;});
     el('body').addEventListener('wheel',()=>{readingUnavailable=false;},{passive:true});
-    for(const type of ['pointerdown','wheel','keydown'])el('').addEventListener(type,()=>{++readingRestoreEpoch;},{passive:true});
+    for(const type of ['pointerdown','wheel','keydown'])el('').addEventListener(type,event=>{
+      ++readingRestoreEpoch;
+      if(type==='wheel' || el('body').contains(event.target) || el('find-form').contains(event.target) ||
+        event.target===el('previous') || event.target===el('next')){
+        ++readingIntentEpoch;
+        if(readingCharacterNotice){
+          const status=el('status');
+          if(status.textContent==='Previous original character unavailable in this fresh text window.')status.textContent=readingCharacterNotice.previous;
+          readingCharacterNotice=null;
+        }
+      }
+    },{passive:true});
     el('').addEventListener('cancel',saveOriginalReading);
     el('').addEventListener('close',()=>{if(!el('').open)invalidate();});
     root.addEventListener?.('pagehide',saveOriginalReading);

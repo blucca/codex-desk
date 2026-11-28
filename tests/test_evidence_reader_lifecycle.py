@@ -6,6 +6,7 @@ READ = SOURCE[SOURCE.index('  async function readEmbeddedReference('):SOURCE.ind
 CLOSE = SOURCE[SOURCE.index('  function close('):SOURCE.index('  function available(')]
 TASK_CONTROLS = SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  function taskSnapshot(')]
 SETUP = r'''
+let findMatches=null;
 const assert=require('assert/strict');
 let taskReview=null;let live=true,version=7,source={id:'sent-B',turns:[]},requested={thread_id:'sent-B',turn_id:'sent-turn',item_id:'sent-item'};
 let returned=0,options={valid:()=>live,onReturn:()=>returned++},page=3,findSubmitted=true,findQuery='needle',findGroups=[{index:121,spans:[{start:9,end:15}]}],findTotal=1,findCursor=0;

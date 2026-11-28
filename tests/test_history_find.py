@@ -101,6 +101,19 @@ process.stdout.write(JSON.stringify(Array.from(spans)));
         self.assertEqual(self.check([{'text': text, 'query': '完整原文'}], script),
                          [{'start': 2_000_000, 'end': 2_000_004}])
 
+    def test_exact_occurrence_binding_in_existing_groups(self):
+        script = r"""
+const h=require(process.argv[1]),groups=[{index:4,first:0,spans:h.spans('Straße / STRASSE','strasse')},
+  {index:91,first:2,spans:h.spans('🧪 Café / CAFÉ','café')}];
+process.stdout.write(JSON.stringify({first:h.occurrence(groups,0),duplicate:h.occurrence(groups,1),
+  later:h.occurrence(groups,3),invalid:[-1,4,1.5,Infinity].map(at=>h.occurrence(groups,at)),empty:h.occurrence([],0)}));
+"""
+        self.assertEqual(self.check([], script), {
+            'first': {'index': 4, 'cursor': 0, 'occurrence': 1, 'item_total': 2, 'start': 0, 'end': 6},
+            'duplicate': {'index': 4, 'cursor': 1, 'occurrence': 2, 'item_total': 2, 'start': 9, 'end': 16},
+            'later': {'index': 91, 'cursor': 3, 'occurrence': 2, 'item_total': 2, 'start': 10, 'end': 14},
+            'invalid': [None, None, None, None], 'empty': None})
+
     def test_async_search_yields_and_invalidated_work_returns_no_results(self):
         script = r"""
 const h=require(process.argv[1]);

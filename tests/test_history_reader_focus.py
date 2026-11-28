@@ -8,8 +8,12 @@ import unittest
 READER=Path(__file__).resolve().parents[1]/'codex_desk/static/history_reader.js'
 NODE=shutil.which('node')
 FIXTURE=r"""
+let findMatches=null;
+function findMatchesValid(){return false;}function resetFindMatches(){findMatches=null;}
+function findMatchesControls(){}function showFindMatches(){}function dismissFindMatches(){}
+
 const assert=require('assert'),frames=[],targets=[];
-const root={DeskHistoryTasks:require(TASK_HELPER)};let taskReview=null,readingRestoreEpoch=0,readingUnavailable=false;
+const root={DeskHistoryTasks:require(TASK_HELPER)};let taskReview=null,readingRestoreEpoch=0,readingIntentEpoch=0,readingUnavailable=false,readingCharacterNotice=null;
 function saveOriginalReading(){}
 const document={body:{},activeElement:null};document.activeElement=document.body;
 class Element {

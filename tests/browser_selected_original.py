@@ -149,6 +149,19 @@ async def acceptance(browser, width, root, evidence):
             assert geometry['mark']['top'] >= max(value['top'] for value in geometry.values()) - 1, geometry
             assert geometry['mark']['bottom'] <= min(value['bottom'] for value in geometry.values()) + 1, geometry
             return geometry
+        async def source_glyph():
+            return await target.evaluate(r"""n=>{
+              const p=n.querySelector('pre'),body=$('history-reader-body'),reader=$('history-reader'),text=p.textContent,start=Number(n.dataset.windowStart);
+              const pr=p.getBoundingClientRect(),br=body.getBoundingClientRect(),rr=reader.getBoundingClientRect();
+              const clip={left:Math.max(pr.left,br.left,rr.left,0),right:Math.min(pr.right,br.right,rr.right,innerWidth),top:Math.max(pr.top,br.top,rr.top,0),bottom:Math.min(pr.bottom,br.bottom,rr.bottom,innerHeight)};
+              const walker=document.createTreeWalker(p,NodeFilter.SHOW_TEXT),nodes=[];let at=0,node;while(node=walker.nextNode()){nodes.push({node,start:at,end:at+node.data.length});at+=node.data.length;}
+              function point(at,right=false){for(const q of nodes){if(at<q.end||!right&&at===q.end)return[q.node,at-q.start];}const q=nodes.at(-1);return q?[q.node,q.node.data.length]:null;}
+              function glyph(at){const a=point(at,true),b=point(at+(text.codePointAt(at)>0xffff?2:1));if(!a||!b)return null;const r=document.createRange();r.setStart(...a);r.setEnd(...b);return [...r.getClientRects()].find(r=>r.width&&r.height);}
+              let first=null;const offsets=[];for(let i=0;i<text.length;i+=text.codePointAt(i)>0xffff?2:1)if(!['\n','\r'].includes(text[i]))offsets.push(i);
+              let low=0,high=offsets.length;while(low<high){const mid=(low+high)>>>1,r=glyph(offsets[mid]);if(!r||r.bottom<=clip.top)low=mid+1;else high=mid;}
+              for(let i=low;i<offsets.length;i++){const at=offsets[i],r=glyph(at);if(!r)continue;if(r.top>=clip.bottom)break;if(r.bottom>clip.top&&r.right>clip.left&&r.left<clip.right){const lines=[...text.slice(0,at+30).matchAll(/Original command line (\d{4})/g)].filter(m=>m.index<=at);first={offset:start+at,char:String.fromCodePoint(text.codePointAt(at)),line:lines.length?Number(lines.at(-1)[1]):null,top:r.top,relative_top:r.top-clip.top,bottom:r.bottom};break;}}
+              return {window_start:start,inner:p.scrollTop,body:body.scrollTop,outer:reader.scrollTop,clip,first_visible:first,pre:{top:pr.top,bottom:pr.bottom,height:pr.height,font:getComputedStyle(p).font,line_height:getComputedStyle(p).lineHeight},focus:document.activeElement.id,query:$('history-reader-find-query').value};
+            }""")
         def read_only_since(http_before, native_before):
             routes = http[http_before:]
             assert not any(entry['path'] in ('/api/native', '/api/open', '/api/import', '/api/turn', '/api/handoff/start', '/api/followups/send') for entry in routes)
@@ -252,6 +265,8 @@ async def acceptance(browser, width, root, evidence):
             expected_window = await target.get_attribute('data-window-start')
             await target.locator('pre').evaluate('node=>node.scrollTop=100')
             await page.locator('#history-reader-find-query').focus()
+            await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+            glyph_before=await source_glyph()
             threads['native-active']['turns'][0]['items'].append({'id': 'fresh-native-evidence', 'type': 'agentMessage',
                 'text': 'FRESH NATIVE ORIGINAL RESULT from explicit Refresh'})
             release.set()
@@ -260,7 +275,15 @@ async def acceptance(browser, width, root, evidence):
             assert await page.locator('#history-reader-find-query').input_value() == old_phrase
             assert await page.evaluate('document.activeElement.id') == 'history-reader-find-query'
             assert await target.get_attribute('data-window-start') == expected_window
-            assert await target.locator('pre').evaluate('node=>node.scrollTop') == 100
+            await page.evaluate('()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
+            glyph_after=await source_glyph()
+            result['held_glyph_probe']={'before':glyph_before,'after':glyph_after,'pixel100':glyph_after['inner']==100,'native_character_exact':glyph_before['first_visible'] and glyph_after['first_visible'] and glyph_before['first_visible']['offset']==glyph_after['first_visible']['offset']}
+            (evidence/f'held-glyph-{width}.json').write_text(json.dumps(result['held_glyph_probe'],indent=2)+'\n')
+            await page.screenshot(path=str(evidence/f'{width}-held-refreshed-glyph.png'))
+
+            assert glyph_before['first_visible'] and glyph_after['first_visible'],result['held_glyph_probe']
+            assert glyph_after['first_visible']['offset']==glyph_before['first_visible']['offset'],result['held_glyph_probe']
+            assert glyph_after['first_visible']['char']==glyph_before['first_visible']['char'],result['held_glyph_probe']
             assert await page.locator('#history-reader-find-next').is_disabled()
             assert len(native) == n + 1
             await find('FRESH NATIVE ORIGINAL RESULT')

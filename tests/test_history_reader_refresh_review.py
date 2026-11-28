@@ -12,7 +12,7 @@ BOUNDS=SOURCE[SOURCE.index('  function bounds('):SOURCE.index('  function findCo
 VIEW=SOURCE[SOURCE.index('  function visibleTextClip('):SOURCE.index('  function refreshControls()')]
 HANDLERS=r'''
 el('').addEventListener=el('body').addEventListener=()=>{};
-let readingRestoreEpoch=0,readingUnavailable=false;function saveOriginalReading(){}
+let readingRestoreEpoch=0,readingUnavailable=false,readingCharacterNotice=null;function saveOriginalReading(){}
 function close(){}function read(){}function movePage(){}function submitFind(){}function jumpFind(){}function invalidate(){}
 '''+CONFIGURE+"\nconfigure({api});\n"
 
@@ -22,7 +22,7 @@ class ReaderRefreshReviewTests(unittest.TestCase):
     run_js=refresh_tests.ReaderRefreshTests.run_js
 
     def test_held_refresh_restores_latest_outer_position_after_item_focus(self):
-        view_handlers=VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
+        view_handlers='let readingCharacterNotice=null;\n'+VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
             '  function restoreView(view,ticket){', 'const restoreOriginalView=function(view,ticket){')
         self.run_js(r'''
 const document={activeElement:null},pre={scrollTop:72};let headerShift=0;
@@ -54,7 +54,7 @@ assert.equal(apiCalls.length,1);
 ''')
 
     def test_transient_refresh_chrome_preserves_text_before_latest_reply_capture(self):
-        view_handlers=VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
+        view_handlers='let readingCharacterNotice=null;\n'+VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
             '  function restoreView(view,ticket){', 'restoreView=function(view,ticket){')
         self.run_js(r'''
 const document={activeElement:null},pre={scrollTop:80};let headerShift=0;
@@ -78,7 +78,7 @@ assert.equal(item.getBoundingClientRect().top,beforeFailure,'Error and retry con
 ''')
 
     def test_submitted_find_chrome_preserves_source_during_refresh_recomputation(self):
-        view_handlers=VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
+        view_handlers='let readingCharacterNotice=null;\n'+VIEW.replace('  function captureView(){', 'captureView=function(){').replace(
             '  function restoreView(view,ticket){', 'restoreView=function(view,ticket){')
         self.run_js(r'''
 const document={activeElement:null},pre={scrollTop:80};let headerShift=0;

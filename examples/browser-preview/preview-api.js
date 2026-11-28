@@ -17,7 +17,7 @@
   // Consume the reset marker before this new document loads any preparation.
   try{if(localStorage.getItem(resetKey)==='1')for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,resetKey])localStorage.removeItem(key);}catch(_){}
   try{const saved=JSON.parse(localStorage.getItem(storageKey));if(saved && Array.isArray(saved.sessions) && saved.drafts && saved.followups)state=saved;}catch(_){}
-  const requests=[];
+  const requests=[];let headerHold=null;
   const notice=text=>{const el=document.getElementById('preview-notice');if(el)el.textContent=text;};
   const save=()=>{try{localStorage.setItem(storageKey,JSON.stringify(state));}catch(_){throw new Error('Browser storage is unavailable. Enable site storage to keep sample preparation.');}};
   const lookup=id=>{const row=state.sessions.find(s=>s.id===id);if(!row)throw new Error('Choose a sample conversation first.');return row;};
@@ -246,6 +246,7 @@
     const method=(options.method || 'GET').toUpperCase();let data={};
     try{data=options.body?JSON.parse(options.body):{};requests.push({path:address.pathname+address.search,method,data:copy(data)});
       if(readingFixture)await readingFixture.controls.before(address.pathname);
+      if(headerHold && ['/api/native/thread','/api/native/evidence-source'].includes(address.pathname)){const hold=headerHold;hold.entered=true;await hold.promise;}
       const result=copy(handle(address.pathname,method,data,address.searchParams));
       if(readingFixture)await readingFixture.controls.after?.(address.pathname);
       return new Response(JSON.stringify(result),{status:200,headers:{'Content-Type':'application/json'}});
@@ -268,7 +269,27 @@
       const button=document.getElementById('preview-supply-original');if(button)button.disabled=true;
       return true;
     }};
-  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,requests,originalFixture,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey])localStorage.removeItem(key);location.reload();}};
+  // Existing original item only: synthetic status headers never become Activity events.
+  const headerFixture={
+    threadId:'sample-child-thread',turnId:'sample-child-turn',itemId:'sample-child-evidence',
+    quote:'HEADER OUTPUT PASSAGE — café🙂 项目.',prepared:false,
+    command:()=>thread(headerFixture.threadId).turns[0].items.find(i=>i.id===headerFixture.itemId),
+    buttons:()=>{for(const id of ['preview-header-toggle','preview-header-reader-toggle']){
+      const b=document.getElementById(id);if(b){b.hidden=!headerFixture.prepared;b.textContent=headerFixture.command().status==='inProgress'?'Complete sample command':'Restore sample command in progress';}}
+      const b=document.getElementById('preview-header-prepare');if(b)b.disabled=headerFixture.prepared;},
+    prepare:()=>{if(headerFixture.prepared)return false;const command=headerFixture.command();
+      command.command='fixture inspect source';command.status='inProgress';delete command.exitCode;
+      command.aggregatedOutput=Array.from({length:10000},(_,n)=>'H'+String(n).padStart(4,'0')+(n===6450?' '+headerFixture.quote:'')).join('\n');
+      headerFixture.prepared=true;headerFixture.buttons();notice('Sample original command prepared. Read it by ID, find HEADER OUTPUT PASSAGE, then complete only its status.');return true;},
+    toggle:()=>{if(!headerFixture.prepared)return false;const command=headerFixture.command();
+      if(command.status==='inProgress'){command.status='completed';command.exitCode=0;}else{command.status='inProgress';delete command.exitCode;}
+      headerFixture.buttons();notice('Only the sample command status/exit header changed; native output is identical. Reopen or Refresh original deliberately.');return true;},
+    hold:()=>{if(headerHold)throw Error('One sample original read is already held.');let release;
+      const promise=new Promise(r=>release=r);headerHold={entered:false,promise,release};},
+    held:()=>!!headerHold?.entered,
+    release:()=>{if(headerHold){const hold=headerHold;headerHold=null;hold.release();}}
+  };
+  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,requests,originalFixture,headerFixture,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey])localStorage.removeItem(key);location.reload();}};
   document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('preview-start').onclick=()=>{
       const home=document.getElementById('welcome');
@@ -276,6 +297,9 @@
       const input=document.getElementById('recall-query');input.value='retry budget';input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();
     };
     document.getElementById('preview-supply-original').onclick=originalFixture.append;
+    document.getElementById('preview-header-prepare').onclick=headerFixture.prepare;
+    for(const id of ['preview-header-toggle','preview-header-reader-toggle'])document.getElementById(id).onclick=headerFixture.toggle;
+    headerFixture.buttons();
     document.getElementById('preview-reset').onclick=window.DeskBrowserPreview.reset;
     for(const id of ['home-project'])document.getElementById(id).hidden=true;
     document.getElementById('send').addEventListener('click',e=>{e.preventDefault();install();});

@@ -79,6 +79,14 @@ jobs:
           python examples/check_browser_preview_following_original.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-following-iframe
           python examples/check_browser_preview_following_original.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-following-rich
           python examples/check_browser_preview_following_original.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-following-rich-iframe
+          python examples/check_browser_preview_command_header.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-command-header-normal
+          python examples/check_browser_preview_command_header.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-command-header-iframe
+          python examples/check_browser_preview_command_header.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-command-header-rich
+          python examples/check_browser_preview_command_header.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-command-header-rich-iframe
+          python examples/check_browser_preview_find_matches.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-find-matches-normal
+          python examples/check_browser_preview_find_matches.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-find-matches-iframe
+          python examples/check_browser_preview_find_matches.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-find-matches-rich
+          python examples/check_browser_preview_find_matches.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-find-matches-rich-iframe
       - name: Check installed daily workflows
         working-directory: temp
         run: |
@@ -140,6 +148,15 @@ jobs:
           cp ../tests/browser_original_frontier.py ../tests/browser_original_responsive_reading.py installed-fixtures/tests/
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-frontier" python installed-fixtures/tests/browser_original_frontier.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-responsive-reading" python installed-fixtures/tests/browser_original_responsive_reading.py
+      - name: Check installed exact original matches and command output passage
+        working-directory: temp
+        env:
+          DESK_USE_INSTALLED: '1'
+        run: |
+          cp ../tests/browser_original_header_boundary.py installed-fixtures/tests/
+          cp ../examples/check_native_find_matches.py installed-fixtures/examples/
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-header-boundary" python installed-fixtures/tests/browser_original_header_boundary.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-find-matches" python installed-fixtures/examples/check_native_find_matches.py
       - name: Retain daily-workflow receipts
         if: always()
         uses: actions/upload-artifact@v4

@@ -7,16 +7,20 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=(ROOT/'codex_desk/static/history_reader.js').read_text()
-HELPERS = SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function refreshControls()'):SOURCE.index('  async function read()')]
+HELPERS = SOURCE[SOURCE.index('  function commandOutputStart('):SOURCE.index('  function saveOriginalReading(')] + SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function refreshControls()'):SOURCE.index('  async function read()')]
 ROW=SOURCE[SOURCE.index('  function rowKey('):SOURCE.index('  function itemNode(')]
 
 @unittest.skipUnless(shutil.which('node'),'Node is required for controller checks')
 class ReaderRefreshTests(unittest.TestCase):
     def run_js(self,body):
         setup=r'''
+let findMatches=null;
+function findMatchesValid(){return false;}function resetFindMatches(){findMatches=null;}
+function findMatchesControls(){}function showFindMatches(){}function dismissFindMatches(){}
+
 const assert=require('assert/strict'),root={DeskHistoryFind:require(FIND),DeskHistoryTasks:require(TASKS)};let taskReview=null;
 const elements=new Map();function el(id){if(!elements.has(id))elements.set(id,{hidden:false,disabled:false,value:'',textContent:''});return elements.get(id);}
-const PAGE_ENTRIES=40;const str=x=>typeof x==='string'?x:'';let version=1,refreshVersion=0,refreshing=false,loading=false,findVersion=0,finding=false,findGroups=[],findTotal=0,findCursor=-1,findSubmitted=false,findQuery='';
+const PAGE_ENTRIES=40;const str=x=>typeof x==='string'?x:'';let version=1,refreshVersion=0,refreshing=false,loading=false,findVersion=0,finding=false,findGroups=[],findTotal=0,findCursor=-1,findSubmitted=false,findQuery='',readingIntentEpoch=0;
 let options=null;let source={id:'original',name:'First original'},requested={thread_id:'original'},rows=[{turn:{id:'turn'},item:{id:'old',type:'agentMessage',text:'exact old evidence'}}],page=0,targetIndex=-1;
 let live=true,view={items:new Map(),anchor:null,first:JSON.stringify(['turn','old']),page:0,scroll:17},renders=[],findMessages=[],apiCalls=[];
 function current(ticket){return live && ticket===version;}function available(){return current(version);}

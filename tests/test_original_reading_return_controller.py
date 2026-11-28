@@ -9,10 +9,11 @@ HELPERS=SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.inde
 CLOSE=SOURCE[SOURCE.index('  function close('):SOURCE.index('  function available(')]
 HOME=SOURCE[SOURCE.index('      if(!explicitReadingTarget() && root.DeskReadingCheckpoint)'):SOURCE.index('      let thread=preloaded;')]
 HARNESS=r'''
+let findMatches=null;
 const PAGE_ENTRIES=40;const assert=require('assert/strict'),h=require(process.argv[1]),values=new Map();
 const root={DeskReadingCheckpoint:h,localStorage:{getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)}};
-let readingRestoreEpoch=0,findVersion=0,live=true;const current=t=>live && t===7;
-let readingUnavailable=false,readingStorage=null,readingHome='a'.repeat(64),requested={thread_id:'original-A'},options={valid:()=>true},loading=false,taskReview=null,page=0;
+let readingRestoreEpoch=0,readingIntentEpoch=0,findVersion=0,live=true;const current=t=>live && t===7;
+let readingUnavailable=false,readingCharacterNotice=null,readingStorage=null,readingHome='a'.repeat(64),requested={thread_id:'original-A'},options={valid:()=>true},loading=false,taskReview=null,page=0;
 let source={id:'original-A',turns:[{id:'turn',items:[{id:'item'}]}]},rows=[{turn:source.turns[0],item:source.turns[0].items[0]}];
 const key=JSON.stringify(['turn','item']),rowKey=row=>JSON.stringify([row.turn.id,row.item.id]);
 let captured={items:new Map([[key,{start:26332,open:true,scroll:7774,left:4}]]),anchor:{key,offset:-123,screenTop:134},
@@ -92,6 +93,13 @@ options.valid=()=>true;source=null;saveOriginalReading();assert.equal(values.get
   self.check(r'''
 const passage=captured;taskReview={passage:{view:passage}};captured={anchor:null,items:new Map()};saveOriginalReading();
 assert.equal(originalReadingView().scroll,passage.scroll);
+''')
+ def test_character_failure_keeps_previous_checkpoint_until_deliberate_new_intent(self):
+  self.check(r'''
+saveOriginalReading();const raw=values.get(h.ORIGINAL_STORAGE_KEY);captured.scroll=4;
+readingCharacterNotice={intent:readingIntentEpoch,failures:new Map([[key,captured.items.get(key)]]),previous:'Original refreshed.'};
+saveOriginalReading();assert.equal(values.get(h.ORIGINAL_STORAGE_KEY),raw);
+++readingIntentEpoch;saveOriginalReading();assert.equal(originalReadingView().scroll,4);
 ''')
  def test_unavailable_and_other_home_use_existing_readable_page_not_substitute(self):
   self.check(r'''

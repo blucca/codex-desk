@@ -76,6 +76,9 @@ Have a native thread ID? **Browse all conversations** → **Native conversation 
 for next time. Remember a title? Use **Search titles**. In an open
 original, **Read containing task** → **Jump to supplied user instruction** finds
 your prompt; **Find in this original conversation** finds reply/tool text.
+**Show Find matches** lists occurrences within that loaded original; choose an
+exact duplicate directly, then **Return to Find matches** to choose another.
+F3 continues from the occurrence you selected.
 [Choose the entrance and carry its own response into your current draft — English / 中文](docs/find-original-by-id-or-instruction.md).
 
 1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
@@ -107,7 +110,10 @@ Existing-item text edits do not count as newly supplied items.
 
 **Return to original passage** returns to your prior reading view. Reopening at a
 narrower or wider width restores the first visible literal character; an explicit
-saved quote, item or response target takes priority. [Rehearse with five deliberate
+saved quote, item or response target takes priority. A command's status/exit header
+can change while its output stays identical: reopening or refreshing retains the
+same output-relative character, including after a resize. [Rehearse that command
+return](examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes). [Rehearse with five deliberate
 sample additions](examples/browser-preview.md#follow-newly-supplied-original-items).
 
 

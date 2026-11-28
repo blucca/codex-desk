@@ -223,3 +223,78 @@ first quote, B's actual editor and both queues, zero automatic original reads or
 native admissions, and metadata-only storage. **Reset sample** clears its own
 original snapshot/reading/preparation keys, including a late pagehide write, while
 retaining installed-workbench and unrelated same-origin keys.
+
+## Keep the command output passage when its status header changes
+
+**Prepare sample command output** replaces only the existing child command's
+synthetic source content with long output and `inProgress` / no exit code. Four
+histories and the initial 13 ordinary / 15 rich item counts stay unchanged. This
+preparation and **Complete sample command** change neither saved-task Activity
+nor its review frontier, B's draft/queues or native task admission.
+
+Keep B's unsent Plan and two queues selected. Prepare the command, read
+`sample-child-thread` by ID, then Find `HEADER OUTPUT PASSAGE — café🙂 项目.` in
+the middle output window. Close the original and its catalog, choose **Complete
+sample command**, resize to the opposite narrow/wide width, and deliberately
+reopen. The output is byte-for-byte identical; only the generated status/exit
+header changed. The actual first visible native-output character returns, rather
+than an old absolute offset into the shorter header-plus-output projection.
+
+The same status button is available inside the original reader. It toggles back
+with **Restore sample command in progress**. Use **Refresh original** to read
+that header change. The maintained checker holds this fresh read, changes status
+and resizes in the opposite direction before releasing it, then verifies the
+output-relative UTF-16 character, Find and a real backwards pointer selection.
+It also checks **Read containing task** → held Refresh → **Return to original
+passage**. Returning to B preserves its exact editor selection, scroll, Plan and
+both queues; reload retains metadata without automatically reading an original.
+Saved quotations remain explicit native source targets. A deliberate new Find,
+page or scroll during a held read stays the newer reading intent; changing only
+the layout width does not replace the prior output passage.
+
+Run all four existing builds, with both resize directions in every command:
+
+```sh
+python3 examples/check_browser_preview_command_header.py --site temp/browser-preview/demo --evidence temp/browser-preview/command-header-normal
+python3 examples/check_browser_preview_command_header.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/command-header-iframe
+python3 examples/check_browser_preview_command_header.py --rich --site temp/browser-preview/reading --evidence temp/browser-preview/command-header-rich
+python3 examples/check_browser_preview_command_header.py --rich --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/command-header-rich-iframe
+```
+
+Receipts use text-node Ranges to measure the literal first visible output glyph,
+not line estimates or equal scroll pixels. Only numeric command-output-boundary
+metadata is added to reading checkpoints; native output bodies, Find text and
+selections remain outside those records.
+
+## Choose an exact occurrence from original Find matches
+
+Keep **Sample documentation review** selected with its unsent Plan and two queued
+instructions. Read `sample-child-thread` by ID, then Find
+`Child decisive evidence — café🙂 项目 exact source.`. This existing original has
+two identical quotes in one long native item; this workflow adds no sample data,
+new source items, Activity events or task admission.
+
+Choose **Show Find matches**. Focus **Read match 2** and press Enter to open the
+second occurrence directly, including its exact native turn/item/span. Select
+the quotation backwards with the pointer. **Read containing task** → **Return
+to original passage** restores that second occurrence, Find and real selection.
+**Return to Find matches** returns to the same submitted query, occurrence page
+and row. Click **Read match 1**, then immediately press F3: it continues to the
+second occurrence from the ordinal you just selected. Return to B's actual
+editor keeps its caret/direction/scroll, Plan and both queues.
+
+The overview uses the existing submitted Find groups, at most 20 occurrences per
+page, within this already loaded original. It performs no additional source read,
+index pass or other-history search. Exact duplicate spans remain distinct.
+
+```sh
+python3 examples/check_browser_preview_find_matches.py --site temp/browser-preview/demo --evidence temp/browser-preview/find-matches-normal
+python3 examples/check_browser_preview_find_matches.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/find-matches-iframe
+python3 examples/check_browser_preview_find_matches.py --rich --site temp/browser-preview/reading --evidence temp/browser-preview/find-matches-rich
+python3 examples/check_browser_preview_find_matches.py --rich --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/find-matches-rich-iframe
+```
+
+Each command checks 1250px and 390px, with an actual iframe in `--embedded` mode.
+Receipts bind each row's global occurrence ordinal to the supplied native source,
+retain Enter and pointer choices, and check immediate F3 continuation, exact
+containing-task passage return and unchanged B/source/review state.

@@ -157,3 +157,19 @@ updates reviewed**。快照只保存 home／thread、数量和末项身份，阅
 视图／字符位置元数据。用示例的 **Add sample original items** 明确提供五项合成
 原文，再主动重读练习；[双语步骤与边界](find-original-by-id-or-instruction.md#跟进原会话新提供的内容项)
 及[四种构建的检查命令](../examples/browser-preview.md#follow-newly-supplied-original-items)。
+
+命令状态从 `inProgress`／无退出码变为 `completed`／`0`，而 output 本身相同时，
+重读或等待中的 **Refresh original** 按输出内部的字符位置恢复，不受生成的
+状态／退出码头长度变化影响。窄屏／宽屏切换以及 **Read containing task** →
+Refresh → **Return to original passage** 保留同一输出字符、Find 和反向选区；
+准确保存引用仍优先定位自己的来源。[用合成命令练习](../examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes)。
+
+## 在当前原文中直接选择 Find 命中
+
+在 **Find in this original conversation** 提交短语后，用 **Show Find matches**
+查看已加载原会话内的出现位置，每页最多 20 处。**Read match N** 打开准确的
+turn／item 和字符范围；同一条原文的重复引句也可直接选择第二次出现。
+**Read containing task** → **Return to original passage** 保留该处 Find 与选区，
+**Return to Find matches** 返回同一查询、页和来源行。选第一处后立刻按 F3，
+继续到下一处，不会重新从第一处开始。已有 Plan／两组待发队列和编辑器保持原样。
+[在免安装示例中练习](../examples/browser-preview.md#choose-an-exact-occurrence-from-original-find-matches)。

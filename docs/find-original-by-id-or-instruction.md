@@ -25,6 +25,15 @@ Literal punctuation is retained, with case and Unicode forms normalized. In the
 original reader, **Copy native conversation ID** keeps that exact ID in your notes
 for the next lookup.
 
+After an original Find, **Show Find matches** lists up to 20 exact occurrences per
+page within that loaded original. **Read match N** opens the selected turn/item
+and native span, including one of two identical quotations in the same item.
+**Read containing task** → **Return to original passage** keeps that occurrence,
+Find and selection; **Return to Find matches** restores the same submitted query,
+occurrence page and source row. Select another occurrence directly; F3/Shift+F3
+then continues from its global ordinal. This is original-only navigation, separate
+from instruction matching and cross-history content indexing.
+
 ### Revisit a native archived original
 
 In **Browse all conversations**, choose **Archived conversations** under **Native history**,
@@ -40,6 +49,14 @@ a narrow/wide resize. Reload alone leaves the original closed. A saved quotation
 specified item or task-response target opens its requested passage instead and
 keeps the ordinary reading checkpoint. The reader's Find query and selected text
 are for the current reading visit; the remembered position contains view metadata.
+For command output, the character position is relative to native output: a change
+from `inProgress` with no exit code to `completed` / `0` can shorten the generated
+header without moving your output passage. Held **Refresh original** and
+**Read containing task** → Refresh → **Return to original passage** retain that
+output character, Find and selection. Later deliberate Find/page/scroll input
+keeps its newer reading intent; a width-only layout change does not replace the
+prior output passage. Exact saved quotes keep their own native
+source spans. [Try the command-header sample](../examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes).
 
 ### Follow newly supplied items in an original
 
@@ -148,6 +165,13 @@ ID／标题入口直接读取当前原生历史；指令跳转先打开原会话
 字面标点，忽略大小写并规范化 Unicode。原文查看器中的 **Copy native conversation ID**
 复制当前原会话的准确 ID，便于保存到笔记中下次查找。
 
+原文 Find 后用 **Show Find matches** 查看当前已加载原会话中的准确出现位置，
+每页最多 20 处。**Read match N** 直接打开所选 turn／item 和原文范围，同一项中
+两次相同引句也按各自位置区分。**Read containing task** → **Return to original
+passage** 保留那次出现、Find 和选区；**Return to Find matches** 返回同一已提交
+查询、出现位置页和来源行。直接选另一处后，F3／Shift+F3 从所选全局序号继续。
+这是当前原文内部的导航，与用户指令匹配和跨会话正文索引分开。
+
 ### 回看原生已归档会话
 
 在 **Browse all conversations** 的 **Native history** 中选 **Archived conversations**，搜索标题后
@@ -159,6 +183,12 @@ ID／标题入口直接读取当前原生历史；指令跳转先打开原会话
 原文中回到那个实际字符；窄屏／宽屏切换后仍按字符定位。刷新页面本身不读取
 原文。保存引句、指定内容项或 task response 入口优先打开自己的准确段落，保留
 普通阅读位置。Find 查询和文字选区属于本次阅读；记住的是阅读视图元数据。
+命令输出按原生 output 内的字符位置恢复：状态从 `inProgress`／无退出码变为
+`completed`／`0` 时，生成的状态头长度可能变化，但相同输出中的阅读字符保持
+原位。等待中的 **Refresh original**，以及 **Read containing task** → Refresh →
+**Return to original passage**，也保留输出字符、Find 与选区；保存引句仍按自己的
+准确原生来源范围打开。等待期间明确的新 Find／翻页／滚动意图仍优先；仅布局
+宽度变化不会替换先前输出段落。[命令状态头示例](../examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes)。
 
 ### 跟进原会话新提供的内容项
 

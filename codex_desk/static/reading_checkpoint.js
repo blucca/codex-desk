@@ -37,6 +37,7 @@
     if(open!==null && typeof open!=='boolean')throw Error('Use a deliberate disclosure state.');
     const view={turn_id:identifier(value.turn_id),item_id:identifier(value.item_id),open,
       window_start:number(value.window_start,0,false,true),scroll_top:number(value.scroll_top),scroll_left:number(value.scroll_left)};
+    if(value.command_output_start!==undefined && value.command_output_start!==null)view.command_output_start=number(value.command_output_start,0,false,true);
     if(value.visible_character!==undefined && value.visible_character!==null)view.visible_character=visibleCharacter(value.visible_character);
     return view;
   }
