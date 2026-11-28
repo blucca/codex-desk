@@ -61,6 +61,28 @@ def capture(thread=_UNSET, quote='Retry budget: 2 attempts.', start=None, **kwar
 
 
 class EvidenceReferenceTests(unittest.TestCase):
+    def test_combined_append_context_preserves_the_exact_new_reference_or_rejects(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/evidence_append_context.json').read_text())
+        block = format_evidence_block(capture())
+        for case in fixture['cases']:
+            with self.subTest(case=case['name']):
+                draft = case['draft'].replace('{{block}}', block)
+                note = case['note']
+                prefix = draft + ('\n\n' if draft else '') + 'Next-step note:\n' + note if note else draft
+                before = prefix
+                if not case['accepted']:
+                    with self.assertRaisesRegex(ValueError, 'Close the unfinished'):
+                        append_evidence_block(prefix, block)
+                else:
+                    combined = append_evidence_block(prefix, block)
+                    self.assertEqual(combined, prefix + ('\n\n' if prefix else '') + block)
+                    parsed = parse_evidence_blocks(combined)
+                    self.assertEqual(len(parsed), case['references'])
+                    self.assertEqual(parsed[-1]['start'], len(combined) - len(block))
+                    self.assertEqual(parsed[-1]['end'], len(combined))
+                    self.assertEqual(parsed[-1]['reference'], capture())
+                self.assertEqual(prefix, before)
+
     def test_shared_history_reader_projection_parity_fixture(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/evidence_reference_v1.json').read_text())
 

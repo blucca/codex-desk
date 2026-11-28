@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {"name":"ordinary", "draft":"Plan before checking 🙂", "note":"", "accepted":true, "references":1},
+    {"name":"closed_backtick_crlf", "draft":"Plan before checking\r\n````sh\r\npytest -q\r\n````", "note":"", "accepted":true, "references":1},
+    {"name":"existing_reference_and_closed_note", "draft":"Plan B\n\n{{block}}", "note":"Check separately:\n~~~sh\npytest -q\n~~~", "accepted":true, "references":2},
+    {"name":"completed_inert_example", "draft":"<!-- codex-desk-evidence:v1 {} -->\nEdited example\n<!-- /codex-desk-evidence:v1 -->", "note":"", "accepted":true, "references":1},
+    {"name":"draft_unclosed_backtick", "draft":"Plan before checking\n```sh\npytest -q", "note":"", "accepted":false},
+    {"name":"draft_unclosed_tilde", "draft":"Plan before checking\n~~~~sh\npytest -q", "note":"", "accepted":false},
+    {"name":"shorter_closing_fence", "draft":"Plan before checking\n````sh\npytest -q\n```", "note":"", "accepted":false},
+    {"name":"unfinished_evidence_example", "draft":"Plan before checking\n<!-- codex-desk-evidence:v1 {} -->\nEdited old example", "note":"", "accepted":false},
+    {"name":"note_unclosed_fence", "draft":"Plan before checking", "note":"Check separately:\n~~~sh\npytest -q", "accepted":false},
+    {"name":"existing_reference_then_unclosed_note", "draft":"Plan B\n\n{{block}}", "note":"```sh\npytest -q", "accepted":false}
+  ]
+}

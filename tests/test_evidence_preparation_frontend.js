@@ -26,6 +26,19 @@ for(const row of fixture.cases){
 }
 for(const row of fixture.invalid_cases){same(E.parse(row.text),[],row.name);check('Inert edited/example artifact: '+row.name);}
 const first=fixture.cases[0],reference=clone(first.reference),thread=clone(first.thread);
+const appendContexts=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/evidence_append_context.json'),'utf8'));
+for(const row of appendContexts.cases){
+  const block=E.format(reference),draft=row.draft.replaceAll('{{block}}',block),note=row.note;
+  const prefix=draft+(draft?'\n\n':'')+(note?'Next-step note:\n'+note+'\n\n':'');
+  if(!row.accepted)assert.throws(()=>E.appendBlock(draft,block,note),/Close the unfinished/,row.name);
+  else{
+    const combined=E.appendBlock(draft,block,note),parsed=E.parse(combined);
+    assert.equal(combined,prefix+block);assert.equal(parsed.length,row.references,row.name);
+    assert.equal(parsed.at(-1).start,combined.length-block.length);assert.equal(parsed.at(-1).end,combined.length);
+    same(parsed.at(-1).reference,reference);
+  }
+  check('Combined append context parity: '+row.name);
+}
 assert.throws(()=>E.capture(thread,{native_home:reference.native_home,thread_id:reference.thread_id,
   turn_id:reference.turn_id,item_id:reference.item_id,start_utf16:8,end_utf16:9,textFor:()=>first.item_text}),/Unicode/);
 assert.throws(()=>E.validate({...reference,quote:'\ud800',quote_end:reference.quote_start+1}),/readable/);
@@ -68,6 +81,26 @@ function world(extra={}){
 const loaded=()=>({thread:clone(thread),thread_id:reference.thread_id,turn_id:reference.turn_id,
   item_id:reference.item_id,start_utf16:first.utf16_start,end_utf16:first.utf16_end,expected_quote:first.quote});
 (async()=>{
+  {
+    const w=world();assert(await w.controller.reviewLoaded(loaded()));
+    w.controller.setNote('Check separately:\n~~~sh\npytest -q');
+    const before=clone(w.b),reviewed=clone(w.controller.state().reference);
+    assert.equal(await w.controller.append(),false);same(w.b,before);same(w.saves,[]);same(w.returned,[]);
+    assert.equal(w.controller.state().status,'review');assert(!w.controller.state().pending);
+    assert(w.controller.state().message.includes('Close the unfinished'));same(w.controller.state().reference,reviewed);
+    w.controller.setNote('Check separately:\n~~~sh\npytest -q\n~~~');assert(await w.controller.append());
+    assert.equal(w.saves.length,1);same(E.parse(w.b.text)[0].reference,reviewed);
+    check('Unfinished note blocks all host writes, keeps exact reviewed quote, corrected note appends once');
+  }
+  {
+    const w=world();w.b.text+='\n```sh\npytest -q';assert(await w.controller.reviewLoaded(loaded()));
+    const before=clone(w.b);assert.equal(await w.controller.append(),false);same(w.b,before);
+    same(w.saves,[]);same(w.returned,[]);assert.equal(w.controller.state().status,'review');
+    w.controller.cancel();w.b.text+='\n```';w.b.sequence++;
+    assert(await w.controller.reviewLoaded(loaded()));assert(await w.controller.append());
+    assert.equal(w.saves.length,1);same(E.parse(w.b.text)[0].reference,reference);
+    check('Unfinished destination keeps text/mode/revision/sequence; explicit close/review recovers');
+  }
   {
     const w=world(),before=clone(w.b);assert(await w.controller.reviewLoaded(loaded()));
     same(w.b,before);same(w.api,['/api/native/home']);same(w.controller.state().reference,reference);

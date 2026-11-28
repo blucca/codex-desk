@@ -33,6 +33,7 @@ original quote.
 Choose **Append to draft**. B keeps its existing text and Work/Plan mode, followed
 by the reviewed note and evidence block. The normal local draft save owns the
 revision. **Return without appending** restores the source reading view instead.
+Close any unfinished code fence or evidence block in the draft or separate note before appending.
 If the draft changed while you were reviewing, return and review its current
 text. Use the ordinary **Keep mine** or **Load saved draft** controls for a save
 conflict.

@@ -287,6 +287,11 @@ def append_evidence_block(draft_text, block):
     result = draft_text + ('\n\n' if draft_text else '') + block
     if len(result) > MAX_DRAFT_CHARS:
         raise ValueError('The appended evidence exceeds the local draft text limit')
+    # The complete block must remain actionable in its combined draft context,
+    # rather than disappearing inside an unfinished user fence/example.
+    if not any(row['start'] == len(result) - len(block) and row['end'] == len(result)
+               for row in parse_evidence_blocks(result)):
+        raise ValueError('Close the unfinished code fence or evidence block in the draft before appending')
     return result
 
 
