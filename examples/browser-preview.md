@@ -87,6 +87,51 @@ python3 examples/check_browser_preview_lookup.py --site temp/browser-preview/dem
 python3 examples/check_browser_preview_lookup.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/embedded-lookup-checks
 ```
 
+## Skim supplied tasks and inspect their own evidence
+
+Choose **Prepare sample task review** in the preview header, then read
+`sample-child-thread` by ID. This deliberate sample action adds a synthetic
+61-task chain to the existing linked original; ordinary startup keeps the four
+sample histories and their existing items.
+
+1. Choose **Task overview**. Page with **Next tasks** to supplied task 42
+   (`sample-review-task-41`). Its own final answer wins over its later commentary.
+   The following task keeps its actual unreported assistant phase; the empty,
+   interrupted task and the task without a supplied instruction retain their own
+   rows.
+2. Choose **Read task** → **Read this task’s evidence**. The 45 supplied items
+   include command, structured MCP and file-change originals. **Next task
+   evidence** reaches the long command `sample-review-long-command`.
+3. Choose **Read full original item**, then Find
+   `TASK EVIDENCE — STRASSE Café 项目 😀`. The exact original excerpt is
+   `TASK EVIDENCE — Straße Café 项目 😀`. Task-scoped Find has one occurrence;
+   **Whole original conversation** includes all three supplied task occurrences.
+4. Copy the full original or select the quote backwards and choose **Review
+   evidence for task** → **Return without appending**. **Return to task evidence**
+   and **Return to task overview** keep their own page and control;
+   **Return to original passage** restores the original Find, Range and window.
+   Close the original to return to B’s same unsent Plan and both paused queues.
+
+The checker exercises pointer selection and genuine Tab/Enter, exact response
+identity despite reused item IDs, task-scoped versus original-wide Find, full
+Copy, exact quote review, original passage and editor return. Reload keeps B’s
+preparation and restores the ordinary sample sources until another deliberate
+**Prepare sample task review** action.
+
+Build ordinary/direct, ordinary/iframe, rich/direct and rich/iframe as in
+[Rebuild and check](#rebuild-and-check) and [Check session reading returns](#check-session-reading-returns), then run:
+
+```sh
+python3 examples/check_browser_preview_task_review.py --site temp/browser-preview/demo --evidence temp/browser-preview/task-review-normal
+python3 examples/check_browser_preview_task_review.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/task-review-iframe
+python3 examples/check_browser_preview_task_review.py --rich --site temp/browser-preview/reading --evidence temp/browser-preview/task-review-rich
+python3 examples/check_browser_preview_task_review.py --rich --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/task-review-rich-iframe
+```
+
+Each command checks 1250 and 390 pixels against the maintained task overview and
+`task-evidence.js` helper copied from the same source. [English / 中文 task-led
+review guide](../docs/skim-original-tasks-and-evidence.md).
+
 ## Read the task behind sample evidence
 
 In an original sample conversation, use **Read containing task** beside a command

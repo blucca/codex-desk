@@ -62,6 +62,21 @@ async def one(browser,width,evidence):
     def target():return page.locator('.history-reader-target')
     async def original():
      return await target().evaluate("n=>({turn:n.dataset.turnId,item:n.dataset.itemId,start:n.dataset.windowStart,scroll:n.querySelector('pre').scrollTop,selection:getSelection().toString(),query:$('history-reader-find-query').value,status:$('history-reader-find-status').textContent})")
+    async def source_glyph():
+        return await target().evaluate(r"""n=>{
+          const p=n.querySelector('pre'),body=$('history-reader-body'),reader=$('history-reader'),text=p.textContent,start=Number(n.dataset.windowStart);
+          const pr=p.getBoundingClientRect(),br=body.getBoundingClientRect(),rr=reader.getBoundingClientRect();
+          const clip={left:Math.max(pr.left,br.left,rr.left,0),right:Math.min(pr.right,br.right,rr.right,innerWidth),top:Math.max(pr.top,br.top,rr.top,0),bottom:Math.min(pr.bottom,br.bottom,rr.bottom,innerHeight)};
+          const walker=document.createTreeWalker(p,NodeFilter.SHOW_TEXT),nodes=[];let at=0,node;while(node=walker.nextNode()){nodes.push({node,start:at,end:at+node.data.length});at+=node.data.length;}
+          function point(at,right=false){for(const q of nodes){if(at<q.end||!right&&at===q.end)return[q.node,at-q.start];}const q=nodes.at(-1);return q?[q.node,q.node.data.length]:null;}
+          function glyph(at){const a=point(at,true),b=point(at+(text.codePointAt(at)>0xffff?2:1));if(!a||!b)return null;const r=document.createRange();r.setStart(...a);r.setEnd(...b);return [...r.getClientRects()].find(r=>r.width&&r.height);}
+          let first=null;const offsets=[];for(let i=0;i<text.length;i+=text.codePointAt(i)>0xffff?2:1)if(!['\n','\r'].includes(text[i]))offsets.push(i);
+          let low=0,high=offsets.length;while(low<high){const mid=(low+high)>>>1,r=glyph(offsets[mid]);if(!r||r.bottom<=clip.top)low=mid+1;else high=mid;}
+          for(let i=low;i<offsets.length;i++){const at=offsets[i],r=glyph(at);if(!r)continue;if(r.top>=clip.bottom)break;if(r.bottom>clip.top&&r.right>clip.left&&r.left<clip.right){const lines=[...text.slice(0,at+30).matchAll(/Original command line (\d{4})/g)].filter(m=>m.index<=at);first={offset:start+at,char:String.fromCodePoint(text.codePointAt(at)),line:lines.length?Number(lines.at(-1)[1]):null,top:r.top,relative_top:r.top-clip.top,bottom:r.bottom};break;}}
+          const selection=getSelection(),location=(node,offset)=>{const q=nodes.find(q=>q.node===node);return q?start+q.start+offset:null;};
+          const anchor=location(selection?.anchorNode,selection?.anchorOffset),focus=location(selection?.focusNode,selection?.focusOffset);
+          return {range:{text:selection?.toString()||'',anchor,focus,backward:anchor!==null&&focus!==null&&anchor>focus},window_start:start,inner:p.scrollTop,body:body.scrollTop,outer:reader.scrollTop,clip,first_visible:first,pre:{top:pr.top,bottom:pr.bottom,height:pr.height,font:getComputedStyle(p).font,line_height:getComputedStyle(p).lineHeight},focus:document.activeElement.id,query:$('history-reader-find-query').value};
+        }""")
     async def overview(returned=False):
      control='#history-reader-find-matches-return' if returned else '#history-reader-find-matches-show'
      await page.locator(control).evaluate('n=>n.focus({preventScroll:true})');await page.keyboard.press('Enter');await base.frames(page)
@@ -112,9 +127,14 @@ async def one(browser,width,evidence):
     await check('bounded-all-exact-spans-reachable-no-source-read-and-current-passage-return')
     await overview();late_index=await long_match(keyboard=True);late=await original();assert int(late['start'])>20000 and late['scroll']>0
     await check('real-Tab-Enter-selects-second-long-Unicode-occurrence-not-equal-first')
-    await select_quote();selected_long=await original();await overview(True)
+    await select_quote();selected_long=await original();glyph_before=await source_glyph();await overview(True)
     assert await page.evaluate('document.activeElement.dataset.findAction')=='match:'+str(late_index)
-    await page.locator('#history-reader-find-matches-close').click();await base.frames(page);assert await original()==selected_long
+    await page.locator('#history-reader-find-matches-close').click();await base.frames(page);restored=await original();glyph_after=await source_glyph()
+    result['overview_restore_glyph']={'before':glyph_before,'after':glyph_after}
+    assert {k:v for k,v in restored.items() if k!='scroll'}=={k:v for k,v in selected_long.items() if k!='scroll'},(selected_long,restored)
+    assert glyph_before['first_visible'] and glyph_after['first_visible'],result['overview_restore_glyph']
+    assert glyph_before['first_visible']['offset']==glyph_after['first_visible']['offset'] and glyph_before['first_visible']['char']==glyph_after['first_visible']['char'],result['overview_restore_glyph']
+    assert glyph_before['range']==glyph_after['range'],result['overview_restore_glyph']
     await overview(True);await long_match(late=False);assert int((await original())['start'])<int(late['start'])
     await overview(True);await long_match(late=True);await select_quote();selected_long=await original()
     await check('pointer-distinguishes-identical-within-item-occurrences-and-keeps-backward-Range')

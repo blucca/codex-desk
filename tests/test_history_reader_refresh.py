@@ -7,7 +7,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=(ROOT/'codex_desk/static/history_reader.js').read_text()
-HELPERS = SOURCE[SOURCE.index('  function commandOutputStart('):SOURCE.index('  function saveOriginalReading(')] + SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function refreshControls()'):SOURCE.index('  async function read()')]
+HELPERS = SOURCE[SOURCE.index('  function taskEvidenceScoped()'):SOURCE.index('  function taskEvidenceResult(')] + SOURCE[SOURCE.index('  function commandOutputStart('):SOURCE.index('  function saveOriginalReading(')] + SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function refreshControls()'):SOURCE.index('  async function read()')]
 ROW=SOURCE[SOURCE.index('  function rowKey('):SOURCE.index('  function itemNode(')]
 
 @unittest.skipUnless(shutil.which('node'),'Node is required for controller checks')

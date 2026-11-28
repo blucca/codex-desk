@@ -242,20 +242,20 @@
     return {start,end};
   }
   function findControls(message) {
-    const ready=!!source && !loading && el('').open && (!taskReview || taskReview.mode==='item');
+    const ready=!!source && !loading && el('').open && (!taskReview || taskReview.mode==='item' || taskReview.mode==='evidence');
     el('find-form').hidden=!ready;el('find-query').disabled=!ready;
     el('find-submit').disabled=!ready || finding;
     el('find-previous').disabled=el('find-next').disabled=!ready || finding || findTotal===0;
     el('find-form').setAttribute('aria-busy',String(finding));
     if(message!==undefined)el('find-status').textContent=message;
-    else if(finding)el('find-status').textContent='Finding matches in the complete original text…';
+    else if(finding)el('find-status').textContent=taskEvidenceScoped()?'Finding matches in this task’s supplied evidence…':'Finding matches in the complete original text…';
     else if(findTotal)el('find-status').textContent=findCursor>=0
-      ? `Match ${findCursor+1} of ${findTotal}. Previous/Next match or Shift+F3/F3 moves through this original.`
+      ? `Match ${findCursor+1} of ${findTotal}. Previous/Next match or Shift+F3/F3 moves through ${taskEvidenceScoped()?'this task’s supplied evidence':'this original'}.`
       : `${findTotal} matches. Choose Previous/Next match to jump to an occurrence.`;
     else el('find-status').textContent=findSubmitted
-      ? 'No matches in the readable original text for this phrase.'
-      : 'Search the complete readable text in this original, including other item pages and text windows.';
-    findMatchesControls();
+      ? taskEvidenceScoped()?'No matches in this task’s supplied readable evidence for this phrase.':'No matches in the readable original text for this phrase.'
+      : taskEvidenceScoped()?'Search only this exact task’s supplied readable items, including complete text windows.':'Search the complete readable text in this original, including other item pages and text windows.';
+    taskEvidenceFindControls();findMatchesControls();
   }
   function resetFind() {
     resetFindMatches();
@@ -272,11 +272,11 @@
   function findMatchesValid() {
     return !!findMatches && findMatches.source===source && findMatches.groups===findGroups &&
       findMatches.query===findQuery && findSubmitted && !finding && findTotal>0 &&
-      el('find-query').value.trim()===findQuery && current(version) && (!taskReview || taskReview.mode==='item');
+      el('find-query').value.trim()===findQuery && current(version) && (!taskReview || taskReview.mode==='item' || taskReview.mode==='evidence');
   }
   function findMatchesControls() {
     const show=el('find-matches-show'),back=el('find-matches-return'),panel=el('find-matches');if(!show || !panel)return;
-    const ready=!!source && !loading && current(version) && (!taskReview || taskReview.mode==='item');
+    const ready=!!source && !loading && current(version) && (!taskReview || taskReview.mode==='item' || taskReview.mode==='evidence');
     show.hidden=!ready || !findSubmitted;show.disabled=!ready || finding || !findTotal || el('find-query').value.trim()!==findQuery;
     const valid=findMatchesValid();panel.hidden=!valid || !findMatches.active;
     if(back){back.hidden=!valid || findMatches.active;back.disabled=!valid;}
@@ -301,7 +301,7 @@
       active,chosen:findCursor,passageView:captureView(),view:null};
   }
   function showFindMatches() {
-    if(!source || !available() || finding || !findSubmitted || !findTotal || el('find-query').value.trim()!==findQuery || (taskReview && taskReview.mode!=='item'))return false;
+    if(!source || !available() || finding || !findSubmitted || !findTotal || el('find-query').value.trim()!==findQuery || (taskReview && !['item','evidence'].includes(taskReview.mode)))return false;
     if(!findMatchesValid())findMatches={source,groups:findGroups,query:findQuery,
       offset:Math.floor(Math.max(0,findCursor)/FIND_MATCH_PAGE)*FIND_MATCH_PAGE,active:false,chosen:findCursor,view:null};
     findMatches.passageView=captureView();findMatches.active=true;renderFindMatches();return true;
@@ -316,7 +316,7 @@
     const state=findMatches,ticket=version,epoch=findVersion,list=el('find-match-list');list.replaceChildren();
     const valid=()=>findMatches===state && findMatchesValid() && current(ticket) && epoch===findVersion;
     const last=Math.min(findTotal,state.offset+FIND_MATCH_PAGE);
-    el('find-matches-status').textContent=`Showing Find matches ${state.offset+1}–${last} of ${findTotal} for “${findQuery}”. This supplied original only.`;
+    el('find-matches-status').textContent=`Showing Find matches ${state.offset+1}–${last} of ${findTotal} for “${findQuery}”. ${taskEvidenceScoped()?'This task’s supplied evidence only.':'This supplied original only.'}`;
     for(let cursor=state.offset;cursor<last;cursor++) {
       const hit=root.DeskHistoryFind.occurrence(findGroups,cursor),row=rows[hit.index],text=textFor(row.item);
       const article=node('article',undefined,'history-reader-find-match');article.dataset.matchIndex=String(cursor);
@@ -352,6 +352,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     } else findCursor=(findCursor+direction+findTotal)%findTotal;
     ++readingIntentEpoch;
     if(findMatches?.active){findMatches.view=matchListView();findMatches.active=false;}
+    if(taskReview?.mode==='evidence'){taskReview.evidence.view=captureView();taskReview.mode='item';taskReview.evidenceItem=true;}
     page=Math.floor(findMatch().index/PAGE_ENTRIES);findControls();render();
   }
   async function submitFind(direction=1) {
@@ -360,7 +361,9 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(query.length<1 || query.length>200){findControls('Enter 1–200 characters to find in this original.');el('find-query').focus();return;}
     resetFindMatches();
     const ticket=version,search=++findVersion;
-    const valid=()=>search===findVersion && current(ticket);
+    const scope=taskEvidenceScoped()?taskReview.evidence:null,scopeCapture=scope?.capture;
+    const valid=()=>search===findVersion && current(ticket) && (!scope || taskReview?.evidence===scope && taskEvidenceScoped());
+    const eligible=scope?new Set(root.DeskTaskEvidence.list(source,scopeCapture,textFor,item=>visibleTypes.has(item.type)).items.filter(item=>item.available).map(item=>item.item_id)):null;
     finding=true;findSubmitted=true;findQuery=query;findGroups=[];findTotal=0;findCursor=-1;findControls();render(false);
     if(el('match').textContent==='Showing the matching original native turn and item.')
       el('match').textContent='The saved search result identifies its original native turn and item. Find navigation is independent.';
@@ -371,7 +374,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
       for(let index=0;index<rows.length;index++) {
         if(!valid())return;
         const item=rows[index].item;
-        if(!item || !visibleTypes.has(item.type))continue;
+        if(!item || !visibleTypes.has(item.type) || scope && (rows[index].turn.id!==scopeCapture.turn_id || !eligible.has(item.id)))continue;
         const spans=await root.DeskHistoryFind.spansAsync(textFor(item),query,valid);
         if(!valid() || spans===null)return;
         if(spans.length){groups.push({index,spans,first:total});total+=spans.length;}
@@ -496,7 +499,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
   function rowKey(row){return row?.item && str(row.turn.id) && str(row.item.id)?JSON.stringify([row.turn.id,row.item.id]):null;}
   function itemNode(row,index,ticket,view=null) {
     const {item,turn}=row,text=textFor(item),occurrence=findMatch();
-    const matched=occurrence?index===occurrence.index:!findSubmitted && index===targetIndex;
+    const matched=occurrence?index===occurrence.index:(!findSubmitted || taskReview?.evidenceItem) && index===targetIndex;
     const phrase=matched && !occurrence?str(requested.match_text):'';
     const exactStart=Number.isInteger(requested.match_start)?requested.match_start:null;
     const at=matched && occurrence?occurrence.start:phrase?(exactStart!==null
@@ -545,8 +548,11 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
   function render(scroll=true,view=null) {
     if(!source || !available())return;
     taskControls();
+    if(taskReview?.mode==='overview')return renderTaskOverview(scroll,view);
     if(taskReview?.mode==='instructions')return renderInstructionSearch(scroll,view);
     if(taskReview?.mode==='context')return renderTaskContext(scroll,view);
+    if(taskReview?.mode==='evidence')return renderTaskEvidence(scroll,view);
+    if(taskReview?.evidenceItem)return renderTaskEvidenceItem(scroll,view);
     const ticket=version,first=page*PAGE_ENTRIES,last=Math.min(rows.length,first+PAGE_ENTRIES);
     const body=el('body');body.replaceChildren();body.scrollTop=0;
     let previousTurn=null,section=null;
@@ -750,7 +756,9 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(view && current(ticket))restoreView(view,ticket);
   }
   async function refreshFind(query,anchor,ticket,previousMatches=null){
-    const search=++findVersion,valid=()=>search===findVersion && current(ticket);
+    const search=++findVersion,scope=taskEvidenceScoped()?taskReview.evidence:null,scopeCapture=scope?.capture;
+    const valid=()=>search===findVersion && current(ticket) && (!scope || taskReview?.evidence===scope && taskEvidenceScoped());
+    const eligible=scope?new Set(root.DeskTaskEvidence.list(source,scopeCapture,textFor,item=>visibleTypes.has(item.type)).items.filter(item=>item.available).map(item=>item.item_id)):null;
     preserveChrome(()=>{finding=true;findGroups=[];findTotal=0;findCursor=-1;findControls();},ticket);
     const groups=[];let total=0;
     try{
@@ -906,7 +914,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
       el('error').textContent=error.message;el('error').hidden=false;el('retry').hidden=false;
       return false;
     } finally {
-      if(ticket===version){loading=false;el('body').setAttribute('aria-busy','false');el('retry').disabled=false;findControls();refreshControls();nativeIdCopyControls();originalFrontierControls();}
+      if(ticket===version){loading=false;el('body').setAttribute('aria-busy','false');el('retry').disabled=false;findControls();refreshControls();nativeIdCopyControls();taskControls();}
     }
   }
   async function show(result,callbacks={}) {
@@ -940,13 +948,107 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
   function taskControls() {
     originalFrontierControls();
     const active=!!taskReview && !!source;
-    if(el('task-return'))el('task-return').hidden=!active || taskReview.mode!=='item';
+    if(el('task-overview-show')){
+      el('task-overview-show').hidden=!source || taskReview?.mode==='overview';
+      el('task-overview-show').disabled=!root.DeskHistoryTasks?.overview || loading || !current(version);
+    }
+    if(el('task-overview-return'))el('task-overview-return').hidden=!active || !taskReview.overview || taskReview.mode==='overview';
+    if(el('task-return'))el('task-return').hidden=!active || !['item','evidence'].includes(taskReview.mode);
+    if(el('task-evidence-return'))el('task-evidence-return').hidden=!active || !taskReview.evidence || !taskReview.evidenceItem;
     if(el('task-instructions-return'))el('task-instructions-return').hidden=!active || taskReview.mode==='instructions' || taskReview.instructionSearch?.submitted==null;
     if(el('task-passage'))el('task-passage').hidden=!active;
     if(el('task-status')){
       el('task-status').hidden=!active;
-      el('task-status').textContent=active?(taskReview.mode==='instructions'?'Supplied user instructions in this loaded original':taskReview.itemLabel || 'Native task context · Turn '+str(taskReview.capture.turn_id)):'';
+      el('task-status').textContent=active?(taskReview.mode==='overview'?'Supplied tasks in this loaded original':taskReview.mode==='instructions'?'Supplied user instructions in this loaded original':taskReview.itemLabel || 'Native task context · Turn '+str(taskReview.capture.turn_id)):'';
     }
+  }
+  function taskEvidenceScoped() {
+    return !!taskReview?.evidence && (taskReview.mode==='evidence' || taskReview.evidenceItem) && taskReview.evidence.scope==='task';
+  }
+  function taskEvidenceFindControls() {
+    const field=el('find-scope'),label=el('find-label');if(!field)return;
+    const active=!!taskReview?.evidence && (taskReview.mode==='evidence' || taskReview.evidenceItem);
+    field.hidden=!active;field.disabled=!active || loading;
+    if(active)field.value=taskReview.evidence.scope;
+    if(label)label.textContent=taskEvidenceScoped()?'Find in this task’s supplied evidence':'Find in this original conversation';
+  }
+  function taskEvidenceResult(state) {
+    if(state.source!==source){
+      state.result=root.DeskTaskEvidence.list(source,state.capture,textFor,item=>visibleTypes.has(item.type));state.source=source;
+      state.page=root.DeskTaskEvidence.page(state.result,state.page).index;
+    }
+    return state.result;
+  }
+  function openTaskEvidence() {
+    if(!taskReview || !source || !available() || !root.DeskTaskEvidence)return false;
+    const review=taskReview;review.contextView=captureView();
+    if(!review.evidence)review.evidence={capture:{...review.capture},source:null,result:null,page:0,view:null,chosen:null,itemView:null,scope:'task'};
+    taskEvidenceResult(review.evidence);review.mode='evidence';review.evidenceItem=false;review.itemLabel='Task evidence · Turn '+review.capture.turn_id;
+    resetFind();render(!review.evidence.view,review.evidence.view);return true;
+  }
+  function taskEvidenceAction(item,capture=taskReview.evidence.capture) {
+    return 'evidence-item:'+encodeURIComponent(JSON.stringify([capture.turn_id,item.item_id]));
+  }
+  function renderTaskEvidence(focus=true,view=null) {
+    const review=taskReview,state=review?.evidence,ticket=version,body=el('body');if(!state || !current(ticket))return;
+    const original=source,epoch=findVersion,result=taskEvidenceResult(state);
+    const focused=view?.taskFocus?.startsWith('evidence-item:')?result.items.find(item=>item.available && taskEvidenceAction(item,state.capture)===view.taskFocus):null;
+    if(focused)state.page=Math.floor(focused.index/root.DeskTaskEvidence.PAGE_ITEMS);
+    const slice=root.DeskTaskEvidence.page(result,state.page);
+    const valid=()=>taskReview===review && review.mode==='evidence' && review.evidence===state && current(ticket) && source===original && epoch===findVersion;
+    body.replaceChildren();body.scrollTop=0;
+    const panel=node('section',undefined,'history-reader-task-evidence');panel.tabIndex=-1;panel.dataset.taskAction='evidence-status';
+    panel.append(node('h3','This task’s supplied evidence'),node('p',`Thread ${state.capture.thread_id}\nTurn ${state.capture.turn_id}\nNative turn status: ${str(result.turn_status)||'unreported'}`,'history-reader-identity'));
+    const error=typeof result.turn_error==='string'?result.turn_error:str(result.turn_error?.message);if(error)panel.append(node('p',error,'history-reader-turn-error'));
+    if(!result.available)panel.append(node('p',`Captured task evidence unavailable in this fresh original: ${result.reason}.`,'history-reader-task-evidence-status'));
+    else if(!result.total)panel.append(node('p','No native items were supplied for this task.','history-reader-task-evidence-status'));
+    const list=node('div',undefined,'history-reader-task-evidence-list');
+    for(const item of slice.items){
+      const article=node('article',undefined,'history-reader-task-evidence-row');article.dataset.itemIndex=String(item.index);article.dataset.turnId=state.capture.turn_id;article.dataset.itemId=str(item.item_id);
+      article.append(node('h4',`Item ${item.index+1} · ${item.item_type || 'Type unreported'}`),node('p',`Item ${str(item.item_id)||'unreported'}\n${item.available?`Readable original · ${item.text_length} UTF16 text units`:item.reason}`,'history-reader-identity'));
+      if(item.preview)article.append(node('pre',item.preview+(item.preview_end<item.text_length?'…':''),'history-reader-task-preview'));
+      article.append(taskButton('Read full original item',taskEvidenceAction(item,state.capture),()=>{if(valid())readTaskEvidenceItem(item.index);},!item.available));list.append(article);
+    }
+    panel.append(list);const controls=node('div',undefined,'actions history-reader-task-navigation');
+    for(const [direction,label] of [[-1,'Previous task evidence'],[1,'Next task evidence']]){
+      const next=slice.index+direction;
+      controls.append(taskButton(label,direction<0?'evidence-previous':'evidence-next',()=>{if(!valid())return;state.page=next;state.view=null;renderTaskEvidence();},next<0 || next>=slice.pages));
+    }
+    panel.append(controls);body.append(panel);
+    el('coverage').textContent=`Showing supplied items ${slice.total?slice.first+1:0}–${Math.min(slice.total,slice.first+20)} of ${slice.total}. Page ${slice.index+1} of ${slice.pages}. ${result.readable_count} readable; native order and unsupported rows retained. Up to 20 supplied items per page.`;
+    el('previous').hidden=el('next').hidden=true;taskControls();findControls();
+    if(view){restoreView(view,ticket);if(view.taskFocus?.startsWith('evidence-item:') && !focused)body.focus({preventScroll:true});}
+    else if(focus){panel.focus({preventScroll:true});el('').scrollTop=0;}
+  }
+  function readTaskEvidenceItem(index) {
+    const review=taskReview,state=review?.evidence;if(!state || review.mode!=='evidence' || !available())return false;
+    const item=taskEvidenceResult(state).items.find(item=>item.index===index && item.available);if(!item)return false;
+    const matches=rows.map((row,index)=>({row,index})).filter(({row})=>row.turn.id===state.capture.turn_id && row.item?.id===item.item_id);
+    if(matches.length!==1)return false;
+    const prior=state.chosen===item.item_id?state.itemView:null;state.view=captureView();state.chosen=item.item_id;
+    review.mode='item';review.evidenceItem=true;review.itemLabel='Task evidence · '+item.item_type+'\nTurn '+state.capture.turn_id+' · Item '+item.item_id;
+    requested={thread_id:source.id,turn_id:state.capture.turn_id,item_id:item.item_id};targetIndex=matches[0].index;page=Math.floor(targetIndex/PAGE_ENTRIES);
+    ++findVersion;finding=false;findCursor=-1;findControls();render(!prior,prior);return true;
+  }
+  function renderTaskEvidenceItem(scroll=true,view=null) {
+    const review=taskReview,state=review?.evidence,ticket=version,body=el('body');if(!state || !current(ticket))return;
+    const occurrence=findMatch(),index=occurrence?.index ?? rows.findIndex(row=>row.turn.id===requested.turn_id && row.item?.id===requested.item_id),row=rows[index];
+    let exact=false;
+    if(row?.item){
+      const result=root.DeskTaskEvidence.list(source,{thread_id:source.id,turn_id:row.turn.id},textFor,item=>visibleTypes.has(item.type));
+      exact=result.available && result.items.some(item=>item.available && item.item_id===row.item.id);
+    }
+    body.replaceChildren();body.scrollTop=0;
+    if(exact){
+      const section=node('section',undefined,'history-reader-turn');section.dataset.turnId=row.turn.id;section.append(node('h3','Turn '+row.turn.id));section.append(itemNode(row,index,ticket,view));body.append(section);
+      el('coverage').textContent='One exact supplied original item · full Copy and existing native text windows. Turn '+row.turn.id+' · Item '+row.item.id;
+    }else{body.append(node('p',`The captured native item is unavailable in this fresh original. Turn ${str(requested.turn_id)} · Item ${str(requested.item_id)}`,'history-reader-task-evidence-status'));el('coverage').textContent='Captured source identity retained; no other item is used.';}
+    el('previous').hidden=el('next').hidden=true;taskControls();
+    const target=body.querySelector('.history-reader-target');if(target && scroll)scrollMatch(target,ticket);if(view)restoreView(view,ticket);
+  }
+  function returnTaskEvidence() {
+    const review=taskReview,state=review?.evidence;if(!state || !available())return false;
+    const view=captureView();if(view.items.has(JSON.stringify([state.capture.turn_id,state.chosen])))state.itemView=view;review.mode='evidence';review.evidenceItem=false;findControls();render(false,state.view);return true;
   }
   function taskSnapshot() {
     const occurrence=findMatch(),key=occurrence?rowKey(rows[occurrence.index]):null;
@@ -965,13 +1067,99 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(!task?.available)throw Error('The captured native task or item is not supplied by this original read.');
     if(!taskReview)taskReview={passage:taskSnapshot(),capture:null,mode:'context',contextView:null};
     ++findVersion;finding=false;findSubmitted=false;findGroups=[];findTotal=0;findCursor=-1;
-    taskReview.capture={thread_id:task.thread_id,turn_id:task.turn_id};taskReview.mode='context';
+    if(taskReview.capture?.turn_id!==task.turn_id){taskReview.evidence=null;taskReview.evidenceItem=false;}
+    if(taskReview.evidence && (taskReview.evidence.capture.thread_id!==task.thread_id || taskReview.evidence.capture.turn_id!==task.turn_id))taskReview.evidence=null;
+    taskReview.capture={thread_id:task.thread_id,turn_id:task.turn_id};taskReview.mode='context';taskReview.evidenceItem=false;
     taskReview.contextView=null;taskReview.message='';taskReview.itemLabel='';taskReview.instructionTarget=instructionMatch;
     findControls();render();return true;
   }
   function taskButton(label,action,callback,disabled=false) {
     const button=node('button',label);button.type='button';button.dataset.taskAction=action;
     button.disabled=disabled;button.onclick=callback;return button;
+  }
+  function taskOverviewState() {
+    if(!taskReview)return null;
+    return taskReview.overview ||= {source:null,page:0,result:null,view:null,chosen:null,notice:''};
+  }
+  function taskOverviewResult(state) {
+    if(state.source!==source || state.result?.page!==state.page){
+      state.result=root.DeskHistoryTasks.overview(source,source.id,state.page);
+      if(state.source && state.source!==source && state.chosen){
+        const retained=root.DeskHistoryTasks.list(source,source.id).some(task=>task.available && task.turn_id===state.chosen.turn_id);
+        state.notice=retained?'':'The task previously selected from this overview is no longer available in this original read.';
+      }
+      state.source=source;state.page=state.result.page;
+    }
+    return state.result;
+  }
+  function showTaskOverview() {
+    if(!root.DeskHistoryTasks?.overview || !source || loading || !available())return false;
+    if(taskReview?.mode==='overview')return true;
+    if(!taskReview)taskReview={passage:taskSnapshot(),capture:null,mode:'overview',contextView:null};
+    const state=taskOverviewState();
+    taskReview.mode='overview';taskReview.evidenceItem=false;taskReview.itemLabel='';taskReview.message='';
+    ++findVersion;finding=false;findSubmitted=false;findGroups=[];findTotal=0;findCursor=-1;
+    findControls();render(true,state.view);return true;
+  }
+  function chooseOverviewTask(capture,kind) {
+    if(!taskReview || !source || !available())return false;
+    const state=taskOverviewState();
+    try{
+      const task=taskOverviewResult(state).entries.find(row=>row.available && row.index===capture.index && row.turn_id===capture.turn_id);
+      if(!task)throw Error('This exact supplied task is no longer on the current overview page.');
+      state.view=captureView();state.chosen={turn_id:task.turn_id};state.notice='';
+      openTaskContext(task);
+      if(kind==='response')return readTaskItem('response');
+      return true;
+    }catch(error){state.notice=error.message;taskReview.mode='overview';render(false,state.view);return false;}
+  }
+  function renderTaskOverview(focus=true,view=null) {
+    const review=taskReview,ticket=version,body=el('body');if(!review || !current(ticket))return;
+    const state=taskOverviewState(),result=taskOverviewResult(state),snapshot=source;
+    const valid=()=>taskReview===review && review.mode==='overview' && source===snapshot && state.result===result && current(ticket);
+    body.replaceChildren();body.scrollTop=0;
+    const panel=node('section',undefined,'history-reader-task-overview');
+    const heading=node('h3','Task overview');heading.tabIndex=-1;
+    panel.append(heading,node('p','Supplied task order, your instructions and each task’s own reported response. Open a task to read its complete original.','muted'));
+    if(!result.total)panel.append(node('p','No native tasks were supplied in this original read.','muted'));
+    for(const task of result.entries){
+      const article=node('article',undefined,'history-reader-task-overview-row');article.dataset.turnId=str(task.turn_id);article.dataset.taskIndex=String(task.index);
+      article.append(node('h4','Supplied task '+task.ordinal),node('p','Turn '+(str(task.turn_id)||'unreported')+'\nNative turn status: '+(str(task.turn_status)||'unreported'),'history-reader-identity'));
+      const error=typeof task.turn_error==='string'?task.turn_error:str(task.turn_error?.message);
+      if(error)article.append(node('p',Array.from(error).slice(0,320).join(''),'history-reader-turn-error'));
+      if(!task.available)article.append(node('p','This task has no unambiguous native turn identity.','muted'));
+      else {
+        if(!task.user_message_count)article.append(node('p','No user instruction was supplied for this task.','muted'));
+        for(const [index,instruction] of task.instructions.entries()){
+          article.append(node('p','Supplied user instruction '+(index+1),'muted'));
+          if(instruction.text)article.append(node('pre',instruction.text+(instruction.truncated?'…':''),'history-reader-task-preview'));
+          if(!instruction.available)article.append(node('p',instruction.reason==='instruction_unavailable'?'No readable user text was supplied.':'This instruction has no unambiguous native item identity.','muted'));
+        }
+        if(task.user_message_count>task.instructions.length)article.append(node('p',`Showing ${task.instructions.length} of ${task.user_message_count} supplied user instructions. Read the task for all instructions.`,'muted'));
+        const response=task.response;
+        if(response.available){
+          article.append(node('p',response.label+' · Phase: '+(str(response.phase)||'unreported')+'\nItem '+response.item_id,'history-reader-identity'));
+          article.append(node('pre',response.preview.text+(response.preview.truncated?'…':''),'history-reader-task-preview'));
+        }else article.append(node('p',response.status==='ambiguous_item'?'This task response has no unambiguous native item identity.':'No readable assistant response was supplied for this task.','muted'));
+      }
+      const actions=node('div',undefined,'actions');
+      for(const [kind,label,disabled] of [['context','Read task',!task.available],['response','Read task response',!task.available || !task.response.available]]){
+        actions.append(taskButton(label,'overview-'+kind+':'+(task.available?encodeURIComponent(task.turn_id):'unavailable-'+task.index),()=>{if(valid())chooseOverviewTask(task,kind);},disabled));
+      }
+      article.append(actions);panel.append(article);
+    }
+    const navigation=node('div',undefined,'actions history-reader-task-navigation');
+    for(const [direction,label] of [[-1,'Previous tasks'],[1,'Next tasks']]){
+      const next=result.page+direction;
+      navigation.append(taskButton(label,direction<0?'overview-previous':'overview-next',()=>{
+        if(!valid())return;state.page=next;state.view=null;state.notice='';renderTaskOverview();
+      },next<0 || next>=result.pages));
+    }
+    panel.append(navigation);
+    if(state.notice){const notice=node('p',state.notice);notice.setAttribute('role','status');panel.append(notice);}
+    body.append(panel);el('coverage').textContent=`Showing supplied tasks ${result.total?result.first+1:0}–${result.first+result.entries.length} of ${result.total}. Page ${result.page+1} of ${result.pages}. Up to ${result.limit} tasks per page; previews are limited to 320 characters and 3 user instructions per task. This loaded original only.`;
+    el('previous').hidden=el('next').hidden=true;taskControls();
+    if(view)restoreView(view,ticket);else if(focus){el('').scrollTop=0;heading.focus({preventScroll:true});}
   }
   function instructionSearchState() {
     if(!taskReview)return null;
@@ -1100,6 +1288,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     }
     const addressable=root.DeskHistoryTasks.list(source,review.capture.thread_id).some(task=>task.turn_id===review.capture.turn_id && task.available);
     panel.append(taskButton('Read this task response','response',()=>readTaskItem('response'),!addressable));
+    if(root.DeskTaskEvidence){const original=source;panel.append(taskButton('Read this task’s evidence','evidence-open',()=>{if(taskReview===review && current(ticket) && source===original && panel.isConnected)openTaskEvidence();},!addressable));}
     const navigation=node('div',undefined,'actions history-reader-task-navigation');
     for(const [direction,label] of [[-1,'Previous task'],[1,'Next task']]) {
       const adjacent=addressable?root.DeskHistoryTasks.adjacent(source,review.capture,direction):null;
@@ -1128,7 +1317,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
       }
       const index=rows.findIndex(row=>row.item && row.turn.id===review.capture.turn_id && row.item.id===selection.item_id);
       if(index<0)throw Error('The captured native item is not available in this original read.');
-      review.contextView=view;review.mode='item';review.message='';
+      review.contextView=view;review.mode='item';review.evidenceItem=false;review.message='';
       review.itemLabel=kind==='response'?`Selected task response · ${str(selection.label)} · Phase: ${str(selection.phase)||'unreported'}\nTurn ${review.capture.turn_id} · Native status at selection: ${str(selection.turn_status)||'unreported'} · Source: native history read`:
         'Supplied user instruction · Turn '+review.capture.turn_id;
       requested={thread_id:source.id,turn_id:review.capture.turn_id,item_id:selection.item_id};
@@ -1142,7 +1331,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
   function returnTaskContext() {
     if(!taskReview || !source || !available())return false;
     ++findVersion;finding=false;findSubmitted=false;findGroups=[];findTotal=0;findCursor=-1;
-    taskReview.mode='context';taskReview.itemLabel='';findControls();render(false,taskReview.contextView);return true;
+    taskReview.mode='context';taskReview.evidenceItem=false;taskReview.itemLabel='';findControls();render(false,taskReview.contextView);return true;
   }
   async function returnTaskPassage() {
     if(!taskReview || !source || !available())return false;
@@ -1180,8 +1369,16 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(el('refresh'))el('refresh').onclick=refresh;
     if(el('first-new')){el('first-new').onclick=readFirstNewOriginalItem;el('first-new').onmousedown=event=>{if(event.button===0 && selectedText())event.preventDefault();};}
     if(el('task-return'))el('task-return').onclick=returnTaskContext;
+    if(el('task-evidence-return'))el('task-evidence-return').onclick=returnTaskEvidence;
+    if(el('find-scope'))el('find-scope').onchange=()=>{
+      if(!taskReview?.evidence || !available())return;
+      const view=captureView();taskReview.evidence.scope=el('find-scope').value==='task'?'task':'original';
+      resetFind();render(false,view);
+    };
     if(el('task-passage'))el('task-passage').onclick=returnTaskPassage;
     if(el('task-instructions-return'))el('task-instructions-return').onclick=returnInstructionMatches;
+    if(el('task-overview-show')){el('task-overview-show').onclick=showTaskOverview;el('task-overview-show').onmousedown=event=>{if(event.button===0 && selectedText())event.preventDefault();};}
+    if(el('task-overview-return'))el('task-overview-return').onclick=showTaskOverview;
     el('previous').onclick=()=>movePage(-1);
     el('next').onclick=()=>movePage(1);
     el('find-form').onsubmit=event=>{event.preventDefault();submitFind();};
@@ -1194,7 +1391,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     el('').addEventListener('keydown',event=>{
       if(event.key!=='F3' || !el('').open || !source || loading || !el('').contains(event.target))return;
       event.preventDefault();
-      if(taskReview && taskReview.mode!=='item')return;
+      if(taskReview && !['item','evidence'].includes(taskReview.mode))return;
       if(finding)return;
       if(findSubmitted && findQuery===el('find-query').value.trim() && findTotal)jumpFind(event.shiftKey?-1:1);
       else if(el('find-query').value.trim())submitFind(event.shiftKey?-1:1);

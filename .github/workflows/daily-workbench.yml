@@ -87,6 +87,12 @@ jobs:
           python examples/check_browser_preview_find_matches.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-find-matches-iframe
           python examples/check_browser_preview_find_matches.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-find-matches-rich
           python examples/check_browser_preview_find_matches.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-find-matches-rich-iframe
+      - name: Check supplied task overview and selected-task evidence sample
+        run: |
+          python examples/check_browser_preview_task_review.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-task-review-normal
+          python examples/check_browser_preview_task_review.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-task-review-iframe
+          python examples/check_browser_preview_task_review.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-task-review-rich
+          python examples/check_browser_preview_task_review.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-task-review-rich-iframe
       - name: Check installed daily workflows
         working-directory: temp
         run: |
@@ -157,6 +163,15 @@ jobs:
           cp ../examples/check_native_find_matches.py installed-fixtures/examples/
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-header-boundary" python installed-fixtures/tests/browser_original_header_boundary.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-find-matches" python installed-fixtures/examples/check_native_find_matches.py
+      - name: Check installed supplied tasks and task evidence
+        working-directory: temp
+        env:
+          DESK_USE_INSTALLED: '1'
+        run: |
+          cp ../tests/browser_task_overview.py installed-fixtures/tests/
+          cp ../examples/check_native_task_evidence.py installed-fixtures/examples/
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-overview" python installed-fixtures/tests/browser_task_overview.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-evidence" python installed-fixtures/examples/check_native_task_evidence.py
       - name: Retain daily-workflow receipts
         if: always()
         uses: actions/upload-artifact@v4

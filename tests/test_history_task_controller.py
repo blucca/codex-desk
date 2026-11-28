@@ -31,7 +31,7 @@ let source={id:'A',turns:[
 let rows=source.turns.flatMap(turn=>turn.items.length?turn.items.map(item=>({turn,item})):[{turn,item:null}]);
 const PAGE_ENTRIES=40;let page=1,targetIndex=rows.findIndex(row=>row.item?.id==='command');
 let requested={thread_id:'A',turn_id:'target',item_id:'command',match_text:'second Unicode quote',match_start:50000};
-let options=null,taskReview=null,live=true,version=7,refreshVersion=2,findVersion=1,finding=false,findSubmitted=true,findQuery='quote';
+let options=null,taskReview=null,loading=false,live=true,version=7,refreshVersion=2,findVersion=1,finding=false,findSubmitted=true,findQuery='quote';
 const originalSpans=root.DeskHistoryFind.spans('second Unicode quote','quote');
 let findGroups=[{index:targetIndex,first:0,spans:originalSpans}],findTotal=1,findCursor=0;
 let view={items:new Map(),anchor:{key:JSON.stringify(['target','command']),offset:19,screenTop:240},selection:{key:JSON.stringify(['target','command']),start:50000,end:50020,text:'second Unicode quote',backward:true},scroll:72,outer:44,page:1,first:JSON.stringify(['target','detail-36'])};

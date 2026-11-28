@@ -289,7 +289,38 @@
     held:()=>!!headerHold?.entered,
     release:()=>{if(headerHold){const hold=headerHold;headerHold=null;hold.release();}}
   };
-  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,requests,originalFixture,headerFixture,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey])localStorage.removeItem(key);location.reload();}};
+  const tasksFixture={
+    threadId:'sample-child-thread',turnId:'sample-review-task-41',itemId:'sample-review-long-command',
+    responseId:'sample-review-reused-answer',quote:'TASK EVIDENCE — Straße Café 项目 😀',
+    query:'TASK EVIDENCE — STRASSE Cafe\u0301 项目 😀',prepared:false,
+    prepare:()=>{
+      if(tasksFixture.prepared)return false;
+      const original=thread(tasksFixture.threadId),quote=tasksFixture.quote;
+      for(let n=1;n<=60;n++){
+        const id='sample-review-task-'+String(n).padStart(2,'0'),shared=[40,41,42].includes(n);
+        const instruction={id:'sample-review-instruction',type:'userMessage',content:[{type:'text',text:shared?'Inspect the retained task evidence and keep its exact source.':'Inspect supplied sample task '+String(n).padStart(2,'0')+'.'}]};
+        let items=[instruction,{id:tasksFixture.responseId,type:'agentMessage',phase:'final_answer',text:'Own supplied task '+String(n).padStart(2,'0')+' final response.'}];
+        if(n===42)items=[instruction,{id:tasksFixture.responseId,type:'agentMessage',text:'Task 42 supplied assistant message with phase unreported.'}];
+        if(n===46)items=[{id:tasksFixture.responseId,type:'agentMessage',phase:'final_answer',text:'Task 46 supplied response; no user instruction was supplied.'}];
+        if(n===41){
+          items.push({id:'sample-review-late-commentary',type:'agentMessage',phase:'commentary',text:'Later commentary is not this task’s final response.'});
+          for(let i=0;i<42;i++){
+            const item={id:'sample-review-tool-'+String(i).padStart(2,'0'),type:'commandExecution',command:'inspect supplied sample evidence '+i,status:'completed',exitCode:0,aggregatedOutput:'Task 41 native supplied evidence item '+i+'.'};
+            if(i===22){item.id=tasksFixture.itemId;item.command='inspect retained Unicode source';item.exitCode=1;item.aggregatedOutput=Array.from({length:1900},(_,line)=>'Task source line '+String(line).padStart(4,'0')+' retains Café 项目 😀'+(line===1450?' '+quote:'')).join('\n');}
+            if(i===5){item.type='mcpToolCall';item.server='sample';item.tool='read_retained_evidence';item.arguments={task:id};item.result={content:[{type:'text',text:'Structured original sample tool result.'}]};delete item.command;delete item.aggregatedOutput;delete item.exitCode;}
+            if(i===6){item.type='fileChange';item.changes=[{path:'sample/retry.txt',diff:'- previous sample evidence\n+ retained sample evidence'}];delete item.command;delete item.aggregatedOutput;delete item.exitCode;}
+            items.push(item);
+          }
+        }else if(shared)items.push({id:tasksFixture.itemId,type:'commandExecution',command:'inspect sample task '+n,status:'completed',exitCode:0,aggregatedOutput:quote+' — task '+n+' only.'});
+        else if(n!==45)items.push({id:'sample-review-short-tool',type:'commandExecution',command:'inspect sample task '+n,status:'completed',exitCode:0,aggregatedOutput:'Own supplied sample task '+n+' result.'});
+        if(n===45)items=[];
+        original.turns.push({id,status:n===45?'interrupted':n===41?'failed':'completed',...(n===45?{error:{message:'Sample task interrupted before native items were supplied.'}}:{}),items});
+      }
+      tasksFixture.prepared=true;const button=document.getElementById('preview-tasks-prepare');if(button)button.disabled=true;
+      notice('Sample task chain prepared on sample-child-thread. Read by ID → Task overview → task 42 → Read this task’s evidence.');return true;
+    }
+  };
+  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,requests,originalFixture,headerFixture,tasksFixture,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey])localStorage.removeItem(key);location.reload();}};
   document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('preview-start').onclick=()=>{
       const home=document.getElementById('welcome');
@@ -298,6 +329,7 @@
     };
     document.getElementById('preview-supply-original').onclick=originalFixture.append;
     document.getElementById('preview-header-prepare').onclick=headerFixture.prepare;
+    document.getElementById('preview-tasks-prepare').onclick=tasksFixture.prepare;
     for(const id of ['preview-header-toggle','preview-header-reader-toggle'])document.getElementById(id).onclick=headerFixture.toggle;
     headerFixture.buttons();
     document.getElementById('preview-reset').onclick=window.DeskBrowserPreview.reset;

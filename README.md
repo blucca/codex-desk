@@ -90,6 +90,22 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 [Short guide: find a past Codex answer and reopen its task](docs/find-past-answer.md)
 
+### Skim the original by task, then inspect its evidence
+
+In a loaded original, **Task overview** shows 20 supplied tasks per page: your
+instructions, each task’s own response/phase and its reported status. Choose
+**Read task** or **Read task response**, then **Return to task overview** to keep
+the same overview page and control.
+
+From that exact task, **Read this task’s evidence** lists its supplied messages,
+commands, file changes and tools in native order, 20 items per page. Choose
+**Read full original item** for the existing long-text windows, full Copy and
+reviewed quote. **Find in this task’s supplied evidence** searches that task;
+**Whole original conversation** searches the complete loaded source. Return
+through **Return to task evidence**, **Return to task overview** and
+**Return to original passage** without changing your current draft or queues.
+[Task-led original review — English / 中文](docs/skim-original-tasks-and-evidence.md).
+
 ### Rehearse the linked-original return
 
 The maintained browser sample includes the checkout parent's reported linked
