@@ -7,9 +7,7 @@ import threading
 import unittest
 from unittest.mock import Mock
 
-from codex_desk.runtime import NativeRequestUnknown
 from codex_desk.server import Desk, handler
-from codex_desk.drafts import load_draft, save_draft
 from http.server import ThreadingHTTPServer
 from test_approval_lifecycle import NativeHTTPFixture, ROOT
 from pathlib import Path
@@ -60,44 +58,6 @@ class FollowupApiTests(NativeHTTPFixture):
         self.assertEqual(self.requests, [])
         self.assertEqual(self.desk.store.get(self.identifier), before)
 
-    def check_lost_plan_reply_preserves_next_work(self, queued, terminal):
-        draft = save_draft(self.desk.store, self.identifier, 'Separate saved Plan draft', 'plan', 0)
-        first = self.add('Review the project before implementing', 'plan') if queued else None
-        later = self.add('Implement the reviewed change', 'native')
-        native_outcome = {}
-
-        def started_then_lost(method, params):
-            self.native_request(method, params)
-            with self.runtime.lifecycle_lock:
-                self.runtime._message({'method': 'thread/tokenUsage/updated', 'params': {
-                    'threadId': 'native-original', 'tokenUsage': {'total': {'totalTokens': 42}}}})
-                completed = self.completed(terminal)
-                if terminal == 'failed':
-                    completed['params']['turn']['error'] = {'message': 'Fixture task failed'}
-                self.runtime._message(completed)
-                native_outcome.update(self.desk.store.get(self.identifier))
-            raise NativeRequestUnknown('Lost native reply after Plan task')
-
-        self.runtime.request = started_then_lost
-        status, result = (self.send(first) if queued else
-                          self.post('/api/turn', text='Review the project before implementing', mode='plan'))
-        self.assertEqual(status, 200)
-        self.assertEqual(self.requests[0]['params']['collaborationMode']['mode'], 'plan')
-        recovered = self.desk.store.get(self.identifier)
-        self.assertEqual(recovered['mode'], 'plan')
-        for field in ('id', 'cwd', 'profile', 'thread_id', 'name', 'created', 'status', 'usage', 'error'):
-            self.assertEqual(recovered[field], native_outcome[field], field)
-        self.assertTrue(recovered['thread_saved'])
-        self.assertEqual(load_draft(self.desk.store, self.identifier), draft)
-        self.assertEqual(self.get()[1], {'entries': [dict(later, order=1)], 'reservation': None})
-        if queued:
-            self.assertEqual(result['receipt']['outcome'], 'accepted')
-            self.assertTrue(result['receipt']['consumed'])
-        self.runtime.request = self.native_request
-        self.assertEqual(self.send(later)[0], 200)
-        self.assertEqual(self.requests[-1]['params']['collaborationMode'], {
-            'mode': 'default', 'settings': {'model': 'fixture-model', 'developer_instructions': None}})
-        self.assertEqual(load_draft(self.desk.store, self.identifier), draft)
 
 class FollowupStdioTests(unittest.TestCase):
     def test_real_http_and_native_stdio_admission_rejection_exit_restart(self):

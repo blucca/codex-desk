@@ -82,16 +82,16 @@ later final answer or an unread item. Text edits within existing identities do n
 count as new items. **Return to original passage** restores the current Find and
 selection. **Read first new activity** remains the separate saved-task update and
 review workflow; the original's supplied-item snapshot does not mark it reviewed.
-[Rehearse five source-only sample additions](../examples/browser-preview.md#follow-newly-supplied-original-items).
+[Read newly supplied original items](workbench.md#read-the-selected-tasks-original).
 
 For a long command original whose status/exit header changes, Desk remembers the
 character within native output rather than treating the generated header as
 output. Fresh reopen and held **Refresh original**, including a narrow/wide
 resize or a containing-task passage return, keep that output character. Exact
-source references retain their own spans. [Rehearse the command-header return](../examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes).
+source references retain their own spans. [Keep a saved command quote through completion](evidence-preparation.md#keep-a-quoted-command-result-through-completion).
 
 To choose a duplicate passage inside a loaded original, run its Find, then
 **Show Find matches** → **Read match N**. **Return to Find matches** keeps the
 query/page/source row; F3 continues from the occurrence you chose. It reads no
 other history and keeps the existing task's Plan/editor/queues in place.
-[Try exact same-item Unicode occurrences](../examples/browser-preview.md#choose-an-exact-occurrence-from-original-find-matches).
+[Choose exact same-item Unicode occurrences](find-original-by-id-or-instruction.md#choose-the-shortest-entrance).

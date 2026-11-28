@@ -11,7 +11,10 @@ from codex_desk import server as product
 from codex_desk.evidence_reference import parse_evidence_blocks, format_evidence_block
 from codex_desk.followups import edit_followup
 from playwright.async_api import async_playwright
-from native_workbench_fixture import WorkbenchFixture, SOURCE, TURN, ITEM, QUOTE, DRAFT, NEWER
+from native_workbench_fixture import (
+    WorkbenchFixture, SOURCE, TURN, ITEM, QUOTE, NEWER,
+    INSTRUCTION_ITEM, RESPONSE_ITEM, INSTRUCTION, RESPONSE,
+)
 
 
 async def frames(page):
@@ -58,6 +61,28 @@ async def run():
                 await page.locator('#recall-index').click()
                 await page.locator('#recall-results .recall-read').click(); await ready(page)
                 assert fixture.prepared() == original_preparation and fixture.requests == []
+                # Read this result's own instruction, response and command before reusing it.
+                reads = len(fixture.history_calls); changes = fixture.desk.store.db.total_changes
+                await page.locator(f'.history-reader-item[data-item-id="{ITEM}"] .history-reader-task-open').click()
+                task = page.locator('.history-reader-task-context')
+                assert f'Turn {TURN}' in await task.inner_text()
+                await task.get_by_role('button', name='Read full instruction', exact=True).click()
+                instruction = page.locator(f'.history-reader-target[data-item-id="{INSTRUCTION_ITEM}"]')
+                assert await instruction.locator('.history-reader-text').inner_text() == 'User\n'+INSTRUCTION
+                await page.locator('#history-reader-task-return').click()
+                await task.get_by_role('button', name='Read this task response', exact=True).click()
+                response = page.locator(f'.history-reader-target[data-item-id="{RESPONSE_ITEM}"]')
+                assert await response.locator('.history-reader-text').inner_text() == 'Codex\n'+RESPONSE
+                await page.locator('#history-reader-task-return').click()
+                await task.get_by_role('button', name='Read this task’s evidence', exact=True).click()
+                rows = page.locator('.history-reader-task-evidence-row')
+                assert await rows.evaluate_all('ns=>ns.map(n=>[n.dataset.turnId,n.dataset.itemId])') == [
+                    [TURN, INSTRUCTION_ITEM], [TURN, ITEM], [TURN, RESPONSE_ITEM]]
+                await page.locator(f'.history-reader-task-evidence-row[data-item-id="{ITEM}"]').get_by_role('button', name='Read full original item', exact=True).click()
+                command = page.locator(f'.history-reader-target[data-item-id="{ITEM}"] .history-reader-text')
+                assert (await command.inner_text()).startswith('Command\ninspect retry\nStatus: completed\nExit: 1\nOriginal beginning')
+                assert fixture.prepared() == original_preparation and fixture.requests == []
+                assert len(fixture.history_calls) == reads and fixture.desk.store.db.total_changes == changes
                 await page.locator('#history-reader-find-query').fill(QUOTE)
                 await page.locator('#history-reader-find-query').press('Enter')
                 await page.wait_for_function("$('history-reader-find-status').textContent.includes('Match 1 of 1')")
@@ -129,7 +154,7 @@ async def run():
                 assert fixture.prepared()['queue'] == expected['queue'] and fixture.prepared()['other'] == original_preparation['other']
                 assert not errors and await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
                 await page.screenshot(path=str(evidence/'core-workflow.png'))
-                result = {'result': 'PASS', 'journey': 'Index remembered original, retain preparation, cold source return, recover one completed Run without replay'}
+                result = {'result': 'PASS', 'journey': 'Index remembered original, read its own instruction/response/command, retain preparation, cold source return, recover one completed Run without replay'}
             except Exception as error:
                 result = {'result': 'FAIL', 'error': str(error)}
                 await page.screenshot(path=str(evidence/'failed.png'))

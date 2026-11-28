@@ -14,6 +14,9 @@ from codex_desk.followups import add_followup, followup_snapshot
 
 ACCESS = 'local-workbench-fixture'
 SOURCE, TURN, ITEM = 'source-A', 'source-turn', 'source-command'
+INSTRUCTION_ITEM, RESPONSE_ITEM = 'source-instruction', 'source-response'
+INSTRUCTION = 'Inspect the checkout retry limit before repeating the failing check.'
+RESPONSE = 'Keep the configured two-attempt limit; inspect the original command result before changing the check.'
 QUOTE = 'Retry budget: 2 attempts. Café🙂 remains exact.'
 DRAFT = 'Keep B as an unsent Plan while checking the original.'
 NEWER = 'Newer unsent Plan — keep this after the completed request.'
@@ -35,9 +38,13 @@ class WorkbenchFixture(NativeHTTPFixture):
         save_draft(self.desk.store, self.other, 'Other task remains unsent.', 'plan', 0)
         self.original = {'id': SOURCE, 'name': 'Older retry decision',
             'cwd': str(self.path / 'removed-A'), 'updatedAt': 1795800000,
-            'turns': [{'id': TURN, 'status': 'completed', 'items': [{
-                'id': ITEM, 'type': 'commandExecution', 'command': 'inspect retry',
-                'status': 'completed', 'exitCode': 1, 'aggregatedOutput': OUTPUT}]}]}
+            'turns': [{'id': TURN, 'status': 'completed', 'items': [
+                {'id': INSTRUCTION_ITEM, 'type': 'userMessage',
+                 'content': [{'type': 'text', 'text': INSTRUCTION}]},
+                {'id': ITEM, 'type': 'commandExecution', 'command': 'inspect retry',
+                 'status': 'completed', 'exitCode': 1, 'aggregatedOutput': OUTPUT},
+                {'id': RESPONSE_ITEM, 'type': 'agentMessage',
+                 'phase': 'final_answer', 'text': RESPONSE}]}]}
         self.http, self.history_calls = [], []
         self.drop_reply = False
         self.hold_reply = False

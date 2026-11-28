@@ -41,7 +41,7 @@ async def run():
                     if await copy.evaluate('n=>n===document.activeElement'): break
                 assert await copy.evaluate('n=>n===document.activeElement')
                 await page.keyboard.press('Enter')
-                await page.wait_for_function("document.querySelector('.history-reader-copy-status').textContent==='Excerpt with source copied.'")
+                await target.get_by_text('Excerpt with source copied.', exact=True).wait_for()
                 paste_url = f'http://127.0.0.1:{fixture.server.server_port}/native-paste'
                 await context.route(paste_url, lambda route: route.fulfill(content_type='text/html', body='<textarea id="paste"></textarea>'))
                 paste = await context.new_page(); await paste.goto(paste_url)

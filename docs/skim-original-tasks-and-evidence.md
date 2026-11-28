@@ -63,7 +63,7 @@ native original read.
 lists then reflect its supplied tasks/items; an unavailable captured identity
 stays unavailable rather than choosing a neighbouring task’s same text.
 
-[Rehearse the synthetic task review in the browser sample](../examples/browser-preview.md#skim-supplied-tasks-and-inspect-their-own-evidence).
+[Rehearse the synthetic task review in the browser sample](../examples/browser-preview.md#find-one-earlier-investigation).
 
 ## 中文
 
@@ -115,4 +115,4 @@ F3/Shift+F3 从该全局序号继续。切换范围后，重新提交词语以�
 **Refresh original** 显式读取新快照，概览和证据列表随其实际提供的任务/条目更新。
 捕获的身份缺失时会显示当前可用性，保留原来的身份。
 
-[在浏览器示例中演练任务概览和任务证据](../examples/browser-preview.md#skim-supplied-tasks-and-inspect-their-own-evidence)。
+[在浏览器示例中演练任务概览和任务证据](../examples/browser-preview.md#find-one-earlier-investigation)。

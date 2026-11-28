@@ -56,7 +56,7 @@ header without moving your output passage. Held **Refresh original** and
 output character, Find and selection. Later deliberate Find/page/scroll input
 keeps its newer reading intent; a width-only layout change does not replace the
 prior output passage. Exact saved quotes keep their own native
-source spans. [Try the command-header sample](../examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes).
+source spans. [Keep the quoted command output](evidence-preparation.md#keep-a-quoted-command-result-through-completion).
 
 ### Follow newly supplied items in an original
 
@@ -84,7 +84,7 @@ reads keep their own targets and do not replace the ordinary supplied-item snaps
 Snapshot metadata stores the native-home/thread owner, item count and exact last
 turn/item boundary. Reading metadata stores disclosures, windows and character
 offsets, not original bodies, Find text or selections. Try the [five-item sample
-and its four maintained checks](../examples/browser-preview.md#follow-newly-supplied-original-items).
+in the workflow reference](workbench.md#read-the-selected-tasks-original).
 
 ### Start with your own history
 
@@ -188,7 +188,7 @@ passage** 保留那次出现、Find 和选区；**Return to Find matches** 返�
 原位。等待中的 **Refresh original**，以及 **Read containing task** → Refresh →
 **Return to original passage**，也保留输出字符、Find 与选区；保存引句仍按自己的
 准确原生来源范围打开。等待期间明确的新 Find／翻页／滚动意图仍优先；仅布局
-宽度变化不会替换先前输出段落。[命令状态头示例](../examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes)。
+宽度变化不会替换先前输出段落。[命令输出引用说明](evidence-preparation.md#keep-a-quoted-command-result-through-completion)。
 
 ### 跟进原会话新提供的内容项
 
@@ -211,7 +211,7 @@ activity** 则按保存任务中记录的更新与明确审阅边界比较，也
 
 快照只保存原生 home／thread、内容项数量和末项的准确 turn／item 边界；阅读
 元数据保存展开状态、文本窗口和字符位置，不保存原文正文、Find 文字或选区。
-可用[五项合成新增内容及四组维护检查](../examples/browser-preview.md#follow-newly-supplied-original-items)练习。
+可用[原文刷新与新增条目的流程说明](workbench.md#read-the-selected-tasks-original)练习。
 
 ### 连接自己的历史，保留当前 B
 
