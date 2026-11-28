@@ -80,7 +80,7 @@ class PageAssets(HTMLParser):
 class LaunchHTTPTests(unittest.TestCase):
     def setUp(self):
         scratch = Path(os.environ.get('DESK_TEST_TEMP',
-            str(Path(__file__).resolve().parents[3] / 'temp' / 'launch-http')))
+            SOURCE / 'temp')).resolve()
         scratch.mkdir(parents=True, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=scratch, prefix='launch-http-')
         self.addCleanup(temporary.cleanup)

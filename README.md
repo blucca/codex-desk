@@ -203,12 +203,21 @@ The native launcher/profile smoke has passed on Ubuntu, Windows and macOS with C
 
 [Task help: find one earlier investigation](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml). Tell us the decision or result you need to find, the step reached, and the task’s own evidence or first blocker. For a useful read, say which check it changed or avoided. If you return for another task, tell us what you reused. OS/native version are optional; for `--codex` setups, use the selected executable's version probe in the Mac/Windows guide above. [Browser sample feedback](https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml). Suggestions and contributions are welcome.
 
-From a source checkout:
+From the source checkout directory, start the workbench with:
 
 ```sh
 python3 -m codex_desk.server
+```
+
+Run the unit suite separately (Python 3.11+; Node.js runs the JavaScript cases):
+
+```sh
 python3 -m unittest discover -s tests
 ```
+
+Unit fixtures create disposable native homes and SQLite state in the checkout's
+ignored `temp/` directory and clean them up after each test. No native installation
+or provider is needed. Set `DESK_TEST_TEMP` to choose another scratch directory.
 
 Browser regressions use controlled local HTTP/SQLite, with no provider calls. See [the first-use test](https://github.com/blucca/codex-desk/blob/main/tests/browser_home.py) and [installed daily-workflow CI](https://github.com/blucca/codex-desk/blob/main/.github/workflows/daily-workbench.yml). [Native MCP fixture and result walkthrough](https://github.com/blucca/codex-desk/blob/main/docs/native-mcp-example.md).
 

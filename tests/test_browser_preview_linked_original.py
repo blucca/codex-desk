@@ -40,7 +40,7 @@ class BrowserPreviewLinkedOriginalTests(unittest.TestCase):
         self.assertNotIn('desk-' + preview.CHILD, fixture['pending'])
 
     def test_known_id_and_instruction_entrance_uses_existing_fourth_original(self):
-        base = Path(os.environ.get('DESK_TEST_TEMP', ROOT.parents[1] / 'temp'))
+        base = Path(os.environ.get('DESK_TEST_TEMP', ROOT / 'temp')).resolve()
         base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=base, prefix='source-entry-sample-') as temporary:
             for embedded in (False, True):
@@ -69,7 +69,7 @@ class BrowserPreviewLinkedOriginalTests(unittest.TestCase):
 
     @unittest.skipUnless(NODE, 'Node is needed for sample transport units')
     def test_linked_read_exact_namespace_ids_and_truthful_history_counts_no_child_writes(self):
-        base = Path(os.environ.get('DESK_TEST_TEMP', ROOT.parents[1] / 'temp'))
+        base = Path(os.environ.get('DESK_TEST_TEMP', ROOT / 'temp')).resolve()
         base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=base, prefix='linked-sample-') as temporary:
             for rich in (False, True):

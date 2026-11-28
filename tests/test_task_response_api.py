@@ -16,7 +16,7 @@ from codex_desk.followups import add_followup, followup_snapshot
 from codex_desk.server import Desk, LoopbackHTTPServer, handler
 
 
-ROOT = Path(os.environ.get('DESK_TEST_TEMP', '/home/i/workspace/temp/task-response-api'))
+ROOT = Path(os.environ.get('DESK_TEST_TEMP', Path.cwd() / 'temp')).resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
 
 

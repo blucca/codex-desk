@@ -15,7 +15,7 @@ from codex_desk.native_outcome import outcomes
 from codex_desk.drafts import save_draft,load_draft
 from codex_desk.followups import add_followup,followup_snapshot
 
-ROOT=Path(os.environ.get('DESK_TEST_TEMP','/home/i/workspace/temp/round161-next-outcome'))
+ROOT=Path(os.environ.get('DESK_TEST_TEMP',Path.cwd()/'temp')).resolve()
 ROOT.mkdir(parents=True,exist_ok=True)
 
 class NativeOutcomeTests(unittest.TestCase):

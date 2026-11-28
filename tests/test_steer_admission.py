@@ -10,9 +10,7 @@ from urllib.parse import urlencode
 from urllib.request import Request,urlopen
 from unittest.mock import Mock,patch
 S=Path(os.environ.get('DESK_SOURCE',Path(__file__).resolve().parents[1])).resolve()
-T=Path(os.environ.get('DESK_TEST_TEMP',Path.cwd()/'temp')).resolve()/'steer-admission'
-T.mkdir(parents=True,exist_ok=True)
-os.environ.setdefault('DESK_TEST_TEMP',str(T));sys.path[:0]=[str(S),str(S/'tests')]
+sys.path[:0]=[str(S),str(S/'tests')]
 from test_approval_lifecycle import NativeHTTPFixture
 from codex_desk.runtime import NativeRequestRejected,NativeRequestUnknown
 from codex_desk.server import Desk,handler
