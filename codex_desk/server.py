@@ -396,10 +396,12 @@ class Desk:
                 self.store.update(identifier, name=title, name_source=source, name_pending=0)
             self.store.recall_snapshot(identifier, thread)
             return {'id': identifier, 'thread': thread}
-    def recall(self, q, cwd=None, include_archived=False, limit=30, offset=0):
+    def recall(self, q, cwd=None, include_archived=False, limit=30, offset=0,
+               *, view='items', source_session=None, source_thread=None):
         # One stable page across saved Desk preparation/evidence and unbound
         # native evidence. Archived bindings stay suppressed by the same query.
-        return self.native_index.search_combined(q, cwd, include_archived, limit, offset)
+        return self.native_index.search_combined(q, cwd, include_archived, limit, offset,
+            view=view, source_session=source_session, source_thread=source_thread)
     def close(self):
         self.history_scanner.close()
         if self.native_reader is not None:
@@ -452,7 +454,7 @@ def handler(desk, access_token=None):
                                        'projects': desk.native_index.projects()})
                 if url.path == '/api/recall':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=10)
-                    if any(key not in ('q', 'cwd', 'archived', 'limit', 'offset') or len(values) != 1
+                    if any(key not in ('q', 'cwd', 'archived', 'limit', 'offset', 'view', 'source_session', 'source_thread') or len(values) != 1
                            for key, values in params.items()):
                         raise ValueError('Use each recall query option once')
                     archived = params.get('archived', ['false'])[0].lower()
@@ -460,7 +462,9 @@ def handler(desk, access_token=None):
                         raise ValueError('Choose whether to include archived sessions')
                     return self.reply(desk.recall(params.get('q', [''])[0], params.get('cwd', [None])[0],
                         archived in ('true', '1'), int(params.get('limit', ['30'])[0]),
-                        int(params.get('offset', ['0'])[0])))
+                        int(params.get('offset', ['0'])[0]), view=params.get('view', ['items'])[0],
+                        source_session=params.get('source_session', [None])[0],
+                        source_thread=params.get('source_thread', [None])[0]))
                 if url.path == '/api/preparation':
                     params = parse_qs(url.query, keep_blank_values=True, max_num_fields=5, strict_parsing=True, errors='strict')
                     if any(key not in ('cwd', 'archived', 'q', 'limit', 'offset') or len(values) != 1

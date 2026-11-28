@@ -70,8 +70,8 @@ Launch this separate local workbench from the terminal with your installed Codex
 Use **Browse all conversations** → **Native history** → **Archived conversations** → search title →
 **Read original conversation**. Read evidence without restoring the native task.
 Close and explicitly reopen the same original to continue from its browser-local
-reading place in fresh native text, retaining the first visible literal character
-across narrow/wide layouts. Keep the same launch Codex home. An exact saved quote,
+reading place in fresh native text. The remembered literal character stays anchored
+through responsive reflow across narrow/wide layouts. Keep the same launch Codex home. An exact saved quote,
 item or response target takes precedence over normal remembered reading.
 See [ID, instruction and original-return workflow](find-original-by-id-or-instruction.md).
 

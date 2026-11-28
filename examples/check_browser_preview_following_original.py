@@ -4,8 +4,11 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
+from original_character_oracle import probe_character,assert_responsive_character
 from build_browser_preview import CHILD,CHILD_TURN,CHILD_ITEM,CHILD_QUOTE
 from check_browser_preview import static_server
 from check_browser_preview_links import open_app,reload_app,reset_app
@@ -39,6 +42,10 @@ VISIBLE=r'''n=>{
 }'''
 
 async def check(p,site,evidence,width,chromium,embedded,rich):
+    frozen=json.JSONDecoder().raw_decode((site/'sample-data.js').read_text().split('window.DeskPreviewThreads = ',1)[1])[0]
+    supplied=[i['text'] for t in frozen if t['id']==CHILD for u in t['turns'] if u['id']==CHILD_TURN for i in u['items'] if i['id']==CHILD_ITEM]
+    assert len(supplied)==1;source_text=supplied[0]
+    emoji_offset=source_text.encode('utf-16-le').rfind('🙂'.encode('utf-16-le'))//2
     mode='iframe' if embedded else 'direct';prefix=f'{width}-{mode}';other=390 if width==1250 else 1250
     report={'passed':False,'from_width':width,'to_width':other,'actual_iframe':embedded,'rich':rich,'checks':[]};errors=[];external=[]
     with static_server(site) as (url,received,escaped):
@@ -113,7 +120,13 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             ref=await app.evaluate('DeskEvidencePreparation.state().reference');assert ref['quote']==CHILD_QUOTE
             await app.locator('#evidence-preparation-append').click();await app.wait_for_function("!$('evidence-preparation').open");await frames(app)
             expected=await state();assert expected['drafts'][B]['revision']==2 and expected['followups']==queues
-            await quote(2);await pointer_select();previous=await visible();assert previous['window_start']>20000 and previous['first_visible'] and previous['quote_fully_visible']
+            await quote(2);await pointer_select()
+            # A small ordinary scroll selects a wrapped-line interior at narrow width.
+            # The exact remembered glyph stays anchored when wider reflow exposes its prefix.
+            if width==390:await item().locator('pre').evaluate('n=>n.scrollTop-=20');await frames(app)
+            previous=await visible();assert previous['window_start']>20000 and previous['first_visible'] and previous['quote_fully_visible']
+            previous_character=await probe_character(item(),source_text,previous['first_visible']['offset']-len('Codex\n'),len('Codex\n'))
+            report.update(previous_view=previous,previous_character=previous_character,interior_scroll_pixels=20 if width==390 else 0,source_emoji_before=await probe_character(item(),source_text,emoji_offset,len('Codex\n')))
             await back()
             previous_frontier=await app.evaluate("JSON.parse(localStorage.getItem(DeskBrowserPreview.originalFrontierKey))")
             assert previous_frontier['snapshots'][0]['snapshot']=={'item_count':3,'boundary':{'turn_id':CHILD_TURN,'item_id':'sample-child-evidence'}}
@@ -124,12 +137,16 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             await app.locator('#preview-supply-original').click();assert await calls(boundary)==[]
             assert await app.evaluate('DeskPreviewThreads.at(-1).turns.length')==3
             await page.set_viewport_size({'width':other,'height':900 if other==1250 else 844});await frames(app)
-            await browse();await read();reopened=await visible();same_native(previous,reopened)
+            await browse();await read();reopened=await visible()
+            assert previous['window_start']==reopened['window_start'] and previous['disclosures']==reopened['disclosures'][:len(previous['disclosures'])],(previous,reopened)
+            reopened_character=await probe_character(item(),source_text,previous_character['source_offset'],len('Codex\n'))
+            assert_responsive_character(previous_character,reopened_character)
+            report.update(reopened_view=reopened,reopened_character=reopened_character)
             assert reopened['query']=='' and reopened['selection']==''
             assert 'New since previous fresh original read · 5 newly supplied native items.'==await app.locator('#history-reader-new-status').inner_text()
             assert await app.locator('#history-reader-first-new').is_visible()
             report.update(previous_view=previous,reopened_view=reopened)
-            await checkpoint('deliberate-fresh-read-after-supply-resize-keeps-actual-first-visible-character')
+            await checkpoint('deliberate-fresh-read-after-supply-resize-keeps-exact-remembered-character')
             # New intent/Find/real backwards Range is restored by existing item/passage return.
             await quote(2);await pointer_select();before_new=await visible();boundary=await app.evaluate('DeskBrowserPreview.requests.length')
             await app.locator('#history-reader-first-new').evaluate('n=>n.focus({preventScroll:true})');await app.locator('#history-reader-first-new').press('Enter');await frames(app)

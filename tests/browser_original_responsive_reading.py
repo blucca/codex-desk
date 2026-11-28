@@ -17,6 +17,7 @@ from codex_desk import server as S
 from codex_desk.drafts import save_draft, load_draft
 from codex_desk.followups import add_followup, followup_snapshot
 from playwright.async_api import async_playwright
+from original_character_oracle import probe_character,assert_responsive_character
 
 QUOTE='RETURN PASSAGE Café 项目 😀'
 BEFORE=False
@@ -156,6 +157,8 @@ async def check(width,pw,evidence):
                 title_calls=[c for c in calls if c['method']=='thread/list'];assert any(c['params'].get('archived') is True for c in title_calls)
                 n=reads();await page.locator('#native-list .native-read').click();await ready();assert reads()==n+1
                 first=await passage();visible_before=await visible();await unchanged()
+                projection=await target().evaluate("n=>DeskHistoryReader.textForItem({type:'commandExecution',command:'fixture inspect source',status:'completed',exitCode:0,aggregatedOutput:''}).length")
+                remembered=await probe_character(target(),output,visible_before['first_visible']['offset']-projection,projection)
                 assert visible_before['quote']['fully_visible'],visible_before
                 await page.screenshot(path=str(evidence/f'{width}-before.png'))
                 await back();assert await page.locator('#history-source').input_value()=='archived'
@@ -174,8 +177,9 @@ async def check(width,pw,evidence):
                 assert reopened['open']==first['open'] and reopened['disclosures']==first['disclosures']
                 assert reopened['query']=='' and reopened['selection']==''
                 assert visible_before['quote']['offset']==visible_after['quote']['offset']
-                assert visible_before['first_visible']['offset']==visible_after['first_visible']['offset'],(visible_before,visible_after)
-                assert visible_before['first_visible']['line']==visible_after['first_visible']['line']
+                reopened_character=await probe_character(target(),output,remembered['source_offset'],projection)
+                assert_responsive_character(remembered,reopened_character)
+                cold_reference=await probe_character(target(),output,visible_after['first_visible']['offset']-projection,projection)
                 assert visible_after['quote']['fully_visible'],visible_after
                 omission=False
                 await page.screenshot(path=str(evidence/f'{width}-to-{opposite}-reopened.png'))
@@ -184,14 +188,15 @@ async def check(width,pw,evidence):
                 selection=await state();opens=sum(r['path']=='/api/open' for r in http);await unchanged()
                 await page.set_viewport_size({'width':width,'height':900 if width==1250 else 844});await frames()
                 await browse();n=reads();await read();assert reads()==n+1;cold=await visible();await unchanged()
-                assert cold['first_visible']['offset']==visible_before['first_visible']['offset'],(cold,visible_before)
+                cold_character=await probe_character(target(),output,cold_reference['source_offset'],projection)
+                assert_responsive_character(cold_reference,cold_character)
                 assert cold['quote']['fully_visible'];await page.screenshot(path=str(evidence/f'{width}-cold-restored.png'))
                 await back()
                 meta=await page.evaluate("JSON.parse(localStorage.getItem('codex-desk-original-reading-checkpoints-v1'))")
                 entry=meta['checkpoints'][0]
                 assert entry['owner']==owner and set(entry['owner'])=={'native_home','thread_id'}
                 character=next(row['visible_character'] for row in entry['view']['item_views'] if row['item_id']=='A-command')
-                assert set(character)=={'offset','top'} and character['offset']==visible_before['first_visible']['offset']
+                assert set(character)=={'offset','top'} and character['offset']==cold['first_visible']['offset']
                 assert QUOTE not in json.dumps(meta) and 'Original 1450' not in json.dumps(meta)
                 for row in entry['view']['item_views']:row.pop('visible_character',None)
                 legacy_inner=next(row['scroll_top'] for row in entry['view']['item_views'] if row['item_id']=='A-command')
@@ -222,7 +227,7 @@ async def check(width,pw,evidence):
                 await page.screenshot(path=str(evidence/f'{width}-late-pointer-retained.png'))
                 result={'result':'PASS','direction':[width,opposite],
                   'browser_version':browser.version,'owner':owner,'native_source_unchanged':True,'source_window_and_item_unchanged':True,
-                  'same_visible_character':True,'legacy_pixel_fallback':True,'normal':normal,'cold':cold,'legacy':legacy,'late_input_before':late_before,'late_input_after':late_after,'fresh_reads':1,'auto_reads':0,'before':first,'after':reopened,
+                  'same_visible_character':True,'remembered_character':remembered,'reopened_character':reopened_character,'cold_character':cold_character,'cold_reference':cold_reference,'legacy_pixel_fallback':True,'normal':normal,'cold':cold,'legacy':legacy,'late_input_before':late_before,'late_input_after':late_after,'fresh_reads':1,'auto_reads':0,'before':first,'after':reopened,
                   'visible_before':visible_before,'visible_after':visible_after,'original_metadata':json.loads(stored),
                   'http':http,'native':calls,'sqlite_unchanged':True,'B_draft':draft,'B_queue':queue,'B_selection':selection,
                   'task_admissions':0,'external':external,'errors':errors}

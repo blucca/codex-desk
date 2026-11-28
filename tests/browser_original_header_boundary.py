@@ -17,6 +17,7 @@ from codex_desk import server as S
 from codex_desk.drafts import save_draft, load_draft
 from codex_desk.followups import add_followup, followup_snapshot
 from playwright.async_api import async_playwright
+from original_character_oracle import probe_character,assert_responsive_character
 
 QUOTE='RETURN PASSAGE Café 项目 😀'
 BOUNDARY_BEFORE=os.environ.get("DESK_BOUNDARY_BEFORE")=="1"
@@ -208,11 +209,12 @@ async def check(width,pw,evidence):
                         diagnostic={'status':status,'view':await view(),'visible':await observe(),'errors':errors}
                         (evidence/f'{width}-held-diagnostic.json').write_text(json.dumps(diagnostic,indent=2)+'\n')
                         await page.screenshot(path=str(evidence/f'{width}-held-diagnostic.png'))
-                await passage();held_before=await observe();release=await begin_hold();await mutate('inProgress',None)
+                await passage();held_before=await observe();held_character=await probe_character(target(),output,held_before['first_visible']['output_offset'],held_before['output_boundary']);release=await begin_hold();await mutate('inProgress',None)
                 await page.set_viewport_size({'width':opposite,'height':900 if opposite==1250 else 844});await frames();await release_hold(release)
                 held_after=await observe();held_view=await view();await unchanged();await page.screenshot(path=str(evidence/f'{width}-held-resize.png'))
-                held_same=held_before['first_visible']['output_offset']==held_after['first_visible']['output_offset']
-                observations.append({'case':'held-header-Refresh-passive-opposite-width-resize','before':held_before,'after':held_after,'same_output_character':held_same})
+                returned_character=await probe_character(target(),output,held_character['source_offset'],held_after['output_boundary'])
+                assert_responsive_character(held_character,returned_character);held_same=True
+                observations.append({'case':'held-header-Refresh-passive-opposite-width-resize','before':held_before,'after':held_after,'same_output_character':held_same,'before_character':held_character,'after_character':returned_character})
                 if not BOUNDARY_BEFORE:assert held_same and held_view['selection']==QUOTE,(held_before,held_after,held_view)
                 await passage();release=await begin_hold();await mutate('completed',0)
                 await page.set_viewport_size({'width':width,'height':900 if width==1250 else 844});await frames()

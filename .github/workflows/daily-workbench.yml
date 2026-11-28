@@ -11,7 +11,7 @@ permissions:
 jobs:
   preparation-and-return:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       PYTHONFAULTHANDLER: '1'
       DESK_SOURCE: ${{ github.workspace }}
@@ -67,6 +67,12 @@ jobs:
         run: |
           python examples/check_browser_preview_source_navigation.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-source-navigation
           python examples/check_browser_preview_source_navigation.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-source-navigation-iframe
+      - name: Check conversation-first recall sample
+        run: |
+          python examples/check_browser_preview_conversations.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-conversations-normal
+          python examples/check_browser_preview_conversations.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-conversations-iframe
+          python examples/check_browser_preview_conversations.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-conversations-rich
+          python examples/check_browser_preview_conversations.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-conversations-rich-iframe
       - name: Check archived-original revisit in the maintained sample
         run: |
           python examples/check_browser_preview_revisit_original.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-revisit-normal
@@ -151,7 +157,7 @@ jobs:
         env:
           DESK_USE_INSTALLED: '1'
         run: |
-          cp ../tests/browser_original_frontier.py ../tests/browser_original_responsive_reading.py installed-fixtures/tests/
+          cp ../tests/browser_original_frontier.py ../tests/browser_original_responsive_reading.py ../tests/original_character_oracle.py installed-fixtures/tests/
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-frontier" python installed-fixtures/tests/browser_original_frontier.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-responsive-reading" python installed-fixtures/tests/browser_original_responsive_reading.py
       - name: Check installed exact original matches and command output passage
@@ -178,5 +184,50 @@ jobs:
         with:
           name: installed-daily-workbench
           path: temp/evidence
+          if-no-files-found: ignore
+          retention-days: 7
+  original-keyboard:
+    name: Original keyboard (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
+    env:
+      PYTHONFAULTHANDLER: '1'
+      DESK_SOURCE: ${{ github.workspace }}
+      DESK_TEST_TEMP: ${{ github.workspace }}/temp/original-keyboard
+      TMPDIR: ${{ github.workspace }}/temp
+      TEMP: ${{ github.workspace }}/temp
+      TMP: ${{ github.workspace }}/temp
+      PIP_CACHE_DIR: ${{ github.workspace }}/temp/pip-cache
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/temp/playwright-browsers
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare workspace scratch
+        run: mkdir -p temp/original-keyboard temp/evidence/original-keyboard
+      - name: Install workbench and selected browser harness
+        run: |
+          python -m pip install . playwright==1.56.0
+          python -m playwright install --with-deps "${{ matrix.engine }}"
+      - name: Check installed original keyboard and passage return
+        working-directory: temp
+        run: |
+          expected=$(python -c 'import ast; tree=ast.parse(open("../codex_desk/__init__.py", encoding="utf-8").read()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__version__" for t in n.targets)))')
+          python ../tests/browser_original_keyboard.py --installed --expect-version "$expected" \
+            --engine "${{ matrix.engine }}" --widths 1250 390 \
+            --evidence "$GITHUB_WORKSPACE/temp/evidence/original-keyboard"
+      - name: Retain original keyboard receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-original-keyboard-${{ matrix.engine }}
+          path: temp/evidence/original-keyboard
           if-no-files-found: ignore
           retention-days: 7

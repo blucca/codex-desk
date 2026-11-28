@@ -84,6 +84,9 @@ F3 continues from the occurrence you selected.
 1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
 2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
 3. Enter a word or phrase from the answer, command output or tool result, then **Search**. You can search while indexing: when the explicit scan completes, an unchanged submitted query in the active search dialog refreshes once. Edits stay unsent; choose **Search** after changing the phrase or scope. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Use **Next matches** / **Previous matches** to reach later results. Your selected task and draft stay unchanged; **Back to search** keeps the query, page and results. In the reader, **Find in this original conversation** locates text across every supplied item and long-output window; **Previous match** / **Next match** (F3 / Shift+F3) visits each occurrence. **Copy full item text** and **Copy source reference** let you reuse the exact evidence in today's work.
+
+When one long conversation fills the results, check **Group matches by conversation** and choose **Search**. Each matching conversation shows its own item count and one original snippet. **Show matching items in this conversation** narrows the same literal query to that exact saved task or indexed native original. Read an item, return to the same item page, then **Return to matching conversations** restores the chosen conversation row. Uncheck grouping to keep the ordinary all-item search. Grouping uses the current index and keeps the selected task unchanged.
+
 4. Ready to work on it? Choose **Continue this conversation** to resume the **original native thread** using **Current Codex settings**. Continuing requires the saved project folder to exist. Prepare the next instruction, then send it when ready.
 
 Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-cached activity, drafts, prepared follow-ups and current unconfirmed captured Work/Plan requests. On a captured-request hit, **Review captured request** reads the exact saved instruction and its original target without opening a task; **Return to results** keeps your submitted query and page. **Index coverage and text limits** shows cached coverage and shortened or omitted text; this is a bounded recent-history cache. Refresh recent history starts at the current top and skips unchanged snapshots. Choose **Index next older conversations** to continue explicitly beyond the recent window. Unread page progress survives cancellation and restart; **Continue indexing** resumes it without sending a task. Native title browsing remains available.
@@ -125,7 +128,8 @@ unread text or the saved task's **Read first new activity** review frontier.
 Existing-item text edits do not count as newly supplied items.
 
 **Return to original passage** returns to your prior reading view. Reopening at a
-narrower or wider width restores the first visible literal character; an explicit
+narrower or wider width keeps the remembered literal character anchored through
+responsive reflow; an explicit
 saved quote, item or response target takes priority. A command's status/exit header
 can change while its output stays identical: reopening or refreshing retains the
 same output-relative character, including after a resize. [Rehearse that command
@@ -204,6 +208,33 @@ python3 -m unittest discover -s tests
 ```
 
 Browser regressions use controlled local HTTP/SQLite, with no provider calls. See [the first-use test](tests/browser_home.py) and [installed daily-workflow CI](.github/workflows/daily-workbench.yml). [Native MCP fixture and result walkthrough](docs/native-mcp-example.md).
+
+The [original keyboard regression](tests/browser_original_keyboard.py) exercises
+Unicode Find, backward pointer excerpts, Tab/Enter evidence review, selected-task
+pages, and return to the original passage and the exact unsent Plan. The daily
+workflow runs this bounded acceptance in Firefox, Chromium and WebKit at desktop and
+phone widths, retaining JSON receipts and screenshots for each engine.
+
+Run it with an installed workbench and Playwright 1.56.0 browser cache:
+
+```sh
+python tests/browser_original_keyboard.py --installed --engine firefox \
+  --source "$PWD" --scratch "$PWD/temp/original-keyboard" \
+  --evidence "$PWD/temp/evidence/original-keyboard/firefox" \
+  --browsers-path "$PLAYWRIGHT_BROWSERS_PATH"
+```
+
+`--engine chromium` or `--engine webkit` selects another maintained engine. `--widths 390` runs one
+viewport for a focused reproduction. `--installed-root` and `--expect-version`
+pin the package environment and version; `--executable` selects an explicit
+browser binary. `--help` lists the equivalent `DESK_*` environment settings.
+
+The [portable sample task-reader check](examples/check_browser_preview_task_review.py)
+uses the same supplied-task and evidence fixture in Chromium, Firefox or WebKit.
+Build a sample with `examples/build_browser_preview.py`, then pass its directory
+as `--site` and select `--engine`. `--embedded` checks a real iframe; `--rich`
+checks a sample built with `--session-reading-fixture`. Its receipts include
+exact Unicode excerpt offsets, keyboard Review return and retained preparation.
 
 ## License
 

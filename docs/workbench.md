@@ -44,6 +44,8 @@ The reader uses 40-entry pages (native items or turn-only outcomes) and 20,000-c
 
 In the original reader, **Find in this original conversation** searches all readable supplied items, not only the current page/window. **Find** submits the literal phrase; **Previous match** / **Next match**, or reader-local Shift+F3 / F3, jumps to the exact item/window. **Copy full item text** copies the entire readable item; **Copy source reference** copies its conversation/thread/turn/item/project identity. None of these actions opens a task or changes preparation. Content-search results have **Previous matches** / **Next matches** pages; returning from the reader retains the submitted query and page.
 
+When one long conversation fills the results, check **Group matches by conversation** and choose **Search**. Each matching conversation shows its own item count and one original snippet. **Show matching items in this conversation** narrows the same literal query to that exact saved task or indexed native original. Read an item, return to the same item page, then **Return to matching conversations** restores the chosen conversation row. Uncheck grouping to keep the ordinary all-item search. Grouping neither indexes more history nor opens a task.
+
 ## Prepare a task and come back later
 
 Write your next task and select Work or Plan. **Draft saved locally** confirms the text and mode are saved for this specific Desk session. Reopen the page or restart Desk with the same state directory to recover them; restoration does not send a task. A failed task submission keeps its preparation. After restarting the server, open its newly printed complete launch URL to restore browser access.

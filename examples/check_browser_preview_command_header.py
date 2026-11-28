@@ -4,8 +4,11 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
+from original_character_oracle import probe_character,assert_responsive_character
 from check_browser_preview import static_server
 from check_browser_preview_links import open_app, reload_app, reset_app
 from check_browser_preview_session_reading import B, frames
@@ -100,18 +103,24 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             await app.locator('#prompt').evaluate("n=>{n.focus({preventScroll:true});n.setSelectionRange(10,22,'backward');n.scrollTop=25}");await frames(app)
             editor=await app.evaluate("({text:$('prompt').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection,scroll:$('prompt').scrollTop,mode:$('turn-mode').value})")
             await app.locator('#preview-header-prepare').click()
-            raw=await app.evaluate('DeskBrowserPreview.headerFixture.command().aggregatedOutput')
-            await browse();await read();before=await passage();await unchanged('in-progress-middle-native-output-with-exact-B')
+            raw='\n'.join(f'H{n:04d}'+(' '+QUOTE if n==6450 else '') for n in range(10000))
+            assert await app.evaluate('DeskBrowserPreview.headerFixture.command().aggregatedOutput')==raw
+            await browse();await read();before=await passage();before_character=await probe_character(item(),raw,before['first_visible']['output_offset'],before['output_boundary']);await unchanged('in-progress-middle-native-output-with-exact-B')
             await back();await app.locator('#history-close').click();await app.locator('#preview-header-toggle').click()
-            await viewport(other);await browse();await read();after=await observe();same(before,after)
+            await viewport(other);await browse();await read();after=await observe();after_character=await probe_character(item(),raw,before_character['source_offset'],after['output_boundary']);assert_responsive_character(before_character,after_character)
+            assert before['window_start']-before['output_boundary']==after['window_start']-after['output_boundary']
+            assert [[t,i,o] for t,i,o,s in before['disclosures']]==[[t,i,o] for t,i,o,s in after['disclosures']]
             assert after['output_boundary']==before['output_boundary']-12
             assert after['query']=='' and after['selection']==''
-            report['observations'].append({'case':'complete-header-opposite-width-fresh-reopen','before':before,'after':after})
+            report['observations'].append({'case':'complete-header-opposite-width-fresh-reopen','before':before,'after':after,'before_character':before_character,'after_character':after_character})
             await unchanged('fresh-reopen-header-only-change-keeps-output-relative-native-glyph')
-            before_refresh=await passage();await held_refresh(width);after_refresh=await observe();same(before_refresh,after_refresh)
+            before_refresh=await passage();refresh_character=await probe_character(item(),raw,before_refresh['first_visible']['output_offset'],before_refresh['output_boundary'])
+            await held_refresh(width);after_refresh=await observe();refreshed_character=await probe_character(item(),raw,refresh_character['source_offset'],after_refresh['output_boundary']);assert_responsive_character(refresh_character,refreshed_character)
+            assert before_refresh['window_start']-before_refresh['output_boundary']==after_refresh['window_start']-after_refresh['output_boundary']
+            assert [[t,i,o] for t,i,o,s in before_refresh['disclosures']]==[[t,i,o] for t,i,o,s in after_refresh['disclosures']]
             assert after_refresh['output_boundary']==before_refresh['output_boundary']+12
             assert after_refresh['query']==QUOTE and after_refresh['selection']==QUOTE
-            report['observations'].append({'case':'held-reverse-header-Refresh-with-opposite-width','before':before_refresh,'after':after_refresh})
+            report['observations'].append({'case':'held-reverse-header-Refresh-with-opposite-width','before':before_refresh,'after':after_refresh,'before_character':refresh_character,'after_character':refreshed_character})
             await unchanged('held-refresh-resize-keeps-native-glyph-Find-and-backwards-Range')
             before_context=await observe();await keyboard(item().get_by_role('button',name='Read containing task',exact=True))
             await held_refresh();await keyboard(app.locator('#history-reader-task-passage'));after_context=await observe();same(before_context,after_context)

@@ -44,8 +44,8 @@ for saved Desk tasks.
 This browser remembers an original's supplied turn/item, displayed text window,
 opened items and first visible literal character for its native home and
 conversation. Close the reader, or reload Desk, then explicitly read the same
-original again to return to that character in freshly read text, including after
-a narrow/wide resize. Reload alone leaves the original closed. A saved quotation,
+original again to return to that character in freshly read text. The remembered
+literal character stays anchored through responsive reflow after a narrow/wide resize. Reload alone leaves the original closed. A saved quotation,
 specified item or task-response target opens its requested passage instead and
 keeps the ordinary reading checkpoint. The reader's Find query and selected text
 are for the current reading visit; the remembered position contains view metadata.

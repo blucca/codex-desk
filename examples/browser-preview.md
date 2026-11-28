@@ -239,8 +239,8 @@ read an original or send a native task.
    establishes the supplied-item snapshot.
 3. Choose **Add sample original items**, then change between 1250px and 390px.
    Deliberately read the same original again by title or ID. The prior text
-   window, disclosures and actual first visible literal character return in fresh
-   source text, even though scroll distances change. The former visit's Find and
+   window and disclosures return in fresh source text. The remembered literal
+   character stays anchored through responsive reflow, even though scroll distances change. The former visit's Find and
    selected text end when that reader closes.
 4. The reader reports **New since previous fresh original read · 5 newly supplied
    native items.** Choose **Read first newly supplied item**. It opens
@@ -317,8 +317,8 @@ python3 examples/check_browser_preview_command_header.py --rich --site temp/brow
 python3 examples/check_browser_preview_command_header.py --rich --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/command-header-rich-iframe
 ```
 
-Receipts use text-node Ranges to measure the literal first visible output glyph,
-not line estimates or equal scroll pixels. Only numeric command-output-boundary
+Receipts use text-node Ranges to measure the exact remembered output glyph and
+its clipped viewport position through responsive reflow. Only numeric command-output-boundary
 metadata is added to reading checkpoints; native output bodies, Find text and
 selections remain outside those records.
 

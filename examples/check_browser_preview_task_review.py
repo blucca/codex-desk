@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Skim supplied tasks, inspect exact task evidence, return to original/B at 1250/390."""
-import argparse,asyncio,json,os
+import argparse,asyncio,json,os,sys,traceback
 from pathlib import Path
 from urllib.parse import urlsplit,parse_qs
 from check_browser_preview import static_server
@@ -11,12 +11,88 @@ SOURCE='sample-child-thread';TURN='sample-review-task-41';ITEM='sample-review-lo
 QUOTE='TASK EVIDENCE — Straße Café 项目 😀';QUERY='TASK EVIDENCE — STRASSE Cafe\u0301 项目 😀'
 DRAFT='Keep B exact unsent Plan while skimming supplied tasks and their own evidence.'
 
-async def check(p,site,evidence,width,chromium,embedded,rich):
-    prefix=f'{width}-'+('iframe' if embedded else 'direct');report={'passed':False,'width':width,'actual_iframe':embedded,'rich':rich,'checks':[]}
+ENGINES = ('chromium', 'firefox', 'webkit')
+SETTLE = "n=>new Promise(resolve=>{let previous=n.scrollTop,stable=0;function frame(){const value=n.scrollTop;stable=value===previous?stable+1:0;previous=value;if(stable>=5)resolve();else requestAnimationFrame(frame);}requestAnimationFrame(frame);})"
+# Absolute UTF-16 DOM prefixes preserve direction across PRE/MARK text nodes.
+SELECTION = r"""n => {
+ const pre=n.querySelector('pre'),s=getSelection(),start=Number(n.dataset.windowStart);
+ const prefix=(node,offset)=>{if(!node||!pre.contains(node))return null;
+  const range=document.createRange();range.selectNodeContents(pre);range.setEnd(node,offset);
+  return start+range.toString().length;};
+ const anchor=prefix(s.anchorNode,s.anchorOffset),focus=prefix(s.focusNode,s.focusOffset);
+ return {text:s.toString(),anchor,focus,backward:anchor!==null&&focus!==null&&anchor>focus,
+  same_node:s.anchorNode===s.focusNode};
+}"""
+
+
+# Observe the accepted write while leaving the browser's real clipboard API intact.
+CLIPBOARD_WRITE_OBSERVER = r"""(() => {
+ const clipboard = navigator.clipboard;
+ if (!clipboard || typeof clipboard.writeText !== 'function') return;
+ const write = clipboard.writeText.bind(clipboard);
+ Object.defineProperty(clipboard, 'writeText', {value: async text => {
+  await write(text); globalThis.__deskTaskCopy = String(text);
+ }});
+})();"""
+
+
+def command_quote_span(command):
+    projection='Command\n'+command['command']+'\nStatus: '+command['status']+'\nExit: '+str(command['exitCode'])+'\n'+command['aggregatedOutput']
+    start=len(projection[:projection.index(QUOTE)].encode('utf-16-le'))//2
+    return {'start':start,'end':start+len(QUOTE.encode('utf-16-le'))//2}
+
+
+def browser_options(engine, executable=None):
+    options = {'headless': True}
+    if engine == 'chromium':
+        options['args'] = ['--no-sandbox', '--disable-dev-shm-usage']
+    if executable:
+        options['executable_path'] = executable
+    return options
+
+
+def widths(value):
+    try:
+        result = tuple(int(width) for width in value.split(','))
+    except ValueError:
+        raise argparse.ArgumentTypeError('widths must be comma-separated integers') from None
+    if not result or min(result) < 320 or len(set(result)) != len(result):
+        raise argparse.ArgumentTypeError('widths must be distinct integers of at least 320')
+    return result
+
+
+def parse_args(argv=None, environ=None):
+    env = os.environ if environ is None else environ
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--site', required=True, type=Path)
+    parser.add_argument('--evidence', required=True, type=Path)
+    parser.add_argument('--embedded', action='store_true')
+    parser.add_argument('--rich', action='store_true')
+    parser.add_argument('--widths', type=widths, default='1250,390')
+    parser.add_argument('--engine', choices=ENGINES, default=env.get('DESK_BROWSER_ENGINE', 'chromium').lower())
+    parser.add_argument('--executable', default=env.get('DESK_BROWSER_EXECUTABLE'))
+    parser.add_argument('--chromium', help='explicit Chromium executable (legacy option)')
+    parser.add_argument('--browsers-path', type=Path, default=env.get('PLAYWRIGHT_BROWSERS_PATH'))
+    parser.add_argument('--scratch', type=Path, default=env.get('DESK_TEST_TEMP', Path.cwd() / 'temp' / 'task-review'))
+    args = parser.parse_args(argv)
+    if args.engine not in ENGINES:
+        parser.error('DESK_BROWSER_ENGINE must be chromium, firefox or webkit')
+    if args.chromium and args.engine != 'chromium':
+        parser.error('--chromium requires --engine chromium; use --executable for other engines')
+    args.executable = args.executable or args.chromium or (env.get('DESK_CHROMIUM') if args.engine == 'chromium' else None)
+    return args
+
+
+async def check(p,site,evidence,width,chromium,embedded,rich,engine='chromium'):
+    prefix=f'{width}-'+('iframe' if embedded else 'direct');report={'passed':False,'engine':engine,'width':width,'actual_iframe':embedded,'rich':rich,'checks':[]}
     errors=[];external=[]
     with static_server(site) as (url,received,escaped):
-        browser=await p.chromium.launch(executable_path=chromium,headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])
-        context=await browser.new_context(viewport={'width':width,'height':900 if width==1250 else 844},permissions=['clipboard-read','clipboard-write'])
+        browser=await getattr(p,engine).launch(**browser_options(engine,chromium));report['browser']=browser.version
+        context_options={'viewport':{'width':width,'height':900 if width==1250 else 844}}
+        if engine=='chromium':context_options['permissions']=['clipboard-read','clipboard-write']
+        context=await browser.new_context(**context_options)
+        if engine!='chromium':await context.add_init_script(CLIPBOARD_WRITE_OBSERVER)
+        report['clipboard_probe']='real-readText' if engine=='chromium' else 'real-writeText-observed'
         page=await context.new_page();page.set_default_timeout(15000);page.on('pageerror',lambda e:errors.append(str(e)))
         async def isolate(route):
             if urlsplit(route.request.url).netloc!=urlsplit(url).netloc:external.append(route.request.url);await route.abort()
@@ -29,15 +105,37 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
         async def find(count):
             await app.locator('#history-reader-find-query').fill(QUERY);await app.locator('#history-reader-find-query').press('Enter')
             await app.wait_for_function('n=>$('+'"history-reader-find-status"'+').textContent.includes("Match 1 of "+n)',arg=count);await frames(app)
+        async def prepare_overview():
+            control=app.locator('#history-reader-task-overview-show')
+            box=await control.bounding_box()
+            if box['y']<12:
+                reader=await app.locator('#history-reader').bounding_box()
+                await page.mouse.move(reader['x']+reader['width']-8,reader['y']+80)
+                await page.mouse.wheel(0,box['y']-24)
+                await app.locator('#history-reader').evaluate(SETTLE)
+            boxes=await item().locator('mark').evaluate('n=>[...n.getClientRects()].map(r=>r.bottom)')
+            height=await app.evaluate('innerHeight')
+            excess=max(boxes)-height+50
+            if excess>0:
+                pre=await item().locator('pre').bounding_box()
+                await page.mouse.move(pre['x']+pre['width']/2,min(pre['y']+60,height-90))
+                await page.mouse.wheel(0,excess)
+                await item().locator('pre').evaluate(SETTLE)
+            box=await control.bounding_box()
+            report['overview_control_before_capture']=box
+            assert box['y']>=0 and box['y']+box['height']<=height,box
+        async def selection():return await item().evaluate(SELECTION)
         async def passage():
-            return await item().evaluate("n=>({start:n.dataset.windowStart,open:n.open,inner:n.querySelector('pre').scrollTop,body:$('history-reader-body').scrollTop,outer:$('history-reader').scrollTop,top:n.getBoundingClientRect().top,query:$('history-reader-find-query').value,status:$('history-reader-find-status').textContent,selection:getSelection().toString(),backward:getSelection().anchorNode===getSelection().focusNode&&getSelection().anchorOffset>getSelection().focusOffset,disclosures:[...$('history-reader-body').querySelectorAll('.history-reader-item')].map(e=>[e.dataset.turnId,e.dataset.itemId,e.open,e.dataset.windowStart])})")
+            view=await item().evaluate("n=>({start:n.dataset.windowStart,open:n.open,inner:n.querySelector('pre').scrollTop,body:$('history-reader-body').scrollTop,outer:$('history-reader').scrollTop,top:n.getBoundingClientRect().top,query:$('history-reader-find-query').value,status:$('history-reader-find-status').textContent,selection:getSelection().toString(),disclosures:[...$('history-reader-body').querySelectorAll('.history-reader-item')].map(e=>[e.dataset.turnId,e.dataset.itemId,e.open,e.dataset.windowStart])})")
+            quote=await selection();view.update(backward=quote['backward'],anchor=quote['anchor'],focus=quote['focus'])
+            return view
         async def listing(kind):
             return await app.evaluate("kind=>({first:Number(document.querySelector('.history-reader-task-'+kind+'-row')?.dataset[kind==='overview'?'taskIndex':'itemIndex']),count:document.querySelectorAll('.history-reader-task-'+kind+'-row').length,coverage:$('history-reader-coverage').textContent,body:$('history-reader-body').scrollTop,outer:$('history-reader').scrollTop,focus:document.activeElement.dataset.taskAction})",kind)
         def same_list(a,b):
             for k in ('first','count','coverage','focus'):assert a[k]==b[k],(k,a,b)
             for k in ('body','outer'):assert abs(a[k]-b[k])<2,(k,a,b)
         def same_passage(a,b):
-            for k in ('start','open','query','status','selection','backward','disclosures'):assert a[k]==b[k],(k,a,b)
+            for k in ('start','open','query','status','selection','backward','anchor','focus','disclosures'):assert a[k]==b[k],(k,a,b)
             for k in ('inner','body','outer','top'):assert abs(a[k]-b[k])<2,(k,a,b)
         async def select():
             boxes=await item().locator('mark').evaluate('n=>[...n.getClientRects()].filter(r=>r.width&&r.height).map(r=>({left:r.left,right:r.right,top:r.top,bottom:r.bottom}))')
@@ -45,8 +143,15 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             if embedded:
                 outer=await page.locator('iframe').bounding_box();a=(a[0]+outer['x'],a[1]+outer['y']);b=(b[0]+outer['x'],b[1]+outer['y'])
             await page.mouse.move(*a);await page.mouse.down();await page.mouse.move(*b,steps=12);await page.mouse.up()
-            assert await app.evaluate('getSelection().toString()')==QUOTE
-            assert await app.evaluate('getSelection().anchorNode===getSelection().focusNode&&getSelection().anchorOffset>getSelection().focusOffset')
+            quote=await selection()
+            assert quote['text']==QUOTE and quote['backward'] and (quote['anchor'],quote['focus'])==(quote_span['end'],quote_span['start']),quote
+            report.setdefault('selections',[]).append(quote)
+        async def tab_review():
+            for _ in range(16):
+                await page.keyboard.press('Tab')
+                if await app.evaluate("document.activeElement.classList.contains('history-reader-review-evidence')"):break
+            else:raise AssertionError('Real Tab navigation did not reach excerpt Review')
+            await page.keyboard.press('Enter');await frames(app)
         async def unchanged(name):
             assert await app.evaluate('DeskBrowserPreview.snapshot()')==expected
             assert await app.evaluate('({selected,nativeThreadId,generation})')==owner
@@ -74,10 +179,17 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             await app.locator('#prompt').evaluate("n=>{n.focus({preventScroll:true});n.setSelectionRange(9,20,'backward');n.scrollTop=25}");await frames(app)
             editor=await app.evaluate("({text:$('prompt').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection,scroll:$('prompt').scrollTop,mode:$('turn-mode').value})")
             before_prepare=await app.evaluate('DeskBrowserPreview.requests.length');await app.locator('#preview-tasks-prepare').click()
-            assert await app.evaluate('DeskBrowserPreview.requests.length')==before_prepare
+            concurrent=await app.evaluate('n=>DeskBrowserPreview.requests.slice(n)',before_prepare)
+            assert all(request['method']=='GET' and urlsplit(request['path']).path not in ('/api/native/thread','/api/native/evidence-source','/api/native/task-response') for request in concurrent),concurrent
+            report['prepare_concurrent_reads']=concurrent
             assert await app.evaluate('DeskPreviewThreads.find(t=>t.id==="sample-child-thread").turns.length')==61
             assert await app.evaluate('DeskBrowserPreview.snapshot()')==expected
             source=await app.evaluate('JSON.stringify(DeskPreviewThreads)')
+            thread=next(thread for thread in json.loads(source) if thread['id']==SOURCE)
+            turn=next(turn for turn in thread['turns'] if turn['id']==TURN)
+            command=next(item for item in turn['items'] if item['id']==ITEM)
+            quote_span=command_quote_span(command)
+            report['expected_quote_span']=quote_span
             await app.locator('#browse').click();await app.wait_for_function("!$('history-search-submit').disabled")
             await app.locator('#history-id').fill(SOURCE);await app.locator('#history-id').press('Enter');await ready()
             posts=await app.evaluate('DeskBrowserPreview.requests.filter(r=>r.method==="POST").length')
@@ -85,9 +197,11 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             assert await app.locator('.history-reader-find-match').count()==3
             for n,turn in enumerate(('sample-review-task-40',TURN,'sample-review-task-42')):
                 row=app.locator(f'.history-reader-find-match[data-match-index="{n}"]');assert await row.get_attribute('data-turn-id')==turn and await row.get_attribute('data-item-id')==ITEM
-            await keyboard(app.locator('.history-reader-find-match[data-match-index="1"] button'));await select();original=await passage();assert int(original['start'])>20000
+            await keyboard(app.locator('.history-reader-find-match[data-match-index="1"] button'));await prepare_overview();await select();original=await passage();report['original_passage_before']=original;assert int(original['start'])>20000
             await unchanged('original-wide-three-exact-tasks-late-Unicode-backwards-Range')
-            await keyboard(app.locator('#history-reader-task-overview-show'))
+            control=await app.locator('#history-reader-task-overview-show').bounding_box()
+            report['overview_pointer_at_capture']=control
+            await page.mouse.click(control['x']+control['width']/2,control['y']+control['height']/2);await frames(app)
             assert await app.locator('.history-reader-task-overview-row').count()==20
             for _ in range(2):await keyboard(app.get_by_role('button',name='Next tasks',exact=True))
             assert (await listing('overview'))['first']==40
@@ -123,8 +237,8 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             assert await app.locator('.history-reader-item').count()==1
             await find(1);assert await item().locator('mark').text_content()==QUOTE;await select();scoped=await passage();assert int(scoped['start'])>20000
             await keyboard(item().get_by_role('button',name='Copy full item text',exact=True));await app.wait_for_function('document.querySelector(".history-reader-copy-status").textContent==="Full item text copied."')
-            copied=await app.evaluate('navigator.clipboard.readText()');assert QUOTE in copied and 'Task source line 1899' in copied and 'task 40 only' not in copied
-            await select();await keyboard(item().get_by_role('button',name='Review evidence for task',exact=True));await app.wait_for_function("$('evidence-preparation').open&&!DeskEvidencePreparation.state().pending")
+            copied=await app.evaluate('navigator.clipboard.readText()' if engine=='chromium' else 'globalThis.__deskTaskCopy');assert copied and QUOTE in copied and 'Task source line 1899' in copied and 'task 40 only' not in copied
+            await select();await tab_review();await app.wait_for_function("$('evidence-preparation').open&&!DeskEvidencePreparation.state().pending")
             assert await app.locator('#evidence-preparation-quote').inner_text()==QUOTE
             reference=await app.evaluate('DeskEvidencePreparation.state().reference');assert reference['thread_id']==SOURCE and reference['turn_id']==TURN and reference['item_id']==ITEM and reference['quote']==QUOTE
             await app.locator('#evidence-preparation-cancel').click();await frames(app)
@@ -135,7 +249,7 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             await keyboard(app.locator('#history-reader-find-matches-show'));assert await app.locator('.history-reader-find-match').count()==3
             await unchanged('explicit-original-wide-Find-retains-all-three-task-occurrences')
             await keyboard(app.locator('#history-reader-task-overview-return'));assert (await listing('overview'))['first']==40
-            await keyboard(app.locator('#history-reader-task-passage'));same_passage(original,await passage())
+            await keyboard(app.locator('#history-reader-task-passage'));returned=await passage();report['original_passage_after']=returned;same_passage(original,returned)
             await unchanged('same-overview-page-and-original-Find-Range-window-return')
             await keyboard(app.locator('#history-reader-back'));await app.locator('#history-close').click();await frames(app)
             assert await app.evaluate("({text:$('prompt').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection,scroll:$('prompt').scrollTop,mode:$('turn-mode').value})")==editor
@@ -145,17 +259,37 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             assert not await app.evaluate("DeskBrowserPreview.requests.some(r=>['/api/native/thread','/api/native/evidence-source','/api/native/task-response'].includes(r.path.split('?')[0]))")
             report.update(passed=True,initial_histories=4,initial_items=15 if rich else 13,supplied_tasks_after_deliberate_prepare=61,evidence_rows=45,native_original_reads=1,native_admissions=0,preparation_posts_during_navigation=0,source_unchanged_after_prepare=True,scope_matches={'task':1,'original':3},exact_quote_reference=reference,editor=editor)
         except Exception as error:
-            import traceback
-            report.update(error=str(error),traceback=traceback.format_exc());await page.screenshot(path=str(evidence/f'{prefix}-failure.png'))
-            if app:report['body']=await app.locator('body').inner_text()
-        finally:await context.close();await browser.close()
-    (evidence/f'{prefix}.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n');assert report['passed'],report.get('traceback')
-    print(json.dumps({'passed':True,'width':width,'iframe':embedded,'rich':rich,'checks':len(report['checks'])}),flush=True);return report
+            report.update(error=str(error),traceback=traceback.format_exc())
+            try:
+                await page.screenshot(path=str(evidence/f'{prefix}-failure.png'))
+                if app:report['body']=await app.locator('body').inner_text()
+            except Exception as capture_error:
+                report['capture_error']=str(capture_error)
+        finally:
+            try:await context.close()
+            finally:await browser.close()
+            report['browser_context_closed']=True
+    (evidence/f'{prefix}.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n')
+    print(json.dumps({'passed':report['passed'],'engine':engine,'browser':report['browser'],'width':width,'iframe':embedded,'rich':rich,'checks':len(report['checks'])}),flush=True);return report
 
 async def main(args):
-    from playwright.async_api import async_playwright
+    os.umask(0o077)
+    args.scratch.mkdir(parents=True,exist_ok=True)
     args.evidence.mkdir(parents=True,exist_ok=True)
-    async with async_playwright() as p:reports=[await check(p,args.site,args.evidence,int(w),args.chromium,args.embedded,args.rich) for w in args.widths.split(',')]
-    (args.evidence/'summary.json').write_text(json.dumps({'result':'PASS','reports':reports},indent=2,ensure_ascii=False)+'\n')
+    os.environ['TMPDIR']=str(args.scratch.resolve())
+    if args.browsers_path:os.environ['PLAYWRIGHT_BROWSERS_PATH']=str(args.browsers_path.resolve())
+    reports=[]
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            reports=[await check(p,args.site,args.evidence,width,args.executable,args.embedded,args.rich,args.engine) for width in args.widths]
+        summary={'result':'PASS' if all(report['passed'] for report in reports) else 'FAIL','engine':args.engine,'reports':reports}
+    except Exception as error:
+        summary={'result':'FAIL','engine':args.engine,'phase':'harness','error':str(error),'traceback':traceback.format_exc(),'reports':reports}
+    (args.evidence/'summary.json').write_text(json.dumps(summary,indent=2,ensure_ascii=False)+'\n')
+    print(json.dumps({'result':summary['result'],'engine':args.engine,'cases':len(reports)}),flush=True)
+    return 0 if summary['result']=='PASS' else 1
+
+
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--site',required=True,type=Path);p.add_argument('--evidence',required=True,type=Path);p.add_argument('--embedded',action='store_true');p.add_argument('--rich',action='store_true');p.add_argument('--widths',default='1250,390');p.add_argument('--chromium',default=os.environ.get('DESK_CHROMIUM'));asyncio.run(main(p.parse_args()))
+    sys.exit(asyncio.run(main(parse_args())))

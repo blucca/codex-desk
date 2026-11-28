@@ -328,23 +328,58 @@ class NativeRecallIndex:
                     'has_more': offset + len(results) < total,
                     'results': results, 'coverage': self._stats(scoped)}
 
-    def search_combined(self, query, cwd=None, include_archived=False, limit=30, offset=0):
+    def search_combined(self, query, cwd=None, include_archived=False, limit=30, offset=0,
+                        *, view='items', source_session=None, source_thread=None):
         """Page once across Desk preparation/evidence and unbound native history."""
         query, scoped, needle = self._search_options(query, cwd, limit, offset)
         if type(include_archived) is not bool:
             raise ValueError('Choose whether to include archived sessions')
+        if view not in ('items', 'conversations'):
+            raise ValueError('Choose items or conversations')
+        if source_session is not None and source_thread is not None:
+            raise ValueError('Choose one exact conversation source')
+        for value in (source_session, source_thread):
+            if value is not None and not _identifier(value):
+                raise ValueError('Choose an exact conversation source')
+        if view != 'items' and (source_session is not None or source_thread is not None):
+            raise ValueError('Choose item matches within a conversation')
         with _read_snapshot(self.store), _query_cwds(self.store):
             desk_sql, desk_options, desk_total, coverage = _desk_query(
                 self.store, scoped, include_archived, needle)
             native_sql, native_options, native_total = self._search_query(
                 scoped, needle, exclude_bound=True)
-            cursor = self.store.db.execute(
-                desk_sql + ' UNION ALL ' + native_sql + PAGE_ORDER,
-                (*desk_options, *native_options, limit, offset))
-            results = [_search_result(row, needle, combined=True) for row in cursor]
+            corpus = desk_sql + ' UNION ALL ' + native_sql
+            params = (*desk_options, *native_options)
             total = desk_total + native_total
+            if source_session is not None or source_thread is not None:
+                condition = 'session_id=?' if source_session is not None else 'session_id IS NULL AND thread_id=?'
+                corpus = 'SELECT * FROM (' + corpus + ') WHERE ' + condition
+                params += (source_session if source_session is not None else source_thread,)
+                total = self.store.db.execute('SELECT count(*) FROM (' + corpus + ')', params).fetchone()[0]
+            item_total = total
+            if view == 'conversations':
+                # Keep each saved binding's preparation and archive/profile ownership.
+                # Only unbound originals group by native thread; the existing union
+                # already suppresses native duplicates of every saved binding.
+                grouped = '''WITH matches AS (''' + corpus + '''), ranked AS (
+                    SELECT *,count(*) OVER (PARTITION BY source,sort_id) match_count,
+                    row_number() OVER (PARTITION BY source,sort_id ORDER BY updated DESC,
+                        kind,position,turn_id,item_id,followup_id) choice FROM matches)
+                    SELECT * FROM ranked WHERE choice=1'''
+                total = self.store.db.execute('SELECT count(*) FROM (' + grouped + ')', params).fetchone()[0]
+                cursor = self.store.db.execute(grouped + PAGE_ORDER, (*params, limit, offset))
+                results = []
+                for row in cursor:
+                    result = _search_result(row[:-2], needle, combined=True)
+                    result.update(group_kind='session' if row[0] is not None else 'native',
+                                  group_id=row[0] if row[0] is not None else row[6], match_count=row[-2])
+                    results.append(result)
+            else:
+                cursor = self.store.db.execute(corpus + PAGE_ORDER, (*params, limit, offset))
+                results = [_search_result(row, needle, combined=True) for row in cursor]
             coverage['native'] = self._stats(scoped)
-            return {'query': query, 'cwd': scoped, 'archived': include_archived,
+            return {'query': query, 'cwd': scoped, 'archived': include_archived, 'view': view,
+                    'source_session': source_session, 'source_thread': source_thread, 'item_total': item_total,
                     'limit': limit, 'offset': offset, 'total': total,
                     'truncated': total > len(results), 'has_more': offset + len(results) < total,
                     'results': results, 'coverage': coverage}
