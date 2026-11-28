@@ -96,6 +96,20 @@ quote → append once to the existing unsent Plan. The saved child reference ret
 to the same editor and parent passage; **Back to Changed work** restores its row
 and scope. [Build and check both hosting modes at 1250/390](examples/browser-preview.md#read-the-reported-linked-original-and-reuse-its-exact-quote).
 
+### Follow newly supplied original items
+
+Deliberately reopen an original or choose **Refresh original**. **Read first newly
+supplied item** opens the earliest native item added since the previous successful
+fresh original read in this browser, even when that item is a user instruction
+before a later final answer. This compares supplied turn/item identities, not
+unread text or the saved task's **Read first new activity** review frontier.
+Existing-item text edits do not count as newly supplied items.
+
+**Return to original passage** returns to your prior reading view. Reopening at a
+narrower or wider width restores the first visible literal character; an explicit
+saved quote, item or response target takes priority. [Rehearse with five deliberate
+sample additions](examples/browser-preview.md#follow-newly-supplied-original-items).
+
 
 ## Bring your existing work
 
@@ -142,7 +156,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 Desk runs on loopback and uses your installed Codex app-server. The printed URL carries a per-launch browser access fragment; the browser keeps it in this tab’s session storage and uses it for private API requests. After a server restart, open the newly printed complete URL. Existing sign-in, model/provider, MCP, trust and sandbox settings come from your Codex configuration. A new Desk account or API key is unnecessary.
 
-Reading-place metadata stays in this browser’s local storage: native home namespace and source IDs, disclosure states and scroll positions. Desk reads the native content afresh on return. Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing and the original-conversation reader use native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
+Reading-place metadata stays in this browser’s local storage: native home namespace and source IDs, disclosure states, text-window/visible-character offsets and scroll positions. Original supplied-item snapshots retain an item count and exact turn/item boundary for the next deliberate fresh read. Desk reads native content afresh on return; these records contain view and identity metadata. Project bindings, cached activity, indexed native history and drafts live in `~/.local/state/codex-desk/desk.sqlite3`. History indexing and the original-conversation reader use native list/read requests; searching uses the local cache. New provider keys stay in a private local sidecar. Desk keeps your main configuration, auth and original rollouts intact. Native Codex sends model requests to your selected provider when you run a task.
 
 Closing the browser leaves Desk running; **Ctrl+C** stops Desk and its owned native tasks. It runs its own app-server rather than attaching to an already-running Desktop backend.
 

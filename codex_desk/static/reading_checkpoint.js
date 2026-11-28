@@ -27,12 +27,18 @@
     return {turn_id:identifier(value.turn_id),item_id:identifier(value.item_id),
       offset:number(value.offset,0,true),screen_top:number(value.screen_top,0,true)};
   }
+  function visibleCharacter(value) {
+    if(!record(value) || value.offset===undefined || value.top===undefined)throw Error('Use original visible-character metadata.');
+    return {offset:number(value.offset,0,false,true),top:number(value.top,0,true)};
+  }
   function itemView(value) {
     if(!record(value))throw Error('Use native item view metadata.');
     const open=value.open===undefined?null:value.open;
     if(open!==null && typeof open!=='boolean')throw Error('Use a deliberate disclosure state.');
-    return {turn_id:identifier(value.turn_id),item_id:identifier(value.item_id),open,
+    const view={turn_id:identifier(value.turn_id),item_id:identifier(value.item_id),open,
       window_start:number(value.window_start,0,false,true),scroll_top:number(value.scroll_top),scroll_left:number(value.scroll_left)};
+    if(value.visible_character!==undefined && value.visible_character!==null)view.visible_character=visibleCharacter(value.visible_character);
+    return view;
   }
   function turnView(value) {
     if(!record(value) || !kinds.has(value.kind) || typeof value.open!=='boolean')throw Error('Use a source-bound native turn disclosure.');

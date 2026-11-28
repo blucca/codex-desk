@@ -5,7 +5,7 @@ import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=(ROOT/'codex_desk/static/history_reader.js').read_text()
-HELPERS=SOURCE[SOURCE.index('  function originalReadingStore()'):SOURCE.index('  function invalidate()')]
+HELPERS=SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')]+SOURCE[SOURCE.index('  function originalReadingStore()'):SOURCE.index('  function invalidate()')]
 CLOSE=SOURCE[SOURCE.index('  function close('):SOURCE.index('  function available(')]
 HOME=SOURCE[SOURCE.index('      if(!explicitReadingTarget() && root.DeskReadingCheckpoint)'):SOURCE.index('      let thread=preloaded;')]
 HARNESS=r'''
@@ -17,13 +17,13 @@ let source={id:'original-A',turns:[{id:'turn',items:[{id:'item'}]}]},rows=[{turn
 const key=JSON.stringify(['turn','item']),rowKey=row=>JSON.stringify([row.turn.id,row.item.id]);
 let captured={items:new Map([[key,{start:26332,open:true,scroll:7774,left:4}]]),anchor:{key,offset:-123,screenTop:134},
  scroll:1781,scrollLeft:2,outer:526,outerLeft:3,page:1,selection:{text:'DO NOT SAVE POINTER QUOTE'}};
-const captureView=()=>captured,status={textContent:'',open:true,close(){this.open=false;captured.anchor=null;}},el=()=>status;
+const restoreView=()=>{},captureView=()=>captured,status={textContent:'',open:true,close(){this.open=false;captured.anchor=null;}},el=()=>status;
 function invalidate(){}
 '''
 @unittest.skipUnless(shutil.which('node'),'Node is required for reader ownership units')
 class OriginalReadingReturnControllerTests(unittest.TestCase):
  def check(self,body):
-  p=subprocess.run(['node','-e',HARNESS+HELPERS+CLOSE+'function startHome(ticket){'+HOME+'}'+body,str(ROOT/'codex_desk/static/reading_checkpoint.js')],capture_output=True,text=True,timeout=15)
+  p=subprocess.run(['node','-e',HARNESS+SOURCE[SOURCE.index('  function preserveChrome('):SOURCE.index('  async function refreshFind(')]+HELPERS+CLOSE+'function startHome(ticket){'+HOME+'}'+body,str(ROOT/'codex_desk/static/reading_checkpoint.js')],capture_output=True,text=True,timeout=15)
   self.assertEqual(p.returncode,0,p.stdout+p.stderr)
  def test_pending_metadata_does_not_gate_read_or_move_newer_reader_intent(self):
   self.check(r'''
@@ -56,6 +56,13 @@ assert.equal(close({}),false);assert.equal(values.size,0);assert(status.open);
 assert.equal(close(),true);assert(!status.open);
 const entry=JSON.parse(values.get(h.ORIGINAL_STORAGE_KEY)).checkpoints[0];
 assert.equal(entry.view.anchor.item_id,'item');assert.equal(entry.view.reader_scroll.top,1781);
+''')
+ def test_character_metadata_bridge_stays_with_exact_native_item(self):
+  self.check(r'''
+captured.items.get(key).character={offset:36332,top:-4.75};saveOriginalReading();
+assert.deepEqual(originalReadingView().items.get(key).character,captured.items.get(key).character);
+const row=JSON.parse(values.get(h.ORIGINAL_STORAGE_KEY)).checkpoints[0].view.item_views[0];
+assert.deepEqual(row.visible_character,{offset:36332,top:-4.75});assert.equal(row.item_id,'item');
 ''')
  def test_capture_restore_metadata_and_page_by_exact_identity(self):
   self.check(r'''

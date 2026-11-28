@@ -4,7 +4,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'codex_desk/static/history_reader.js').read_text()
 READ = SOURCE[SOURCE.index('  async function readEmbeddedReference('):SOURCE.index('  function scrollMatch(')]
 CLOSE = SOURCE[SOURCE.index('  function close('):SOURCE.index('  function available(')]
-TASK_CONTROLS = SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  function taskSnapshot(')]
+TASK_CONTROLS = SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  function taskSnapshot(')]
 SETUP = r'''
 const assert=require('assert/strict');
 let taskReview=null;let live=true,version=7,source={id:'sent-B',turns:[]},requested={thread_id:'sent-B',turn_id:'sent-turn',item_id:'sent-item'};

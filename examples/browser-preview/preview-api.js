@@ -8,14 +8,14 @@
     if(document.documentElement.dataset.previewEmbedded==='true')openExternal(url,'_blank','noopener');
     else location.assign(url);
   };
-  const storageKey='codex-desk-browser-preview-v1',sessionKey='codex-desk-browser-preview-session-v1',readingKey='codex-desk-browser-preview-reading-checkpoints-v1',originalReadingKey='codex-desk-browser-preview-original-reading-checkpoints-v1',reviewKey='codex-desk-browser-preview-activity-review-v1',resetKey='codex-desk-browser-preview-reset-v1';
+  const storageKey='codex-desk-browser-preview-v1',sessionKey='codex-desk-browser-preview-session-v1',readingKey='codex-desk-browser-preview-reading-checkpoints-v1',originalReadingKey='codex-desk-browser-preview-original-reading-checkpoints-v1',originalFrontierKey='codex-desk-browser-preview-original-frontiers-v1',reviewKey='codex-desk-browser-preview-activity-review-v1',resetKey='codex-desk-browser-preview-reset-v1';
   const readingFixture=window.DeskPreviewReadingFixture || null;
   const threads=window.DeskPreviewThreads, copy=v=>JSON.parse(JSON.stringify(v));
   const blank=()=>({sessions:[],indexed:false,drafts:{},followups:{},nextId:1});
   let state=blank(),resetting=false;
   // The ordinary app's pagehide save can run after Reset removes the old keys.
   // Consume the reset marker before this new document loads any preparation.
-  try{if(localStorage.getItem(resetKey)==='1')for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,reviewKey,resetKey])localStorage.removeItem(key);}catch(_){}
+  try{if(localStorage.getItem(resetKey)==='1')for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,resetKey])localStorage.removeItem(key);}catch(_){}
   try{const saved=JSON.parse(localStorage.getItem(storageKey));if(saved && Array.isArray(saved.sessions) && saved.drafts && saved.followups)state=saved;}catch(_){}
   const requests=[];
   const notice=text=>{const el=document.getElementById('preview-notice');if(el)el.textContent=text;};
@@ -251,13 +251,31 @@
       return new Response(JSON.stringify(result),{status:200,headers:{'Content-Type':'application/json'}});
     }catch(error){return new Response(JSON.stringify({error:error.message,...(error.current?{current:error.current}:{})}),{status:error.status || 400,headers:{'Content-Type':'application/json'}});}
   };
-  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,originalReadingKey,reviewKey,requests,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,reviewKey])localStorage.removeItem(key);location.reload();}};
+  // Explicit source-only sample mutation. No activity frontier, preparation or task admission.
+  const originalFixture={
+    threadId:'sample-child-thread',turnId:'sample-child-supplied-turn',itemId:'sample-child-supplied-question',
+    append:()=>{
+      const original=thread(originalFixture.threadId);
+      if(original.turns.some(t=>t.id===originalFixture.turnId))return false;
+      original.turns.push({id:originalFixture.turnId,status:'completed',items:[
+        {id:originalFixture.itemId,type:'userMessage',content:[{type:'text',text:'FIRST NEW SAMPLE ORIGINAL ITEM — inspect the supplied retry transport evidence.'}]},
+        {id:'sample-child-supplied-command',type:'commandExecution',command:'printf sample-supplied-transport',status:'completed',exitCode:0,aggregatedOutput:'New sample native transport evidence — café🙂 项目.'},
+        {id:'sample-child-supplied-answer',type:'agentMessage',phase:'final_answer',text:'The first added task retains its exact transport observation.'}]});
+      original.turns.push({id:'sample-child-later-turn',status:'completed',items:[
+        {id:'sample-child-later-question',type:'userMessage',content:[{type:'text',text:'Summarize the later sample task separately.'}]},
+        {id:'sample-child-later-answer',type:'agentMessage',phase:'final_answer',text:'LATER SAMPLE FINAL ANSWER — separate from the first newly supplied native item.'}]});
+      notice('Five synthetic native items supplied. Close and deliberately read the sample linked original again.');
+      const button=document.getElementById('preview-supply-original');if(button)button.disabled=true;
+      return true;
+    }};
+  window.DeskBrowserPreview={storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey,requests,originalFixture,...(readingFixture?{fixture:readingFixture.controls}:{}),snapshot:()=>copy(state),reset:()=>{resetting=true;localStorage.setItem(resetKey,'1');for(const key of [storageKey,sessionKey,readingKey,originalReadingKey,originalFrontierKey,reviewKey])localStorage.removeItem(key);location.reload();}};
   document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('preview-start').onclick=()=>{
       const home=document.getElementById('welcome');
       document.getElementById(home.hidden?'search-saved-content':'home-content').click();
       const input=document.getElementById('recall-query');input.value='retry budget';input.dispatchEvent(new Event('input',{bubbles:true}));input.focus();
     };
+    document.getElementById('preview-supply-original').onclick=originalFixture.append;
     document.getElementById('preview-reset').onclick=window.DeskBrowserPreview.reset;
     for(const id of ['home-project'])document.getElementById(id).hidden=true;
     document.getElementById('send').addEventListener('click',e=>{e.preventDefault();install();});

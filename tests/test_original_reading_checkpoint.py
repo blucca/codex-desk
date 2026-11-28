@@ -23,6 +23,19 @@ class OriginalReadingCheckpointTests(unittest.TestCase):
  def check(self,body):
   p=subprocess.run([NODE,'-e',HARNESS+body,str(ROOT/'codex_desk/static/reading_checkpoint.js')],capture_output=True,text=True,timeout=15)
   self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+ def test_visible_character_is_whitelisted_utf16_offset_geometry_only(self):
+  self.check(r'''
+const enriched=clone(view);enriched.item_views[0].visible_character={offset:36332,top:-4.75,text:'SECRET SOURCE',range:{quote:'SECRET QUOTE'}};
+store.put(owner,enriched);const point=store.get(owner).view.item_views[0].visible_character;
+assert.deepEqual(point,{offset:36332,top:-4.75});assert(!values.get(h.ORIGINAL_STORAGE_KEY).includes('SECRET'));
+assert.deepEqual(store.restore(owner,source).view.item_views[0].visible_character,point);
+for(const invalid of [{},{offset:1},{top:0},null]){enriched.item_views[0].visible_character=invalid;if(invalid!==null)assert.throws(()=>store.put(owner,enriched));}
+for(const offset of [-1,0.5,NaN,Infinity,'36332']){
+ enriched.item_views[0].visible_character={offset,top:0};assert.throws(()=>store.put(owner,enriched));}
+for(const top of [NaN,Infinity,'2']){
+ enriched.item_views[0].visible_character={offset:36332,top};assert.throws(()=>store.put(owner,enriched));}
+assert(!Object.hasOwn(h.normalizeOriginalView(view).item_views[0],'visible_character'));
+''')
  def test_no_session_and_separate_activity_owner(self):
   self.check(r'''
 const saved=store.put({...owner,session:'WRONG B',draft:'SECRET B'},view).checkpoint;

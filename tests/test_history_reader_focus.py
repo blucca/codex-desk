@@ -40,7 +40,7 @@ let itemNode=()=>{const item=new Element();item.className='history-reader-target
 class HistoryReaderFocusTests(unittest.TestCase):
     def run_case(self,body):
         source=READER.read_text()
-        snippets=[source[source.index('  function scrollMatch('):source.index('  function itemNode(')],
+        snippets=[source[source.index('  function originalFrontierControls()'):source.index('  function originalReadingStore()')],source[source.index('  function scrollMatch('):source.index('  function itemNode(')],
                   source[source.index('  function render('):source.index('  async function read(')],
                   source[source.index('  function taskControls('):source.index('  function configure(')],
                   source[source.index('  function configure('):source.index('  root.DeskHistoryReader=')]]

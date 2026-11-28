@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'codex_desk/static/history_reader.js').read_text()
-TASKS = SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  function configure(')]
+TASKS = SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  function configure(')]
 SETUP = r'''
 const assert=require('assert/strict'),root={DeskHistoryTasks:require(TASK_HELPER),DeskHistoryFind:require(FIND_HELPER)};
 const document={activeElement:null};

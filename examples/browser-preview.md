@@ -12,7 +12,7 @@ After saving a draft or follow-up, choose **Prepared work**, enter a remembered 
 
 Choose **Review saved draft** or **Review saved follow-up** to revisit its exact owner. For a draft containing a referenced original, **Read referenced original** opens the retained quote and returns to the same local editor. To try the ordinary queue path, save that referenced draft with **Save as follow-up**, choose **Edit** in **Prepared follow-ups**, make an unsaved change, and choose **Read referenced original**. **Return to saved follow-up** restores that unsent instruction, selection and scroll position without saving or sending it.
 
-The preview uses three synthetic conversations, the maintained Desk interface and a sample-only API implemented in the browser. Preparation is saved in namespaced browser storage. **Reset sample** clears only these sample keys. The installed workbench uses native Codex history and its local SQLite database; follow the [installer](../README.md#install-the-preview) for your own work.
+The preview uses three primary synthetic histories and an independent linked original, the maintained Desk interface and a sample-only API implemented in the browser. Preparation is saved in namespaced browser storage. **Reset sample** clears only these sample keys. The installed workbench uses native Codex history and its local SQLite database; follow the [installer](../README.md#install-the-preview) for your own work.
 
 ## Rebuild and check
 
@@ -160,3 +160,66 @@ python3 examples/check_browser_preview_linked_original.py --embedded --site temp
 The source reads create no child saved task, draft, queue, native event feed or
 native admission. Ordinary Recent, Find and source-return controls use the same
 reported child original and exact source API.
+
+## Follow newly supplied original items
+
+All four builds start with the same four histories: 13 supplied items in the
+ordinary builds, or 15 with the opt-in reading fixture. **Add sample original
+items** adds exactly five source-only native items to `sample-child-thread` on the
+current sample page, across two new turns. The first is a user instruction;
+the final answer of the later turn remains distinct. The button leaves saved
+tasks, drafts, queues, Activity and its review frontier unchanged and does not
+read an original or send a native task.
+
+1. Keep **Sample documentation review** selected with an unsent **Plan** and two
+   queued instructions. In **Browse existing Codex sessions**, choose **Native
+   history** → **Archived conversations**, search `linked retry original`, then
+   **Read original conversation**. Or use **Read original by ID** with
+   `sample-child-thread`.
+2. Find `Child decisive evidence — café🙂 项目 exact source.`. Select the first
+   occurrence, choose **Review evidence for task** → **Append to draft** once,
+   then use **Next match** to read the second occurrence in the long native item.
+   Close the reader and its conversation catalog. That successful fresh read
+   establishes the supplied-item snapshot.
+3. Choose **Add sample original items**, then change between 1250px and 390px.
+   Deliberately read the same original again by title or ID. The prior text
+   window, disclosures and actual first visible literal character return in fresh
+   source text, even though scroll distances change. The former visit's Find and
+   selected text end when that reader closes.
+4. The reader reports **New since previous fresh original read · 5 newly supplied
+   native items.** Choose **Read first newly supplied item**. It opens
+   `sample-child-supplied-turn` / `sample-child-supplied-question`, whose text begins
+   `FIRST NEW SAMPLE ORIGINAL ITEM`, rather than `LATER SAMPLE FINAL ANSWER`.
+5. **Return to original passage** restores the view, Find and selection from
+   immediately before the jump. Open the saved first quote from B's actual draft
+   reference: that explicit first occurrence wins over the remembered later
+   passage. Return keeps B's editor caret/direction/scroll, Plan and both queues.
+   Reload keeps preparation and reading/snapshot metadata, leaving the original
+   closed with no automatic original read or task run.
+
+“New” compares ordered native turn/item identities against the previous
+successful fresh original read in this browser/native home. It does not track
+consumed/unread items, and an existing item's text edit is not a new identity.
+Successful fresh reads advance that snapshot. **Read first new activity** and
+**Mark displayed updates reviewed** instead use the saved task's recorded updates
+and review frontier, which may include changes to earlier items. Reading new
+original items does not mark activity reviewed. Exact saved-reference/item/response
+targets keep their own passage and leave the ordinary snapshot intact.
+
+With the four outputs built above, run the maintained checker in each mode:
+
+```sh
+python3 examples/check_browser_preview_following_original.py --site temp/browser-preview/demo --evidence temp/browser-preview/following-normal
+python3 examples/check_browser_preview_following_original.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/following-iframe
+python3 examples/check_browser_preview_following_original.py --rich --site temp/browser-preview/reading --evidence temp/browser-preview/following-rich
+python3 examples/check_browser_preview_following_original.py --rich --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/following-rich-iframe
+```
+
+Each command checks both 1250→390 and 390→1250, using a real iframe for
+`--embedded`. Receipts measure the exact native UTF-16 character position with
+text-node Ranges, not an inferred line or pixel count. They also check the first
+supplied instruction, backwards pointer selection and Find return, the saved
+first quote, B's actual editor and both queues, zero automatic original reads or
+native admissions, and metadata-only storage. **Reset sample** clears its own
+original snapshot/reading/preparation keys, including a late pagehide write, while
+retaining installed-workbench and unrelated same-origin keys.

@@ -5,11 +5,11 @@ import unittest
 import test_history_reader_refresh as refresh_tests
 
 SOURCE=refresh_tests.SOURCE
-CONFIGURE=SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  root.DeskHistoryReader=')]
+CONFIGURE = SOURCE[SOURCE.index('  function originalFrontierControls()'):SOURCE.index('  function originalReadingStore()')] + SOURCE[SOURCE.index('  function taskControls('):SOURCE.index('  root.DeskHistoryReader=')]
 MANUAL=SOURCE[SOURCE.index('  function manualFindNavigation('):SOURCE.index('  function findMatch(')]
 ITEM=SOURCE[SOURCE.index('  function itemNode('):SOURCE.index('  function render(')]
 BOUNDS=SOURCE[SOURCE.index('  function bounds('):SOURCE.index('  function findControls(')]
-VIEW=SOURCE[SOURCE.index('  function captureView()'):SOURCE.index('  function refreshControls()')]
+VIEW=SOURCE[SOURCE.index('  function visibleTextClip('):SOURCE.index('  function refreshControls()')]
 HANDLERS=r'''
 el('').addEventListener=el('body').addEventListener=()=>{};
 let readingRestoreEpoch=0,readingUnavailable=false;function saveOriginalReading(){}

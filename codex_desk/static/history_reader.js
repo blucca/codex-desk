@@ -15,6 +15,7 @@
   let findVersion=0,finding=false,findSubmitted=false,findQuery='',findGroups=[],findTotal=0,findCursor=-1;
   let taskReview=null;
   let readingHome=null,readingStorage=null,readingRestoreEpoch=0,readingUnavailable=false;
+  let originalFrontier=null,frontierStorage=null;
 
   let nativeIdCopy=null;
   function nativeIdCopyControls() {
@@ -40,6 +41,56 @@
   function current(ticket) {
     return ticket===version && el('').open && (!options?.valid || options.valid());
   }
+  function originalFrontierControls() {
+    const panel=el('new-material'),button=el('first-new');if(!panel || !button)return;
+    if(!root.DeskOriginalFrontier){panel.hidden=true;button.hidden=true;button.disabled=true;return;}
+    const result=originalFrontier?.result;
+    panel.hidden=!result || ['first_read','unchanged'].includes(result.status);
+    button.hidden=result?.status!=='new_items';
+    button.disabled=!result?.target || loading || refreshing || !!taskReview || !current(version);
+    const messages={previous_snapshot_unavailable:'Previous fresh original read snapshot unavailable in this browser.',
+      previous_boundary_unavailable:'Previous fresh original read boundary unavailable in this source.',
+      previous_boundary_ambiguous:'Previous fresh original read boundary ambiguous in this source.',
+      previous_boundary_changed:'Previous fresh original read boundary changed position in this source.',
+      new_item_unavailable:'The first newly supplied native item identity is unavailable.',
+      new_item_ambiguous:'The first newly supplied native item identity is ambiguous.',
+      source_unavailable:'New supplied-item boundary unavailable in this source.',
+      home_unavailable:'The captured original native home changed.'};
+    el('new-status').textContent=result?.status==='new_items'
+      ? `New since previous fresh original read · ${result.count} newly supplied native item${result.count===1?'':'s'}.`
+      : messages[result?.status] || '';
+  }
+  function captureOriginalFrontier(ticket) {
+    if(!root.DeskOriginalFrontier || !source || !readingHome || !current(ticket))return;
+    if(!originalFrontier && explicitReadingTarget())return;
+    const owner={native_home:readingHome,thread_id:source.id};
+    if(originalFrontier && (originalFrontier.owner.native_home!==owner.native_home || originalFrontier.owner.thread_id!==owner.thread_id)){
+      originalFrontier.result={status:'home_unavailable',target:null,count:0};originalFrontierControls();return;
+    }
+    if(!frontierStorage)try{frontierStorage=root.DeskOriginalFrontier.create(root.localStorage);}catch{return;}
+    if(!originalFrontier){let previous;try{previous=frontierStorage.get(owner);}catch{previous={};}
+      originalFrontier={owner,previous,result:null,committed:null};}
+    originalFrontier.result=root.DeskOriginalFrontier.resolve(originalFrontier.previous,source);
+    if(originalFrontier.committed!==source)try{
+      frontierStorage.put(owner,root.DeskOriginalFrontier.snapshot(source));originalFrontier.committed=source;
+    }catch{}
+    originalFrontierControls();
+  }
+  function resetOriginalFrontier() {originalFrontier=null;originalFrontierControls();}
+  function readFirstNewOriginalItem() {
+    if(!source || loading || refreshing || taskReview || !available() || originalFrontier?.result?.status!=='new_items')return false;
+    const target=originalFrontier.result.target;
+    const resolved=root.DeskOriginalFrontier.resolve(originalFrontier.previous,source);
+    if(resolved.status!=='new_items' || resolved.target.turn_id!==target.turn_id || resolved.target.item_id!==target.item_id){
+      originalFrontier.result=resolved;originalFrontierControls();return false;}
+    const index=rows.findIndex(row=>row.item && row.turn.id===target.turn_id && row.item.id===target.item_id);
+    if(index<0)return false;
+    taskReview={passage:taskSnapshot(),capture:{thread_id:source.id,turn_id:target.turn_id},mode:'item',contextView:null,
+      itemLabel:'New since previous fresh original read · Turn '+target.turn_id,message:''};
+    requested={thread_id:source.id,turn_id:target.turn_id,item_id:target.item_id};targetIndex=index;page=Math.floor(index/PAGE_ENTRIES);
+    ++findVersion;finding=false;findSubmitted=false;findQuery='';findGroups=[];findTotal=0;findCursor=-1;
+    el('find-query').value='';findControls();render();return true;
+  }
   function originalReadingStore() {
     if(!readingStorage && root.DeskReadingCheckpoint)try{readingStorage=root.DeskReadingCheckpoint.createOriginal(root.localStorage);}catch{return null;}
     return readingStorage;
@@ -56,7 +107,8 @@
       originalReadingStore()?.put({native_home:readingHome,thread_id:source.id},{latest:false,
         anchor:{...identity(view.anchor.key),offset:view.anchor.offset,screen_top:view.anchor.screenTop},
         window_scroll:{top:view.outer,left:view.outerLeft || 0},reader_scroll:{top:view.scroll,left:view.scrollLeft || 0},
-        item_views:Array.from(view.items,([key,row])=>({...identity(key),open:row.open,window_start:row.start,scroll_top:row.scroll,scroll_left:row.left || 0})),turn_views:[]});
+        item_views:Array.from(view.items,([key,row])=>({...identity(key),open:row.open,window_start:row.start,scroll_top:row.scroll,scroll_left:row.left || 0,
+          ...(row.character?{visible_character:row.character}:{})})),turn_views:[]});
     }catch{}
   }
   function originalReadingView() {
@@ -69,7 +121,8 @@
     const saved=resolved.view,key=JSON.stringify([saved.anchor.turn_id,saved.anchor.item_id]);
     const index=rows.findIndex(row=>rowKey(row)===key);page=Math.floor(index/PAGE_ENTRIES);
     return {items:new Map(saved.item_views.map(row=>[JSON.stringify([row.turn_id,row.item_id]),
-      {start:row.window_start,open:row.open,scroll:row.scroll_top,left:row.scroll_left}])),
+      {start:row.window_start,open:row.open,scroll:row.scroll_top,left:row.scroll_left,
+        ...(row.visible_character?{character:row.visible_character}:{})}])),
       anchor:{key,offset:saved.anchor.offset,screenTop:saved.anchor.screen_top},scroll:saved.reader_scroll.top,scrollLeft:saved.reader_scroll.left,
       outer:saved.window_scroll.top,outerLeft:saved.window_scroll.left,page};
   }
@@ -81,7 +134,7 @@
       if(current(ticket) && readingEpoch===readingRestoreEpoch && findEpoch===findVersion)restoreView(view,ticket);});
   }
   function invalidate() {
-    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;
+    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;resetOriginalFrontier();
     ++version;++refreshVersion;refreshing=false;const callback=options?.onReturn;
     options=null;source=null;requested=null;rows=[];loading=false;targetIndex=-1;unavailableThread=null;taskReview=null;taskControls();resetNativeIdCopy();
     el('response').hidden=true;el('response').textContent='';el('original').hidden=true;el('saved-evidence').hidden=true;el('saved-evidence-quote').textContent='';
@@ -465,12 +518,54 @@
     const anchor=saved.backward?last:first,focus=saved.backward?first:last;
     selection.setBaseAndExtent(anchor.node,anchor.offset,focus.node,focus.offset);
   }
+  function visibleTextClip(pre) {
+    if(!pre?.getBoundingClientRect)return null;
+    const rect=pre.getBoundingClientRect(),body=el('body').getBoundingClientRect(),reader=el('').getBoundingClientRect();
+    const clip={top:Math.max(rect.top,body.top,reader.top,0),bottom:Math.min(rect.bottom,body.bottom,reader.bottom,root.innerHeight ?? Infinity),
+      left:Math.max(rect.left,body.left,reader.left,0),right:Math.min(rect.right,body.right,reader.right,root.innerWidth ?? Infinity)};
+    return clip.bottom>clip.top && clip.right>clip.left?clip:null;
+  }
+  function characterRect(pre,text,at) {
+    if(!Number.isSafeInteger(at) || at<0 || at>=text.length ||
+        (/[\uDC00-\uDFFF]/.test(text[at]) && at && /[\uD800-\uDBFF]/.test(text[at-1])))return null;
+    const size=text.codePointAt(at)>0xffff?2:1,first=textPoint(pre,at,true),last=textPoint(pre,at+size);
+    if(!first || !last)return null;
+    const range=document.createRange();range.setStart(first.node,first.offset);range.setEnd(last.node,last.offset);
+    const rects=Array.from(range.getClientRects());
+    return rects.find(rect=>rect.right>rect.left && rect.bottom>rect.top) || rects[0] || null;
+  }
+  function captureVisibleCharacter(item,pre) {
+    const clip=item.open?visibleTextClip(pre):null;if(!clip)return null;
+    const text=pre.textContent,offsets=[];
+    // Native text windows use literal UTF16 offsets, including surrogate pairs.
+    for(let at=0;at<text.length;at+=text.codePointAt(at)>0xffff?2:1)if(text[at]!=='\n' && text[at]!=='\r')offsets.push(at);
+    let low=0,high=offsets.length;
+    while(low<high){const middle=(low+high)>>>1,rect=characterRect(pre,text,offsets[middle]);
+      if(!rect || rect.bottom<=clip.top)low=middle+1;else high=middle;}
+    for(let i=low;i<offsets.length;i++){
+      const rect=characterRect(pre,text,offsets[i]);if(!rect)continue;if(rect.top>=clip.bottom)break;
+      if(rect.bottom>clip.top && rect.right>clip.left && rect.left<clip.right && rect.right>rect.left)
+        return {offset:(Number(item.dataset.windowStart)||0)+offsets[i],top:rect.top-clip.top};
+    }
+    return null;
+  }
+  function restoreVisibleCharacter(item,saved) {
+    if(!saved.character)return true;
+    const pre=item.querySelector('.history-reader-text'),start=Number(item.dataset.windowStart)||0;
+    if(!item.open || start!==saved.start)return false;
+    const clip=visibleTextClip(pre),rect=characterRect(pre,pre.textContent,saved.character.offset-start);
+    if(!clip || !rect || rect.right<=rect.left || rect.bottom<=rect.top)return false;
+    const top=Math.min(Math.max(saved.character.top,1-(rect.bottom-rect.top)),clip.bottom-clip.top-1);
+    pre.scrollTop+=rect.top-clip.top-top;return true;
+  }
   function captureView(){
     const body=el('body'),items=new Map(),active=document.activeElement;
     const box=body.getBoundingClientRect();let anchor=null,focus=null;
     for(const item of viewItems()){
       const key=elementKey(item),pre=item.querySelector('.history-reader-text'),rect=item.getBoundingClientRect();
-      items.set(key,{start:Number(item.dataset.windowStart)||0,open:item.open,scroll:pre?.scrollTop || 0,left:pre?.scrollLeft || 0});
+      const character=captureVisibleCharacter(item,pre);
+      items.set(key,{start:Number(item.dataset.windowStart)||0,open:item.open,scroll:pre?.scrollTop || 0,left:pre?.scrollLeft || 0,
+        ...(character?{character}:{})});
       if(!anchor && rect.bottom>box.top)anchor={key,offset:rect.top-box.top,screenTop:rect.top};
       if(item===active || item.contains(active)){
         const controls=Array.from(item.querySelectorAll('button,summary,pre'));
@@ -502,11 +597,15 @@
       const item=items.find(item=>elementKey(item)===view.anchor.key);
       if(item)el('').scrollTop+=item.getBoundingClientRect().top-view.anchor.screenTop;
     }
+    for(const item of items){const saved=view.items.get(elementKey(item));
+      if(saved?.character && !restoreVisibleCharacter(item,saved)){
+        readingUnavailable=true;el('status').textContent='Previous original character unavailable in this fresh text window.';
+      }}
   }
   function refreshControls(){
     const button=el('refresh');if(!button)return;
     button.hidden=!source;button.disabled=refreshing || loading;
-    button.textContent=refreshing?'Refreshing original…':'Refresh original';
+    button.textContent=refreshing?'Refreshing original…':'Refresh original';originalFrontierControls();
   }
   function preserveChrome(change,ticket){
     const view=source && rows.length?captureView():null;
@@ -564,7 +663,7 @@
         el('response').textContent=resolved.available?'The saved reviewed excerpt is still at this exact native item and span.':
           `Saved reviewed excerpt retained. Fresh original: ${resolved.status}. No other item or occurrence is used as its replacement.`;
       }
-      source=thread;rows=flatten(thread);
+      source=thread;rows=flatten(thread);captureOriginalFrontier(ticket);
       const first=view.anchor?.key || view.first,index=first?rows.findIndex(row=>rowKey(row)===first):-1;
       page=index>=0?Math.floor(index/PAGE_ENTRIES):Math.min(view.page,Math.max(0,Math.ceil(rows.length/PAGE_ENTRIES)-1));
       targetIndex=typeof requested.turn_id==='string' && typeof requested.item_id==='string'
@@ -609,7 +708,7 @@
           if(typeof home!=='string' || !/^[a-f0-9]{64}$/.test(home))return;
           readingHome=home;
           if(readingEpoch!==readingRestoreEpoch || findEpoch!==findVersion)return;
-          if(source && !loading){const view=originalReadingView();if(view){render(false,view);settleOriginalReading(view,ticket);}}
+          if(source && !loading){preserveChrome(()=>captureOriginalFrontier(ticket),ticket);const view=originalReadingView();if(view){render(false,view);settleOriginalReading(view,ticket);}}
         };
         if(options?.nativeHome)rememberHome(options.nativeHome);
         else Promise.resolve(api('/api/native/home')).then(result=>rememberHome(result?.home_namespace),()=>{});
@@ -636,7 +735,7 @@
       }else if(!thread)thread=typeof options?.loadOriginal==='function'?await options.loadOriginal():await api('/api/native/thread?id='+encodeURIComponent(requested.thread_id));
       if(!current(ticket)){if(ticket===version && el('').open)close();return false;}
       if(!thread || thread.id!==requested.thread_id || !Array.isArray(thread.turns))throw new Error('The original native read did not return this conversation.');
-      source=thread;rows=flatten(thread);
+      source=thread;rows=flatten(thread);captureOriginalFrontier(ticket);
       el('title').textContent=(str(thread.name)||str(thread.title)||str(thread.preview)||'Original Codex conversation').slice(0,240);
       el('binding').textContent='Thread '+thread.id+'\n'+(str(thread.cwd)||'Working directory unreported')+
         (str(thread.modelProvider)?'\nProvider: '+thread.modelProvider:'');
@@ -660,13 +759,13 @@
       el('error').textContent=error.message;el('error').hidden=false;el('retry').hidden=false;
       return false;
     } finally {
-      if(ticket===version){loading=false;el('body').setAttribute('aria-busy','false');el('retry').disabled=false;findControls();refreshControls();nativeIdCopyControls();}
+      if(ticket===version){loading=false;el('body').setAttribute('aria-busy','false');el('retry').disabled=false;findControls();refreshControls();nativeIdCopyControls();originalFrontierControls();}
     }
   }
   async function show(result,callbacks={}) {
     if(!api)throw new Error('Native history reader is not configured.');
     if(callbacks.valid && !callbacks.valid())return false;
-    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;
+    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;resetOriginalFrontier();
     ++version;++refreshVersion;refreshing=false;loading=false;source=null;rows=[];targetIndex=-1;taskReview=null;taskControls();refreshControls();resetNativeIdCopy();
     resetFind();
     requested={...result};options=callbacks;unavailableThread=null;el('response').hidden=true;el('response').textContent='';el('original').hidden=true;el('saved-evidence').hidden=true;el('saved-evidence-quote').textContent='';
@@ -692,6 +791,7 @@
     return read();
   }
   function taskControls() {
+    originalFrontierControls();
     const active=!!taskReview && !!source;
     if(el('task-return'))el('task-return').hidden=!active || taskReview.mode!=='item';
     if(el('task-instructions-return'))el('task-instructions-return').hidden=!active || taskReview.mode==='instructions' || taskReview.instructionSearch?.submitted==null;
@@ -922,6 +1022,7 @@
     el('retry').onclick=()=>{el('retry').disabled=true;source?refresh():read();};
     el('original').onclick=()=>{if(!unavailableThread || !available())return;const thread=unavailableThread;options={...options,taskResponse:false,preloadedThread:thread};return read();};
     if(el('refresh'))el('refresh').onclick=refresh;
+    if(el('first-new')){el('first-new').onclick=readFirstNewOriginalItem;el('first-new').onmousedown=event=>{if(event.button===0 && selectedText())event.preventDefault();};}
     if(el('task-return'))el('task-return').onclick=returnTaskContext;
     if(el('task-passage'))el('task-passage').onclick=returnTaskPassage;
     if(el('task-instructions-return'))el('task-instructions-return').onclick=returnInstructionMatches;

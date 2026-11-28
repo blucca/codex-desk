@@ -61,6 +61,8 @@ class BrowserPreviewLinkedOriginalTests(unittest.TestCase):
                         expected = asset.read_bytes()
                         if asset.name == 'reading_checkpoint.js':
                             expected = expected.replace(b"'codex-desk-reading-checkpoints-v1'", repr(preview.READING_KEY).encode()).replace(b"'codex-desk-original-reading-checkpoints-v1'", repr(preview.ORIGINAL_READING_KEY).encode())
+                        elif asset.name == 'original_frontier.js':
+                            expected = expected.replace(b"'codex-desk-original-frontiers-v1'", repr(preview.ORIGINAL_FRONTIER_KEY).encode())
                         elif asset.name == 'new-activity.js':
                             expected = expected.replace(b"'codex-desk-activity-review-v1'", repr(preview.REVIEW_KEY).encode())
                         self.assertEqual((output / asset.name).read_bytes(), expected)

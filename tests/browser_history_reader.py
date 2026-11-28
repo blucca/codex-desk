@@ -532,13 +532,13 @@ async def check(width, playwright, evidence):
                 await page.locator('#recall-close').click()
                 await page.locator('#browse').click()
                 await page.wait_for_function("!$('history-search-submit').disabled")
-                assert paths('/api/native')[-1]['query'] == {}
+                assert paths('/api/native')[-1]['query'] == {'archived': ['false']}
                 assert await page.locator('#native-list .native-row').count() == 30
                 for cursor in range(30, 181, 30):
                     await page.locator('#more').click()
                     await page.wait_for_function(
                         "$('native-list').children.length===%d && !$('more').disabled" % (cursor + 30))
-                    assert paths('/api/native')[-1]['query'] == {'cursor': [str(cursor)]}
+                    assert paths('/api/native')[-1]['query'] == {'cursor': [str(cursor)], 'archived': ['false']}
                 assert list(threads).index('catalog-old-00') == 200
                 assert desk.history_scanner.status()['seen'] == 200
                 await catalog_read('catalog-old-00')
@@ -556,16 +556,16 @@ async def check(width, playwright, evidence):
                 # exact punctuation/Unicode query; it never searches messages.
                 await catalog_search('  ' + catalog_query + '  ')
                 assert await page.locator('#native-list .native-row').count() == 30
-                assert paths('/api/native')[-1]['query'] == {'search': [catalog_query]}
+                assert paths('/api/native')[-1]['query'] == {'search': [catalog_query], 'archived': ['false']}
                 await page.locator('#more').click()
                 await page.wait_for_function("$('native-list').children.length===32 && !$('more').disabled")
-                assert paths('/api/native')[-1]['query'] == {'search': [catalog_query], 'cursor': ['30']}
+                assert paths('/api/native')[-1]['query'] == {'search': [catalog_query], 'cursor': ['30'], 'archived': ['false']}
                 assert await page.locator('#more').is_hidden()
                 title_calls = [c['params'] for c in calls if c['method'] == 'thread/list'
                                and c['params'].get('searchTerm') == catalog_query]
                 assert len(title_calls) == 2
                 assert all(p['modelProviders'] == [] and p['sortKey'] == 'updated_at'
-                           and 'cwd' not in p for p in title_calls)
+                           and p['archived'] is False and 'cwd' not in p for p in title_calls)
                 await catalog_row('catalog-old-31').get_by_role('button', name='Read original conversation').evaluate(
                     '(button)=>{globalThis.__catalogReadButton=button}')
                 await catalog_read('catalog-old-31')

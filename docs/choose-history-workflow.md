@@ -11,6 +11,7 @@ Start with the job you need to finish, rather than installing another history to
 | Search and analyze histories from several coding agents | [AgentsView](https://github.com/kenn-io/agentsview) provides a local session archive, transcript search and usage reports. [Agent Sessions](https://github.com/jazzyalex/agent-sessions) provides a native macOS history browser with search and supported CLI resume. |
 | Let a coding agent retrieve past work or carry context between agents | [deja-vu](https://github.com/vshulcz/deja-vu) indexes existing transcripts and offers CLI/TUI search, MCP memory and cross-agent handoff. |
 | Find an earlier issue or decision, inspect its original evidence, and optionally prepare the remaining work in a browser | **Codex Desk**: search reply, command and tool text in explicitly indexed recent history. Read the matching original without disturbing your selected task or draft; continue and save preparation when that helps your next step. |
+| Follow newly supplied original items while another task's draft stays open | **Codex Desk original reader**: deliberately read the original again, then **Read first newly supplied item**. This compares supplied identities with its previous successful fresh read, separately from saved-task activity review. |
 
 ## If the terminal already does the job
 
@@ -69,6 +70,16 @@ Launch this separate local workbench from the terminal with your installed Codex
 Use **Browse all conversations** → **Native history** → **Archived conversations** → search title →
 **Read original conversation**. Read evidence without restoring the native task.
 Close and explicitly reopen the same original to continue from its browser-local
-reading place in fresh native text. Keep the same launch Codex home. An exact
-saved quote or response target takes precedence over normal remembered reading.
+reading place in fresh native text, retaining the first visible literal character
+across narrow/wide layouts. Keep the same launch Codex home. An exact saved quote,
+item or response target takes precedence over normal remembered reading.
 See [ID, instruction and original-return workflow](find-original-by-id-or-instruction.md).
+
+When that original supplies later items, **Refresh original** or a deliberate
+reopen compares them with its previous successful fresh-read snapshot.
+**Read first newly supplied item** opens the first new native turn/item, not a
+later final answer or an unread item. Text edits within existing identities do not
+count as new items. **Return to original passage** restores the current Find and
+selection. **Read first new activity** remains the separate saved-task update and
+review workflow; the original's supplied-item snapshot does not mark it reviewed.
+[Rehearse five source-only sample additions](../examples/browser-preview.md#follow-newly-supplied-original-items).

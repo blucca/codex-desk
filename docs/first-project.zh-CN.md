@@ -134,6 +134,26 @@ uvx --refresh --prerelease allow codex-desk@latest
 **Show archived** 是另一项操作。
 
 关闭原文或刷新页面后，主动重新读取同一原生 home 的同一会话，此浏览器会在
-新读取的原文中恢复实际条目、文本窗口、展开状态和阅读位置。刷新页面本身不
-读取原文；保存引句、指定回答等准确来源入口仍优先定位各自段落。当前任务的
-Plan 和待发指令保持原样。
+新读取的原文中恢复实际条目、文本窗口、展开状态和首个可见字符，窄屏／宽屏
+切换后也按原文字符定位。刷新页面本身不读取原文；保存引句、指定内容项／回答
+等准确来源入口仍优先定位各自段落，保留普通阅读位置。当前任务的 Plan 和待发
+指令保持原样。
+
+## 跟进原会话新提供的内容项
+
+按标题或 ID 首次成功读取新鲜原文时，此浏览器为该原生 home／会话建立已提供
+内容项快照。后来主动重新读取，或点 **Refresh original**，**New since previous
+fresh original read** 按 turn／item 身份比较新增内容。已有内容项的文字修改
+不算新提供的内容项；快照表示上次成功读取时来源提供了什么，不表示读完／未读。
+
+点 **Read first newly supplied item** 查看准确的第一项新增内容，可能是用户指令
+而非更晚的 final answer。**Return to original passage** 返回跳转前的视图、Find
+查询和文字选区，已有 Plan 与两组待发队列保持原样。保存引句等准确入口仍优先
+定位自身内容，不替换普通阅读的快照。
+
+这与保存任务中的 **Read first new activity** 分开：后者按记录的活动更新和明确
+审阅边界定位，也包括较早条目的更新。阅读原文新增项不执行 **Mark displayed
+updates reviewed**。快照只保存 home／thread、数量和末项身份，阅读位置只保存
+视图／字符位置元数据。用示例的 **Add sample original items** 明确提供五项合成
+原文，再主动重读练习；[双语步骤与边界](find-original-by-id-or-instruction.md#跟进原会话新提供的内容项)
+及[四种构建的检查命令](../examples/browser-preview.md#follow-newly-supplied-original-items)。

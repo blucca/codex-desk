@@ -33,11 +33,41 @@ archived in Codex. This native catalog choice is separate from **Show archived**
 for saved Desk tasks.
 
 This browser remembers an original's supplied turn/item, displayed text window,
-opened items and reading position for its native home and conversation. Close the
-reader, or reload Desk, then explicitly read the same original again to return to
-that passage in freshly read text. A saved quotation or other exact source target
-opens its requested passage instead. The reader's Find query and selected text are
-for the current reading visit; the remembered position contains view metadata.
+opened items and first visible literal character for its native home and
+conversation. Close the reader, or reload Desk, then explicitly read the same
+original again to return to that character in freshly read text, including after
+a narrow/wide resize. Reload alone leaves the original closed. A saved quotation,
+specified item or task-response target opens its requested passage instead and
+keeps the ordinary reading checkpoint. The reader's Find query and selected text
+are for the current reading visit; the remembered position contains view metadata.
+
+### Follow newly supplied items in an original
+
+1. Read the original normally by title or ID. The first successful fresh read in
+   this browser establishes its supplied-item snapshot for that native home and
+   conversation. It records what the source supplied, not which items you consumed.
+2. When more items are supplied, deliberately reopen the same original or choose
+   **Refresh original**. **New since previous fresh original read** compares the
+   source's ordered turn/item identities with the previous successful fresh read.
+   Editing text in an existing item does not make it a newly supplied item.
+3. Choose **Read first newly supplied item** to inspect the exact first addition.
+   It may be a user instruction or tool item before a later final answer. This
+   navigates the already loaded original while B's Plan and both queues stay put.
+4. **Return to original passage** restores the view, Find query and text selection
+   you had immediately before that jump. Close and later reopen normally to use
+   the remembered passage; explicit source targets still take priority.
+
+Successful fresh reads advance this supplied-item snapshot; the control is not an
+unread marker. **Read first new activity** instead follows recorded updates in a
+saved task, including updates to earlier items, against its explicit review
+frontier. **Mark displayed updates reviewed** belongs to that activity workflow;
+reading new original items leaves it unchanged. Exact saved-reference/item/response
+reads keep their own targets and do not replace the ordinary supplied-item snapshot.
+
+Snapshot metadata stores the native-home/thread owner, item count and exact last
+turn/item boundary. Reading metadata stores disclosures, windows and character
+offsets, not original bodies, Find text or selections. Try the [five-item sample
+and its four maintained checks](../examples/browser-preview.md#follow-newly-supplied-original-items).
 
 ### Start with your own history
 
@@ -124,10 +154,34 @@ ID／标题入口直接读取当前原生历史；指令跳转先打开原会话
 选择 **Read original conversation**。会话仍保持 Codex 原生归档状态；这个目录
 选择与保存 Desk 任务的 **Show archived** 分开。
 
-此浏览器按原生 home／会话记住实际 turn／item、文本窗口、展开状态和阅读位置。
-关闭查看器或刷新 Desk 后，主动重新读取同一原会话，就从新读取的原文回到该段。
-保存引句等准确来源入口仍优先打开指定段落。Find 查询和文字选区属于本次阅读；
-记住的是阅读视图元数据。
+此浏览器按原生 home／会话记住实际 turn／item、文本窗口、展开状态和首个可见
+文字的位置。关闭查看器或刷新 Desk 后，主动重新读取同一原会话，就在新读取的
+原文中回到那个实际字符；窄屏／宽屏切换后仍按字符定位。刷新页面本身不读取
+原文。保存引句、指定内容项或 task response 入口优先打开自己的准确段落，保留
+普通阅读位置。Find 查询和文字选区属于本次阅读；记住的是阅读视图元数据。
+
+### 跟进原会话新提供的内容项
+
+1. 按标题或 ID 普通读取原会话。此浏览器在该原生 home／会话首次成功读取
+   新鲜原文时建立「已提供内容项」快照，记录来源提供了什么，而非你读完了什么。
+2. 后来有新内容时，主动重新打开同一原文，或点 **Refresh original**。
+   **New since previous fresh original read** 按原生 turn／item 的顺序和身份，
+   与上一次成功的新鲜读取比较；已有内容项的文字修改不计为新提供的内容项。
+3. **Read first newly supplied item** 打开准确的第一项新增内容，可能是用户指令
+   或工具项，而不是后面某回合的 final answer。它在已加载的原文中跳转，B 的
+   Plan 和两组待发队列保持原样。
+4. **Return to original passage** 恢复跳转前的阅读视图、Find 查询和文字选区。
+   关闭后再普通重读会恢复记住的段落；明确指定的来源入口仍优先定位自己的内容。
+
+每次成功的新鲜读取会推进已提供内容项快照，这不是未读标记。**Read first new
+activity** 则按保存任务中记录的更新与明确审阅边界比较，也包括较早内容项的
+更新；**Mark displayed updates reviewed** 属于该活动流程。阅读原文新增内容
+不改变活动审阅边界。保存引句／指定内容项／回答的准确入口也不会替换普通的
+已提供内容项快照。
+
+快照只保存原生 home／thread、内容项数量和末项的准确 turn／item 边界；阅读
+元数据保存展开状态、文本窗口和字符位置，不保存原文正文、Find 文字或选区。
+可用[五项合成新增内容及四组维护检查](../examples/browser-preview.md#follow-newly-supplied-original-items)练习。
 
 ### 连接自己的历史，保留当前 B
 
