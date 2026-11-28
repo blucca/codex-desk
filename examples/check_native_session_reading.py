@@ -91,7 +91,6 @@ async def one(browser, width, scratch, evidence, cold=False):
                  'options': [{'label': CHOICE, 'description': 'Retain the existing check'}, {'label': 'Different scope', 'description': 'Separate next work'}]}
             ]}}
         calls, http, errors, holds = [], [], [], {}
-        namespace_hold = [None]
 
         class ControlledRuntime:
             def __init__(self, store, identifier, binary, native_home, **options):
@@ -128,16 +127,6 @@ async def one(browser, width, scratch, evidence, cold=False):
                 self.process.poll = lambda: 0
 
         original_open = desk_server.Desk.open
-        original_namespace = desk_server.Desk.native_home_namespace
-
-        def controlled_namespace(desk):
-            held = namespace_hold[0]
-            if held:
-                entered, release = held
-                entered.set()
-                assert release.wait(30), 'Held native home namespace was not released'
-            return original_namespace(desk)
-
         def controlled_open(desk, identifier):
             result = original_open(desk, identifier)
             held = holds.get(identifier)
@@ -147,7 +136,7 @@ async def one(browser, width, scratch, evidence, cold=False):
                 assert release.wait(30), 'Held original open was not released'
             return result
 
-        with patch.object(desk_server, 'Runtime', ControlledRuntime), patch.object(desk_server.Desk, 'open', controlled_open), patch.object(desk_server.Desk, 'native_home_namespace', controlled_namespace):
+        with patch.object(desk_server, 'Runtime', ControlledRuntime), patch.object(desk_server.Desk, 'open', controlled_open):
             desk = desk_server.Desk('never-executed', home, state_dir)
             for session, project in projects.items():
                 desk.store.create(str(project), 'default', identifier=session, name=threads[session]['name'])
@@ -281,10 +270,17 @@ async def one(browser, width, scratch, evidence, cold=False):
                     # A delayed launch namespace belongs to the old intent, not
                     # whichever source or editor the user chooses while waiting.
                     entered, release = threading.Event(), threading.Event()
-                    namespace_hold[0] = (entered, release)
+                    async def hold_namespace(route):
+                        response = await route.fetch()
+                        entered.set()
+                        assert await asyncio.to_thread(release.wait, 30), 'Held native home HTTP response was not released'
+                        await route.fulfill(response=response)
+
+                    await page.route('**/api/native/home', hold_namespace)
                     desk.runtimes.pop(A).close()
                     await page.reload()
-                    assert await asyncio.to_thread(entered.wait, 12), 'Initial native namespace did not enter its hold'
+                    assert await asyncio.to_thread(entered.wait, 12), 'Initial native namespace HTTP response did not enter its hold'
+                    state_home = await page.evaluate("async () => (await api('/api/state')).native_material.native_home")
                     c_button = page.locator(f'.session-row[data-session="{C}"] .session')
                     await c_button.evaluate('node => node.focus({preventScroll:true})')
                     await c_button.press('Enter')
@@ -295,12 +291,13 @@ async def one(browser, width, scratch, evidence, cold=False):
                     c_before = await page.evaluate("({selected,thread:nativeThreadId,text:$('activity').textContent,prompt:$('prompt').value,top:scrollY})")
                     async with page.expect_response(lambda response: urlsplit(response.url).path == '/api/native/home') as held_namespace:
                         release.set()
-                        namespace_hold[0] = None
                     namespace_response = await held_namespace.value
                     assert namespace_response.ok, 'Held native namespace response failed'
                     namespace_body = await namespace_response.json()
                     assert set(namespace_body) == {'home_namespace'}
                     assert isinstance(namespace_body['home_namespace'], str) and len(namespace_body['home_namespace']) == 64
+                    assert namespace_body['home_namespace'] == state_home
+                    await page.unroute('**/api/native/home', hold_namespace)
                     await frames(page)
                     c_after = await page.evaluate("({selected,thread:nativeThreadId,text:$('activity').textContent,prompt:$('prompt').value,top:scrollY})")
                     assert c_after == c_before, (c_before, c_after)
@@ -427,8 +424,8 @@ async def one(browser, width, scratch, evidence, cold=False):
             finally:
                 for _, release in holds.values():
                     release.set()
-                if namespace_hold[0]:
-                    namespace_hold[0][1].set()
+                if 'release' in locals():
+                    release.set()
                 await context.close()
                 server.shutdown()
                 server.server_close()

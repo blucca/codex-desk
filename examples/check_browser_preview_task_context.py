@@ -118,6 +118,7 @@ async def check(playwright, site, evidence, width, chromium, embedded, public_ur
                 await app.locator('#browse').click()
                 await app.locator('#native-list .native-row').filter(has_text=thread['name']).locator('.native-read').click()
                 await app.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+                assert await app.evaluate('getComputedStyle(document.documentElement).overflowAnchor') == 'none'
                 assert thread['id'] in await app.locator('#history-reader-binding').inner_text()
 
             async def reveal(turn, item):
@@ -236,13 +237,14 @@ async def check(playwright, site, evidence, width, chromium, embedded, public_ur
             assert not any(row['path'].startswith('/api/native') or row['method']=='POST' for row in (await log())[boundary:])
             await app.locator('#history-reader-back').click()
             await app.locator('#history-close').click()
+            assert await app.evaluate('getComputedStyle(document.documentElement).overflowAnchor') == 'auto'
             await checkpoint('missing-input-own-response-supplied-order-no-neighbor-substitution')
             requests = await log()
             assert not any(row['method'] == 'POST' and row['path'] in {'/api/turn', '/api/followups/send', '/api/steer', '/api/stop'} for row in requests)
             receipt = {'passed': True, 'viewport': width, 'embedded': embedded, 'actual_iframe': embedded,
                 'phases': phases, 'source': str(site), 'public_url': public_url, 'paths': paths,
                 'targeted_sample_data_extension': MISSING_TURN, 'missing_instruction_not_borrowed': True,
-                'same_turn_response': True, 'local_task_navigation_requests': 0, 'outer_plan_and_queues_unchanged': True,
+                'same_turn_response': True, 'reader_root_anchor_policy': 'scoped-none-then-auto', 'local_task_navigation_requests': 0, 'outer_plan_and_queues_unchanged': True,
                 'simulated_api_requests': requests, 'static_http_requests': received, 'escaped_api_requests': escaped,
                 'external_requests': external, 'native_model_calls': 0, 'javascript_errors': errors,
                 'console_errors': console, 'failed_requests': failed, 'horizontal_overflow': False}

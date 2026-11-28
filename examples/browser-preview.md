@@ -58,6 +58,20 @@ To rerun only reading transitions, use
 adding `--embedded` for the iframe build. The JSON receipts and screenshots retain
 each exact-source comparison; the fixture traps every native task/response path.
 
+The same opt-in fixture also exercises **Read first new activity**:
+
+```sh
+python3 examples/check_browser_preview_new_activity.py --site temp/browser-preview/reading --evidence temp/browser-preview/new-activity
+python3 examples/check_browser_preview_new_activity.py --site temp/browser-preview/reading-embedded --embedded --evidence temp/browser-preview/new-activity-embedded
+```
+
+At 1250/390, the checker updates an earlier native command, opens that exact item
+without marking it reviewed, returns between saved tasks and reloads fresh source.
+Held event responses and deliberate Latest frames keep review on the captured
+displayed frontier while later material remains new. A moved source cannot be
+recovered from cached event replay. Sample review metadata has its own storage key;
+**Reset sample** clears it along with sample reading places and preparation.
+
 For iframe hosting, add `--embedded` when building. Installer links then open separately while the sample preparation stays in the original frame. Check both hosting modes with:
 
 ```sh
@@ -85,3 +99,25 @@ actual iframe, alongside the existing Prepared lookup workflow.
 ```sh
 python3 examples/check_browser_preview_task_context.py --site temp/browser-preview/demo --evidence temp/browser-preview/task-context
 ```
+
+## Changed saved work and review return
+
+The default sample can group its three saved conversations without inventing a
+review baseline. The existing reading fixture also supplies parent-task events
+for **Changed saved work** → the saved original passage → **Read first new
+activity** → **Mark displayed updates reviewed** → **Back to Changed work**.
+The checker preserves the overview row and project/title/archive/page scope,
+including when a reviewed row no longer belongs in Changed. Background native
+material updates only the small dot while another task's draft, paused queues,
+unsent answer and editor caret remain unchanged.
+
+```sh
+python3 examples/check_browser_preview_changed_work.py --ordinary --site temp/browser-preview/demo --evidence temp/browser-preview/changed-normal
+python3 examples/check_browser_preview_changed_work.py --site temp/browser-preview/reading --evidence temp/browser-preview/changed-reading
+python3 examples/check_browser_preview_changed_work.py --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/changed-embedded
+```
+
+Each command checks 1250/390 against the generated maintained assets. Receipts
+record compact native-home-bound metadata, exact source IDs, GET-only overview
+and review reads, and zero native task or response admissions. Reset checks wait
+for the sample document's actual reload, including inside the iframe.

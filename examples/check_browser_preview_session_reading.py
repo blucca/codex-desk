@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from check_browser_preview import static_server
-from check_browser_preview_links import open_app, reload_app
+from check_browser_preview_links import open_app, reload_app, reset_app
 
 A, B, C = ('desk-sample-' + name + '-thread' for name in ('checkout', 'docs', 'mobile'))
 PRIOR, LIVE = 'sample-checkout-turn', 'sample-checkout-live-turn'
@@ -206,9 +206,16 @@ async def check(p, site, evidence, chromium, embedded, width):
             await app.locator('#prompt').fill(C_DRAFT)
             await app.wait_for_function('text=>draftSaved.get(selected)?.text===text', arg=C_DRAFT)
             current = await app.evaluate("({selected,thread:nativeThreadId,text:$('activity').textContent,prompt:$('prompt').value,top:scrollY})")
+            report['namespace_before'] = await app.evaluate('''()=>({pending:sessionReadingPending,intent:DeskSessionReading.intent(),follow:DeskSessionReading.follow(),opening,
+                taskHidden:$('task').hidden,activityReview:globalThis.DeskNewActivityView?.state?.()})''')
+            report['namespace_before']['view'] = current
             await app.evaluate("DeskBrowserPreview.fixture.release('/api/native/home')")
             await frames(app)
-            assert await app.evaluate("({selected,thread:nativeThreadId,text:$('activity').textContent,prompt:$('prompt').value,top:scrollY})") == current
+            settled = await app.evaluate("({selected,thread:nativeThreadId,text:$('activity').textContent,prompt:$('prompt').value,top:scrollY})")
+            report['namespace_after'] = await app.evaluate('''()=>({pending:sessionReadingPending,intent:DeskSessionReading.intent(),follow:DeskSessionReading.follow(),opening,
+                taskHidden:$('task').hidden,activityReview:globalThis.DeskNewActivityView?.state?.()})''')
+            report['namespace_after']['view'] = settled
+            assert settled == current, (current, settled)
             assert await preparation() == saved
             await navigate(A)
             await app.evaluate('''async ids => {await open(ids.a,{revealLatest:false,readingTarget:{turn_id:ids.turn,item_id:ids.item}});
@@ -246,10 +253,7 @@ async def check(p, site, evidence, chromium, embedded, width):
             forbidden = {'/api/turn', '/api/followups/send', '/api/approval', '/api/answer', '/api/steer', '/api/stop'}
             assert not any(r['method'] == 'POST' and urlsplit(r['path']).path in forbidden for r in requests), requests
             await app.evaluate("localStorage.setItem('codex-desk-reading-checkpoints-v1','installed-marker');localStorage.setItem('codex-desk-session','installed-session')")
-            await app.locator('#preview-reset').click()
-            await page.wait_for_timeout(100)
-            app = await (await page.locator('iframe').element_handle()).content_frame() if embedded else page.main_frame
-            await app.wait_for_function("$('home-list').getAttribute('aria-busy')==='false'")
+            app = await reset_app(page, app, embedded)
             assert await app.evaluate("localStorage.getItem('codex-desk-browser-preview-reading-checkpoints-v1')") is None
             assert await app.evaluate("localStorage.getItem('codex-desk-reading-checkpoints-v1')") == 'installed-marker'
             assert await app.evaluate("localStorage.getItem('codex-desk-session')") == 'installed-session'

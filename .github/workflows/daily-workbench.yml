@@ -48,6 +48,14 @@ jobs:
           python examples/build_browser_preview.py --embedded --session-reading-fixture --out temp/static-preview/reading-embedded
           python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-reading
           python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-reading-embedded
+      - name: Check changed saved-work sample and first-new activity
+        run: |
+          python examples/check_browser_preview_new_activity.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-new-activity
+          python examples/check_browser_preview_new_activity.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-new-activity-embedded
+          python examples/check_browser_preview_changed_work.py --site temp/static-preview/demo --ordinary --evidence temp/evidence/browser-preview-changed-ordinary
+          python examples/check_browser_preview_changed_work.py --site temp/static-preview/embedded --ordinary --embedded --evidence temp/evidence/browser-preview-changed-ordinary-embedded
+          python examples/check_browser_preview_changed_work.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-changed-rich
+          python examples/check_browser_preview_changed_work.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-changed-rich-embedded
       - name: Check installed daily workflows
         working-directory: temp
         run: |
@@ -69,13 +77,15 @@ jobs:
           DESK_USE_INSTALLED: '1'
         run: |
           mkdir -p installed-fixtures/examples
-          cp ../examples/check_native_session_reading.py ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py ../examples/check_preparation_find.py ../examples/check_native_task_context.py installed-fixtures/examples/
+          cp ../examples/check_native_new_activity.py ../examples/check_native_changed_work.py ../examples/check_native_session_reading.py ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py ../examples/check_preparation_find.py ../examples/check_native_task_context.py installed-fixtures/examples/
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-response" python installed-fixtures/examples/check_native_task_response.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/evidence-preparation" python installed-fixtures/examples/check_native_evidence_preparation.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/preparation-find" python installed-fixtures/examples/check_preparation_find.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-context" python installed-fixtures/examples/check_native_task_context.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/session-reading" python installed-fixtures/examples/check_native_session_reading.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/session-reading-cold" python installed-fixtures/examples/check_native_session_reading.py --cold
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/first-new-activity" python installed-fixtures/examples/check_native_new_activity.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/changed-work" python installed-fixtures/examples/check_native_changed_work.py
       - name: Retain daily-workflow receipts
         if: always()
         uses: actions/upload-artifact@v4

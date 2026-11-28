@@ -100,6 +100,7 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Return to what you were reading.** Switch from saved task A to B and back: the same original activity, tool disclosures and scroll positions return. In the same browser, they also return after reload. Choose **Latest output ↓** to follow the end instead.
+- **Read what changed across projects.** [Read first new activity](docs/review-new-activity.md) opens the earliest recorded native item update since your review. Deliberately mark displayed updates reviewed or choose **Latest output ↓**; later arrivals remain new.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
 - **Read the proposed plan.** Plan-mode output appears as native Codex streams it; the final native plan remains readable in activity, original history, content recall and reviewed handoffs. It stays separate from your unsent Plan draft and native task checklist.
 - **Review this turn's changes.** The latest native cumulative diff appears in **Turn changes**. Read or copy its full patch without losing your position as output continues; actual completion, interruption or failure keeps the last reported diff until the next turn.

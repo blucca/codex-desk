@@ -18,7 +18,7 @@ const E=DeskEvidencePreparation,clone=x=>JSON.parse(JSON.stringify(x));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 const crypto={randomUUID:()=> '00000000-0000-4000-8000-000000000001'};
-let state={sessions:[{id:'a',name:'A prepared Plan',cwd:'/former/a'},{id:'b',name:'B prepared Work',cwd:'/former/b'}]},selected='a',generation=7,opening=false,modeSelected='a';
+let state={sessions:[{id:'a',name:'A prepared Plan',cwd:'/former/a',thread_id:'thread-A'},{id:'b',name:'B prepared Work',cwd:'/former/b',thread_id:'thread-B'}]},selected='a',generation=7,opening=false,modeSelected='a',nativeThreadId='thread-A';
 const drafts=new Map(),submitting=new Set(),timerCallbacks=new Map();let timerId=0;
 const setTimeout=callback=>{timerCallbacks.set(++timerId,callback);return timerId;};
 const clearTimeout=id=>timerCallbacks.delete(id);
@@ -43,7 +43,7 @@ async function api(path,data){
   if(control.saveHold)await control.saveHold.promise;return next;
 }
 function seed(id='a',text=db[id].text){
-  selected=id;opening=false;$('task').hidden=false;$('prompt').value=text;$('turn-mode').value=db[id].mode;
+  selected=id;nativeThreadId=state.sessions.find(row=>row.id===id).thread_id;opening=false;$('task').hidden=false;$('prompt').value=text;$('turn-mode').value=db[id].mode;
   draftRevisions.set(id,db[id].revision);draftEdits.set(id,7);drafts.set(id,text);draftModes.set(id,db[id].mode);
   draftSaved.set(id,clone(db[id]));draftIdentities.set(id,{revision:db[id].revision,sequence:7});
   $('prompt').selectionStart=2;$('prompt').selectionEnd=9;$('prompt').scrollTop=77;
@@ -62,10 +62,14 @@ class EvidenceHostControllerTests(unittest.TestCase):
         source = APP.read_text()
         draft = source[source.index('const draftWriter='):source.index('// Browser retention')]
         host = source[source.index('let preparedEvidenceOwner='):source.index("$('read-original').onclick=")]
+        reading = '\n'.join(source[source.index(begin):source.index(end)] for begin, end in [
+            ('const sessionReadingViews=', 'let sessionReadingHomeValue='),
+            ('function sessionReadingBinding()', 'function sessionReadingIdentity('),
+            ('function sessionReadingInput()', "window.addEventListener('wheel',")])
         events = '\n'.join(line for line in source.splitlines()
                            if line.startswith("$('prompt').oninput=") or line.startswith("$('turn-mode').onchange="))
         script = SETUP.replace('MODULE', json.dumps(str(ROOT / 'codex_desk/static/evidence-preparation.js')))
-        script += '\n' + draft + '\n' + host + '\n' + events + '\n(async()=>{seed();\n' + body + r'''
+        script += '\n' + reading + '\n' + draft + '\n' + host + '\n' + events + '\n(async()=>{seed();\n' + body + r'''
 unchangedNative();process.stdout.write(JSON.stringify({passed:true}));
 })().catch(e=>{process.stderr.write(e.stack);process.exitCode=1;});
 '''
@@ -114,7 +118,9 @@ assert.equal(posts().length,0);
     def test_later_input_while_save_reply_held_is_never_overwritten_then_saves_new_identity(self):
         self.run_js(r'''
 assert(await review());const hold=deferred();control.saveHold=hold;const pending=E.append();await settle();assert.equal(posts().length,1);
+sessionReadingPending=true;sessionReadingRestoring=true;sessionReadingLatest=true;const readingEpoch=sessionReadingEpoch;
 const newer=$('prompt').value+'\nLater exact unsent Work';$('prompt').value=newer;$('turn-mode').value='native';$('prompt').oninput();
+assert.equal(sessionReadingEpoch,readingEpoch+1);assert.equal(sessionReadingPending,false);assert.equal(sessionReadingRestoring,false);assert.equal(sessionReadingLatest,false);
 assert.equal(draftEdits.get('a'),9);hold.resolve();assert(await pending);assert.equal($('prompt').value,newer);assert.equal(drafts.get('a'),newer);assert.equal(draftModes.get('a'),'native');assert.equal($('turn-mode').value,'native');
 delete control.saveHold;assert(await persistDraft('a',{identify:true}));assert.equal(db.a.text,newer);assert.equal(db.a.mode,'native');assert.equal(posts()[1].data.sequence,9);assert.equal(posts()[1].data.revision,4);
 ''')

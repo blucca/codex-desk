@@ -29,6 +29,16 @@ async def reload_app(page, embedded):
     return await (await page.locator('iframe').element_handle()).content_frame() if embedded else page.main_frame
 
 
+async def reset_app(page, app, embedded):
+    # Reset reloads this document, not the iframe host. Wait for that actual
+    # navigation rather than sampling a fixed delay before the app is loaded.
+    async with app.expect_navigation(wait_until='load'):
+        await app.locator('#preview-reset').click()
+    frame = await (await page.locator('iframe').element_handle()).content_frame() if embedded else page.main_frame
+    await frame.wait_for_function("document.querySelector('#home-list')?.getAttribute('aria-busy')==='false'")
+    return frame
+
+
 async def check(p,site,evidence,chromium,embedded,width=390):
     with static_server(site) as (url,received,escaped):
         browser=await p.chromium.launch(executable_path=chromium,headless=True,args=['--no-sandbox','--disable-dev-shm-usage'])

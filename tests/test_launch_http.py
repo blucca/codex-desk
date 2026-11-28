@@ -6,6 +6,7 @@ The current Python executable supplies the harmless --version preflight.
 Every child spawn is recorded; non-version spawns and browser opens are trapped.
 """
 import contextlib
+import hashlib
 from html.parser import HTMLParser
 import http.client
 import json
@@ -212,7 +213,9 @@ class LaunchHTTPTests(unittest.TestCase):
             self.assertEqual((status, mime), (200, 'application/json; charset=utf-8'))
             self.assertEqual(json.loads(body), {'profiles': [{'id': 'default',
                 'name': 'Current Codex settings', 'editable': False}],
-                'sessions': [], 'organized': [], 'pending': {}, 'native_outcomes': {}})
+                'sessions': [], 'organized': [], 'pending': {}, 'native_outcomes': {},
+                'native_material': {'native_home': hashlib.sha256(str(self.home.resolve()).encode('utf-8')).hexdigest(),
+                                    'summaries': []}})
             status, mime, body = self.get(address, '/')
             self.assertEqual((status, mime), (200, 'text/html; charset=utf-8'))
             static = Path(desk_server.__file__).resolve().parent / 'static'

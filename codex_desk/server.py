@@ -30,6 +30,7 @@ from .stop_dispatch import stop_current, stop_status, StopConflict
 from .preparation import preparation_snapshot
 from .preparation_find import lookup_snapshot
 from .native_outcome import outcomes
+from .native_material import summaries as material_summaries
 from .task_response import identifier as response_identifier, select_task_response
 from .followups import (FollowupConflict, followup_snapshot, add_followup, edit_followup,
     remove_followup, reorder_followups, clear_followups, reserve_followup, record_followup_receipt)
@@ -521,11 +522,16 @@ def handler(desk, access_token=None):
                     params = parse_qs(url.query)
                     return self.reply(load_draft(desk.store, params['session'][0]))
                 if url.path == '/api/state':
-                    sessions = [s for s in desk.store.sessions() if s['id'] != 'native-catalog']
-                    return self.reply({'profiles': profiles(desk.home),
-                        'sessions': sessions, 'native_outcomes': outcomes(desk.store, sessions),
-                        'organized': desk.store.organized_sessions(include_archived=True),
-                        'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}})
+                    with desk.store.lock:
+                        sessions = [s for s in desk.store.sessions() if s['id'] != 'native-catalog']
+                        namespace = desk.native_home_namespace()
+                        result = {'profiles': profiles(desk.home),
+                            'sessions': sessions, 'native_outcomes': outcomes(desk.store, sessions),
+                            'native_material': {'native_home': namespace,
+                                'summaries': material_summaries(desk.store, sessions, namespace)},
+                            'organized': desk.store.organized_sessions(include_archived=True),
+                            'pending': {k: list(v.approvals.values()) for k, v in desk.runtimes.items() if v.process.poll() is None}}
+                    return self.reply(result)
                 if url.path == '/api/organized':
                     params = parse_qs(url.query, keep_blank_values=True)
                     archived = params.get('include_archived', ['false'])[0].lower()
@@ -581,12 +587,12 @@ def handler(desk, access_token=None):
                 if url.path == '/api/events':
                     params = parse_qs(url.query)
                     return self.reply(desk.store.events(params['session'][0], int(params.get('after', ['0'])[0])))
-                if url.path not in ('/', '/app.js', '/evidence-preparation.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_tasks.js', '/reading_checkpoint.js', '/history_find.js', '/preparation.js', '/preparation-find.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/stop-task.js', '/recall.js', '/home.js', '/style.css'):
+                if url.path not in ('/', '/app.js', '/evidence-preparation.js', '/evidence.js', '/activity.js', '/history_reader.js', '/history_tasks.js', '/reading_checkpoint.js', '/new-activity.js', '/new-activity-view.js', '/changed-work.js', '/changed-work-view.js', '/history_find.js', '/preparation.js', '/preparation-find.js', '/followups.js', '/native-state.js', '/native-steps.js', '/turn-changes.js', '/steering.js', '/stop-task.js', '/recall.js', '/home.js', '/style.css'):
                     return self.reply({'error': 'Not found'}, 404)
                 name = 'index.html' if url.path == '/' else url.path[1:]
                 data = (Path(__file__).parent / 'static' / name).read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence-preparation.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_tasks.js': 'text/javascript; charset=utf-8', 'reading_checkpoint.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'preparation-find.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'stop-task.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
+                self.send_header('Content-Type', {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'evidence-preparation.js': 'text/javascript; charset=utf-8', 'evidence.js': 'text/javascript; charset=utf-8', 'activity.js': 'text/javascript; charset=utf-8', 'history_reader.js': 'text/javascript; charset=utf-8', 'history_tasks.js': 'text/javascript; charset=utf-8', 'reading_checkpoint.js': 'text/javascript; charset=utf-8', 'new-activity.js': 'text/javascript; charset=utf-8', 'new-activity-view.js': 'text/javascript; charset=utf-8', 'changed-work.js': 'text/javascript; charset=utf-8', 'changed-work-view.js': 'text/javascript; charset=utf-8', 'history_find.js': 'text/javascript; charset=utf-8', 'preparation.js': 'text/javascript; charset=utf-8', 'preparation-find.js': 'text/javascript; charset=utf-8', 'followups.js': 'text/javascript; charset=utf-8', 'native-state.js': 'text/javascript; charset=utf-8', 'native-steps.js': 'text/javascript; charset=utf-8', 'turn-changes.js': 'text/javascript; charset=utf-8', 'steering.js': 'text/javascript; charset=utf-8', 'stop-task.js': 'text/javascript; charset=utf-8', 'recall.js': 'text/javascript; charset=utf-8', 'home.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name])
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Cache-Control', 'no-store')
                 self.end_headers()

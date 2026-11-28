@@ -9,6 +9,7 @@ import shutil
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = 'https://blucca.github.io/codex-desk/demo/'
 READING_KEY = 'codex-desk-browser-preview-reading-checkpoints-v1'
+REVIEW_KEY = 'codex-desk-browser-preview-activity-review-v1'
 
 
 def sample_threads():
@@ -94,6 +95,9 @@ def build(output, embedded=False, session_reading_fixture=False):
     checkpoint = output / 'reading_checkpoint.js'
     if checkpoint.exists():
         checkpoint.write_text(checkpoint.read_text().replace("'codex-desk-reading-checkpoints-v1'", repr(READING_KEY)))
+    review = output / 'new-activity.js'
+    if review.exists():
+        review.write_text(review.read_text().replace("'codex-desk-activity-review-v1'", repr(REVIEW_KEY)))
     for name in ('preview-api.js', 'preview.css'):
         shutil.copyfile(ROOT / 'examples/browser-preview' / name, output / name)
     casefold = {chr(n): chr(n).casefold() for n in range(0x110000) if chr(n).casefold() != chr(n).lower()}

@@ -15,6 +15,7 @@ from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 from . import __version__, recall
 from .native_outcome import record_snapshot, initialize as initialize_outcomes
+from .native_material import initialize as initialize_material
 
 
 NAME_LIMIT = 120
@@ -269,6 +270,7 @@ class Store:
                      'task' if title else 'default', int(bool(title)), identifier))
             recall.initialize(self)
             initialize_outcomes(self)
+            initialize_material(self)
     def create(self, cwd, profile, identifier=None, name=None):
         identifier = identifier or uuid.uuid4().hex
         now = time.time()
