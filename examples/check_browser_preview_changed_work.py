@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Changed saved work using the maintained three-conversation sample.
+"""Check Changed saved work using the maintained three saved conversations and linked original.
 
 The ordinary build checks unknown baselines and exact saved-reading navigation.
 The existing --session-reading-fixture build additionally checks background dots,
@@ -102,7 +102,7 @@ async def check(p, site, evidence, chromium, embedded, width, ordinary=False):
         try:
             app = await open_app(page, context, url, embedded)
             await app.wait_for_function("$('home-list').getAttribute('aria-busy')==='false'")
-            assert await app.evaluate('DeskPreviewThreads.length') == 3
+            assert await app.evaluate('DeskPreviewThreads.length') == 4
             assert await app.evaluate('!!DeskBrowserPreview.fixture') == (not ordinary)
             assert await app.evaluate("document.documentElement.dataset.previewEmbedded==='true'") == embedded
             await app.evaluate('''async data=>{
@@ -314,7 +314,7 @@ if __name__ == '__main__':
     parser.add_argument('--site', type=Path, required=True)
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--embedded', action='store_true')
-    parser.add_argument('--ordinary', action='store_true', help='Check the default three short histories without transport fixtures')
+    parser.add_argument('--ordinary', action='store_true', help='Check the default primary histories and linked original without transport fixtures')
     parser.add_argument('--widths', default='1250,390')
     parser.add_argument('--chromium', default=os.environ.get('DESK_CHROMIUM'))
     asyncio.run(main(parser.parse_args()))

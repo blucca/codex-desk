@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Maintained sample: exact tool evidence -> its task -> its response -> passage.
 
-The three shipped sample histories supply addressed command evidence. A targeted
+The three primary shipped sample histories supply addressed command evidence. A targeted
 sample-data wrapper appends a no-input mobile task for the availability check;
 it does not change the shipped sample's latest response or simulate task sending.
 """
@@ -73,7 +73,7 @@ async def check(playwright, site, evidence, width, chromium, embedded, public_ur
             await app.wait_for_function("$('home-list').getAttribute('aria-busy')==='false'")
             assert await app.evaluate("document.documentElement.dataset.previewEmbedded==='true'") == embedded
             threads = await app.evaluate('DeskPreviewThreads')
-            assert len(threads) == 3
+            assert len(threads) == 4
 
             async def snapshot():
                 return await app.evaluate('DeskBrowserPreview.snapshot()')
@@ -186,9 +186,23 @@ async def check(playwright, site, evidence, width, chromium, embedded, public_ur
                 await app.locator('[data-task-action="response"]').click()
                 await app.locator(f'.history-reader-target[data-turn-id="{turn["id"]}"][data-item-id="{answer["id"]}"]').wait_for()
                 expected_response = await app.evaluate('(item)=>DeskHistoryReader.textForItem(item)', answer)
-                assert await app.locator('.history-reader-target pre').text_content() == expected_response
+                if answer.get('id') == 'sample-child-answer':
+                    # The long child uses the shipped bounded source window; Copy
+                    # below still compares its complete original response exactly.
+                    window = await app.locator('.history-reader-target').evaluate('''n=>({start:Number(n.dataset.windowStart),
+                        range:n.querySelector('.history-reader-text-coverage').textContent,text:n.querySelector('pre').textContent})''')
+                    import re
+                    match = re.fullmatch(r'Text characters (\d+)–(\d+) of (\d+)\.', window['range'])
+                    assert match, window
+                    start, end, total = map(int, match.groups())
+                    assert start == window['start'] + 1 and 0 < end - window['start'] <= 24000
+                    assert total == await app.evaluate('text=>text.length', expected_response)
+                    assert window['text'] == await app.evaluate('(data)=>data.text.slice(data.start,data.end)',
+                        {'text': expected_response, 'start': window['start'], 'end': end})
+                else:
+                    assert await app.locator('.history-reader-target pre').text_content() == expected_response
                 assert 'Native status at selection: ' + turn['status'] in await app.locator('#history-reader-task-status').inner_text()
-                assert 'Phase: unreported' in await app.locator('#history-reader-task-status').inner_text()
+                assert 'Phase: ' + (answer.get('phase') or 'unreported') in await app.locator('#history-reader-task-status').inner_text()
                 await app.locator('.history-reader-target .history-reader-copy-text').click()
                 await app.wait_for_function('text=>window.__deskTaskCopies?.at(-1)===text', arg=expected_response)
                 await app.locator('#history-reader-task-return').click()

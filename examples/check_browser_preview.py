@@ -31,7 +31,7 @@ REUSED_DRAFT = DRAFT + "\n\n" + FIRST
 
 
 def check_preparation_api():
-    """Exercise browser-local preparation against the maintained three histories."""
+    """Exercise browser-local preparation against the maintained sample histories."""
     import importlib.util
     root = Path(__file__).resolve().parents[1]
     spec = importlib.util.spec_from_file_location('browser_preview_build', root / 'examples/build_browser_preview.py')
@@ -50,7 +50,7 @@ const source=fs.readFileSync(process.argv[1],'utf8');
 function load(){vm.runInThisContext(source);}
 async function request(path,data){const response=await window.fetch(path,data?{method:'POST',body:JSON.stringify(data)}:{});return {status:response.status,body:await response.json()};}
 (async()=>{
- load();assert.equal(fixture.threads.length,3);
+ load();assert.equal(fixture.threads.length,4);
  const pristine=window.DeskBrowserPreview.snapshot();
  const home=(await request('/api/native/home')).body.home_namespace;assert.match(home,/^[a-f0-9]{64}$/);
  const original=fixture.threads[0],turn=original.turns[0];
@@ -130,7 +130,7 @@ async function request(path,data){const response=await window.fetch(path,data?{m
  }
  assert.deepEqual(window.DeskBrowserPreview.snapshot(),indexedBaseline,'Command evidence searches changed preparation');
  assert(!requests.some(r=>/\/api\/(turn|followups\/send)$/.test(r.path)));assert.equal(external,0);
- console.log(JSON.stringify({passed:true,sample_histories:3,overview_sessions:1,prepared_followups:2,
+ console.log(JSON.stringify({passed:true,sample_histories:4,overview_sessions:1,prepared_followups:2,
    overview_read_only:true,exact_project_scope:true,archive_scope:true,literal_unicode_lookup:true,command_evidence_search:true,lookup_owners:3,duplicate_phrase_owners:2,lookup_read_only:true,source_queue_unchanged:true,
    reload_preserved:true,conflict_status:409,same_page_sequence_recovery:true,native_model_calls:0,external_http_requests:external}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
@@ -244,7 +244,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
         try:
             await page.goto(url)
             await page.wait_for_function("document.querySelector('#home-list').getAttribute('aria-busy') === 'false'")
-            assert await page.locator("#home-list .native-row").count() == 3
+            assert await page.locator("#home-list .native-row").count() == 4
             assert "Sample" in await page.locator("#home-list").inner_text()
             banner = page.locator("#preview-banner")
             assert await banner.is_visible()

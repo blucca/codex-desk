@@ -10,6 +10,32 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = 'https://blucca.github.io/codex-desk/demo/'
 READING_KEY = 'codex-desk-browser-preview-reading-checkpoints-v1'
 REVIEW_KEY = 'codex-desk-browser-preview-activity-review-v1'
+CHILD = 'sample-child-thread'
+CHILD_TURN = 'sample-child-turn'
+CHILD_ITEM = 'sample-child-answer'
+CHILD_QUOTE = 'Child decisive evidence — café🙂 项目 exact source.'
+
+
+def linked_item():
+    return {'id': 'sample-checkout-collaboration', 'type': 'collabAgentToolCall',
+            'tool': 'spawnAgent', 'status': 'completed', 'senderThreadId': 'sample-checkout-thread',
+            'receiverThreadIds': [CHILD], 'prompt': 'Inspect the sample retry result only.',
+            'agentsStates': {CHILD: {'status': 'completed', 'message': 'Sample child result retained.'}}}
+
+
+def child_original():
+    text = 'CHILD START\n' + '\n'.join(
+        f'Child source line {n:04d} — retain the captured retry instruction and independent original.'
+        + (' ' + CHILD_QUOTE if n in (50, 900) else '') for n in range(1200)) + '\nCHILD END'
+    return {'id': CHILD, 'name': 'Sample linked retry original', 'cwd': '/sample/projects/checkout-child',
+            'cwdExists': False, 'modelProvider': 'sample', 'updatedAt': 1795649999,
+            'turns': [{'id': CHILD_TURN, 'status': 'completed', 'items': [
+                {'id': 'sample-child-question', 'type': 'userMessage', 'content': [{'type': 'text',
+                 'text': 'Inspect the reported retry result and retain the decisive original evidence.'}]},
+                {'id': CHILD_ITEM, 'type': 'agentMessage', 'phase': 'final_answer', 'text': text},
+                {'id': 'sample-child-evidence', 'type': 'commandExecution', 'command': 'printf sample-child',
+                 'status': 'completed', 'exitCode': 0,
+                 'aggregatedOutput': 'Sample child command evidence: independent original — café🙂.'}]}]}
 
 
 def sample_threads():
@@ -27,6 +53,8 @@ def sample_threads():
                 {'id': f'sample-{name}-evidence', 'type': 'commandExecution', 'command': f'printf sample-{name}',
                  'status': 'completed', 'exitCode': 0,
                  'aggregatedOutput': f'Sample {name} command evidence: retained result — café🙂.'}]}]})
+    result[0]['turns'][0]['items'].append(linked_item())
+    result.append(child_original())
     return result
 
 
@@ -36,16 +64,11 @@ def reading_fixture():
     prior = threads[0]['turns'][0]
     prior['items'][2]['aggregatedOutput'] = '\n'.join(
         f'Sample command line {n:04d} — café 项目 🌱 retains its original result.' for n in range(950))
-    prior['items'].extend([
+    prior['items'].insert(-1,
         {'id': 'sample-checkout-mcp', 'type': 'mcpToolCall', 'server': 'sample',
          'tool': 'read_saved_result', 'status': 'completed', 'arguments': {'project': 'checkout'},
          'result': {'content': [{'type': 'text', 'text': '\n'.join(
-             f'Sample MCP line {n:04d} — original retained result.' for n in range(650))}]}},
-        {'id': 'sample-checkout-collaboration', 'type': 'collabAgentToolCall', 'tool': 'spawnAgent',
-         'status': 'completed', 'senderThreadId': threads[0]['id'], 'receiverThreadIds': ['sample-child-thread'],
-         'prompt': 'Inspect the sample result only.',
-         'agentsStates': {'sample-child-thread': {'status': 'completed', 'message': 'Sample child result retained.'}}},
-    ])
+             f'Sample MCP line {n:04d} — original retained result.' for n in range(650))}]}})
     live = 'sample-checkout-live-turn'
     threads[0]['turns'].append({'id': live, 'status': 'inProgress', 'items': [
         {'id': 'sample-checkout-live-output', 'type': 'agentMessage', 'text': '\n'.join(

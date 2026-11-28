@@ -149,3 +149,12 @@ Browser regressions use controlled local HTTP/SQLite, with no provider calls. Se
 ## License
 
 MIT.
+
+### Sample linked original and local Plan return
+
+The maintained browser sample includes the checkout parent's reported linked
+child original. Expand collaboration → **Read linked agent original** → Find
+`Child decisive evidence — café🙂 项目 exact source.` → F3 → Copy/review the second
+quote → append once to the existing unsent Plan. The saved child reference returns
+to the same editor and parent passage; **Back to Changed work** restores its row
+and scope. [Build and check both hosting modes at 1250/390](examples/browser-preview.md#read-the-reported-linked-original-and-reuse-its-exact-quote).

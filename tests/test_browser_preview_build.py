@@ -46,7 +46,7 @@ class BrowserPreviewBuildTests(unittest.TestCase):
 
     def test_sample_original_id_contract(self):
         threads=preview.sample_threads()
-        self.assertEqual(len(threads),3)
+        self.assertEqual(len(threads),4)
         original=threads[0]
         self.assertEqual(original['id'],'sample-checkout-thread')
         turn=original['turns'][0]

@@ -93,7 +93,7 @@ const supplied=h.instructions(thread,task,reader.textForItem);
 assert.equal(supplied.user_message_count,1);assert.equal(supplied.items[0].item_id,prompt.id);
 assert.equal(supplied.items[0].text,reader.textForItem(prompt));assert(supplied.items[0].available);
 assert.equal(h.response(thread,task).item_id,answer.id);
-assert.equal(h.response(thread,task).selection,'last_assistant_message');
+assert.equal(h.response(thread,task).selection,answer.phase==='final_answer'?'final_answer':'last_assistant_message');
 assert.equal(h.adjacent(thread,task,1),null);assert.equal(h.adjacent(thread,task,-1),null);
 """, thread)
 

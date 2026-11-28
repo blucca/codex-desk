@@ -58,7 +58,7 @@ class BrowserPreviewChangedWorkTests(unittest.TestCase):
 const ids=[];for(const thread of DeskPreviewThreads)ids.push((await request('/api/import',{thread:thread.id})).id);
 const before=JSON.stringify(DeskBrowserPreview.snapshot()),storedBefore=writes,calls=DeskBrowserPreview.requests.length;
 const state=await request('/api/state'),native=state.native_material;
-assert.equal(native.summaries.length,3);assert.equal(native.native_home,(await request('/api/native/home')).home_namespace);
+assert.equal(native.summaries.length,4);assert.equal(native.native_home,(await request('/api/native/home')).home_namespace);
 for(const summary of native.summaries){assert.equal(summary.status,'available');assert.equal(summary.material_seq,0);assert.equal(summary.received_seq,0);assert.deepEqual(Object.keys(summary).sort(),['material_seq','owner','received_seq','status']);}
 const projected=DeskChangedWork.project({native_home:native.native_home,summaries:native.summaries,reviews:[],tasks:state.sessions.map(task=>({session:task.id,group_id:'sample',active:false,archived:false,thread_id:task.thread_id}))},{mode:'all'});
 assert(rows(projected).every(row=>row.activity_status==='baseline_missing' && row.changed===null));

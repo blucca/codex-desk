@@ -195,7 +195,10 @@ async def check():
                                 assert actual == expected, (actual, expected)
                             ids = await page.locator('#activity .item').evaluate_all('(rows) => rows.map(row => row.dataset.itemId)')
                             assert len(ids) == len(set(ids))
-                            assert await page.locator('.activity-collaboration details,.activity-collaboration button,.activity-collaboration input,.activity-collaboration textarea,.activity-collaboration select,.activity-collaboration audio').count() == 0
+                            # Linked originals add only scoped read/Retry/Cancel controls.
+                            controls = await page.locator('.activity-collaboration button').evaluate_all('nodes=>nodes.map(n=>({text:n.textContent,type:n.type,classes:n.className}))')
+                            assert all(c['type']=='button' and ((c['classes']=='linked-agent-original' and c['text'].startswith('Read linked agent original · ')) or (c['classes']=='linked-agent-retry' and c['text']=='Retry linked original') or (c['classes']=='linked-agent-cancel' and c['text']=='Cancel linked read')) for c in controls), controls
+                            assert await page.locator('.activity-collaboration details,.activity-collaboration button:not(.linked-agent-original):not(.linked-agent-retry):not(.linked-agent-cancel),.activity-collaboration input,.activity-collaboration textarea,.activity-collaboration select,.activity-collaboration audio,.activity-collaboration .approval,.activity-collaboration form').count() == 0
 
                         await assert_groups()
                         assert await page.locator('details.activity-collaboration[open]').count() == 0

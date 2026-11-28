@@ -28,15 +28,15 @@ Serve the output with any static HTTP server. For reproducible desktop and mobil
 python3 examples/check_browser_preview.py --site temp/browser-preview/demo --evidence temp/browser-preview/checks
 ```
 
-Use `--chromium /path/to/chromium` to reuse an installed browser. The checker exercises explicit indexing, exact original IDs, continuation, saved Plan/ordered follow-ups, exact task-response reading, reviewed original A into unsent B, cold source return, local review and explicit Save-and-open, reload and scoped reset. It also checks literal Prepared lookup across all three sample projects, duplicate saved owners without replacing unsaved editors, exact project scope, retained originals and ordinary queued-instruction return. The embedded build is checked in an actual iframe. Application requests cannot escape to the static HTTP server.
+Use `--chromium /path/to/chromium` to reuse an installed browser. The checker exercises explicit indexing, exact original IDs, continuation, saved Plan/ordered follow-ups, exact task-response reading, reviewed original A into unsent B, cold source return, local review and explicit Save-and-open, reload and scoped reset. It also checks literal Prepared lookup across all three primary sample projects, duplicate saved owners without replacing unsaved editors, exact project scope, retained originals and ordinary queued-instruction return. The embedded build is checked in an actual iframe. Application requests cannot escape to the static HTTP server.
 
 `browser-preview/preview-api.js` contains only sample behavior. `build_browser_preview.py` copies maintained assets and applies the preview label, route-relative assets, install actions and a preview-specific selection key. Production runtime files are unchanged.
 
 ## Check session reading returns
 
-The opt-in acceptance fixture keeps the three original sample identities and adds
-long command/MCP results, collaboration, reported native steps/changes and an unsent
-sample input request. The normal public build keeps its existing short histories.
+The opt-in acceptance fixture keeps the four original sample identities and adds
+long parent command/MCP results, reported native steps/changes and an unsent
+sample input request. The default build has three short primary histories and the independent long linked original.
 
 ```sh
 python3 examples/build_browser_preview.py --session-reading-fixture --out temp/browser-preview/reading
@@ -121,3 +121,42 @@ Each command checks 1250/390 against the generated maintained assets. Receipts
 record compact native-home-bound metadata, exact source IDs, GET-only overview
 and review reads, and zero native task or response admissions. Reset checks wait
 for the sample document's actual reload, including inside the iframe.
+
+## Read the reported linked original and reuse its exact quote
+
+The checkout parent explicitly reports `sample-child-thread` in its collaboration
+item. That fourth history is the independent original, with a completed response
+and a missing project folder. Recent indexing counts all four histories and their
+actual supplied items; the three saved primary tasks stay separate from the child.
+
+1. Resume **Sample checkout retry decision**, retain an unsent **Plan** and two
+   queued instructions. This existing parent draft is the B destination below.
+2. Open **Changed saved work**. On the default build, use **All saved work** after
+   inspecting the empty Changed scope. The opt-in reading build supplies real
+   parent events: the checker updates the parent collaboration result, opens its Changed row
+   and chooses **Read first new activity**, keeping the review frontier unchanged.
+3. Expand parent collaboration and choose **Read linked agent original ·
+   sample-child-thread**. The maintained controller performs one native-home-bound
+   `GET /api/native/evidence-source?home=…&thread=sample-child-thread`.
+4. Find `Child decisive evidence — café🙂 项目 exact source.`, then press **F3**
+   for the second occurrence. **Copy full item text** includes all 1,200 source
+   lines. Select that second exact quote and choose **Review evidence for task**.
+5. Review the captured child IDs/quote and the existing parent/B **Plan**, then
+   **Append to current draft** once. Both ordered queues and the other saved owner
+   remain unchanged. **Return to parent activity** restores the exact parent passage.
+6. Open the actual saved draft reference. Its second child quote is highlighted;
+   return restores B's editor caret/direction/scroll and the parent passage.
+   **Back to Changed work** restores the same row and project/title/archive/page scope.
+
+Run the connected workflow at 1250/390, direct and in an actual iframe:
+
+```sh
+python3 examples/check_browser_preview_linked_original.py --ordinary --site temp/browser-preview/demo --evidence temp/browser-preview/linked-normal
+python3 examples/check_browser_preview_linked_original.py --ordinary --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/linked-normal-iframe
+python3 examples/check_browser_preview_linked_original.py --site temp/browser-preview/reading --evidence temp/browser-preview/linked-reading
+python3 examples/check_browser_preview_linked_original.py --embedded --site temp/browser-preview/reading-embedded --evidence temp/browser-preview/linked-reading-iframe
+```
+
+The source reads create no child saved task, draft, queue, native event feed or
+native admission. Ordinary Recent, Find and source-return controls use the same
+reported child original and exact source API.

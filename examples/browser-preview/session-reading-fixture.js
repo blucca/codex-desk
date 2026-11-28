@@ -39,6 +39,11 @@
       item.aggregatedOutput+='\nNEW SAMPLE COMMAND MATERIAL remains in its exact earlier native item.';
       return emit({method:'item/completed',params:{threadId:a.id,turnId:prior.id,item}});
     },
+    updateLinkedOriginal:()=>{
+      const item=copy(prior.items.find(item=>item.id==='sample-checkout-collaboration'));
+      item.agentsStates['sample-child-thread'].message+='\nNew parent-reported linked result retains its exact original source.';
+      return emit({method:'item/completed',params:{threadId:a.id,turnId:prior.id,item}});
+    },
     appendIgnored:()=>{
       emit({method:'thread/tokenUsage/updated',params:{threadId:a.id,tokenUsage:{total:99}}});
       emit({method:'item/agentMessage/delta',params:{threadId:'sample-child-thread',turnId:prior.id,itemId:'sample-child-output',delta:'Child-only sample output.'}});

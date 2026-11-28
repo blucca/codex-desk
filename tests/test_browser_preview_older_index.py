@@ -65,7 +65,7 @@ class BrowserPreviewOlderIndexTests(unittest.TestCase):
                                     json.dumps(cls.seed)], capture_output=True, text=True, timeout=10, check=True)
         cls.result = json.loads(completed.stdout)
 
-    def test_three_sample_histories_never_offer_older_or_pending_index_work(self):
+    def test_four_sample_histories_never_offer_older_or_pending_index_work(self):
         result = self.result
         self.assertEqual(result['initial']['writes'], 0)
         self.assertEqual(result['initial']['data']['job']['status'], 'idle')
@@ -81,7 +81,7 @@ class BrowserPreviewOlderIndexTests(unittest.TestCase):
             self.assertFalse(job['has_more'])
         for response in (result['indexed'], result['legacy'], result['reopened']):
             self.assertEqual(response['data']['job']['status'], 'completed')
-            self.assertEqual((response['data']['job']['seen'], response['data']['job']['indexed']), (3, 3))
+            self.assertEqual((response['data']['job']['seen'], response['data']['job']['indexed']), (4, 4))
             self.assertEqual(response['data']['projects'], expected_projects)
         self.assertEqual(result['writesBeforeReload'], result['writes'])
         self.assertEqual(result['external'], 0)

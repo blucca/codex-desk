@@ -62,7 +62,7 @@ const settle=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setImmedia
 const unchanged=()=>assert.strictEqual(JSON.stringify({selected,generation,nativeThreadId,draft,queue}),initial);
 (async()=>{
 """+body+"\nprocess.stdout.write(JSON.stringify({passed:true}));\n})().catch(e=>{process.stderr.write(e.stack);process.exit(1);});"
-        result=subprocess.run([NODE,'-e',script],capture_output=True,text=True,timeout=10)
+        result=subprocess.run([NODE,'-'],input=script,capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(json.loads(result.stdout),{'passed':True})
 
@@ -163,7 +163,7 @@ const sampleBefore=window.DeskBrowserPreview.snapshot(),storedBefore=stored;
 """.replace('FIXTURE',json.dumps(fixture)).replace('API_SOURCE',json.dumps((root/'examples/browser-preview/preview-api.js').read_text()))
         self.check(r"""
 $('show-recent').focus();$('show-recent').onclick();await settle();
-assert($('recent-work').open);assert.strictEqual($('home-list').children.length,3);
+assert($('recent-work').open);assert.strictEqual($('home-list').children.length,4);
 assert($('recent-selected-status').textContent.includes('Sample checkout retry decision · saved'));
 const second=$('home-list').children[1];await second.querySelector('.native-read').onclick();
 assert.strictEqual(reads[0].result.thread_id,fixture.threads[1].id);
