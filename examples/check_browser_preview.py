@@ -23,6 +23,7 @@ THREAD = "sample-checkout-thread"
 SESSION = "desk-" + THREAD
 TURN = "sample-checkout-turn"
 ITEM = "sample-checkout-answer"
+EVIDENCE_ITEM = "sample-checkout-evidence"
 QUERY = "retry budget"
 FIRST = "Review the retry budget before changing timeout handling."
 SECOND = "Verify checkout retry behavior and record the result."
@@ -190,7 +191,57 @@ def normalized_request(record):
             "query": parse_qs(parsed.query), "data": data}
 
 
-async def check(playwright, site, evidence, width, chromium, public_url=None):
+def sample_command_source(site):
+    """Independent oracle from the frozen supplied sample, before browser actions."""
+    script = (site / "sample-data.js").read_text()
+    prefix = "window.DeskPreviewThreads = "
+    assert script.startswith(prefix), "The supplied sample source is unavailable"
+    threads, end = json.JSONDecoder().raw_decode(script[len(prefix):])
+    assert script[len(prefix) + end:].startswith(";\nwindow.DeskPreviewCasefold = ")
+    assert isinstance(threads, list) and len(threads) == 4
+    matching = [thread for thread in threads if thread.get("id") == THREAD]
+    assert len(matching) == 1, "The exact sample conversation is unavailable or ambiguous"
+    turns = [turn for turn in matching[0]["turns"] if turn.get("id") == TURN]
+    assert len(turns) == 1, "The exact supplied task is unavailable or ambiguous"
+    items = [item for item in turns[0]["items"] if item.get("id") == EVIDENCE_ITEM]
+    assert len(items) == 1, "The task's own command is unavailable or ambiguous"
+    item = items[0]
+    assert item["type"] == "commandExecution" and item["command"] == "printf sample-checkout"
+    assert item["status"] == "completed" and item["exitCode"] == 0
+    output = item["aggregatedOutput"]
+    assert isinstance(output, str) and output, "The supplied command output is unavailable"
+    header = "Command\n" + item["command"] + "\nStatus: " + item["status"] + "\nExit: " + str(item["exitCode"]) + "\n"
+    full = header + output
+    encoded = full.encode("utf-16-le")
+    end = min(len(encoded) // 2, 20000)
+    if end < len(encoded) // 2 and 0xD800 <= int.from_bytes(encoded[(end - 1) * 2:end * 2], "little") <= 0xDBFF:
+        end -= 1
+    return {"full": full, "visible_window": encoded[:end * 2].decode("utf-16-le"),
+            "output_start": len(header.encode("utf-16-le")) // 2, "first_output_character": output[0],
+            "task_chain": matching[0]["turns"]}
+
+
+def sample_task_response_source(task_chain, captured):
+    """Resolve the actual captured task only in the frozen supplied source."""
+    assert captured["thread_id"] == THREAD
+    assert captured["turn_id"] == task_chain[-1]["id"], "The sample's current native outcome changed target"
+    turns = [turn for turn in task_chain if turn.get("id") == captured["turn_id"]]
+    assert len(turns) == 1, "The captured current task is unavailable or ambiguous"
+    turn = turns[0]
+    assert captured["status"] == turn["status"], "The reported native outcome status changed"
+    messages = [item for item in turn["items"] if item.get("type") == "agentMessage" and
+                isinstance(item.get("text"), str) and item["text"].strip()]
+    assert messages, "The captured task supplied no readable assistant response"
+    final = [item for item in messages if item.get("phase") == "final_answer"]
+    response = (final or messages)[-1]
+    assert len([item for item in turn["items"] if item.get("id") == response["id"]]) == 1
+    return {"thread_id": THREAD, "turn_id": captured["turn_id"], "item_id": response["id"],
+            "full": "Codex\n" + response["text"], "phase": response.get("phase"), "status": turn["status"]}
+
+
+async def check(playwright, site, evidence, width, chromium, public_url=None, embedded=False):
+    from check_browser_preview_links import open_app, reload_app, reset_app
+    expected_command = sample_command_source(site)
     errors, console_errors, external, failures, phases, captured = [], [], [], [], [], []
     with static_server(site) as (url, received, escaped_api):
         url = public_url or url
@@ -201,6 +252,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
         await context.add_init_script("""Object.defineProperty(navigator, 'clipboard', {configurable:true,
             value:{async writeText(text){(window.__deskSampleCopies ||= []).push(text);}}});""")
         page = await context.new_page()
+        app = None
         page.set_default_timeout(10_000)
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
@@ -217,41 +269,41 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
         await context.route("**/*", isolated)
 
         async def snapshot():
-            return await page.evaluate("DeskBrowserPreview.snapshot()")
+            return await app.evaluate("DeskBrowserPreview.snapshot()")
 
         async def log():
-            return [normalized_request(row) for row in await page.evaluate("DeskBrowserPreview.requests")]
+            return [normalized_request(row) for row in await app.evaluate("DeskBrowserPreview.requests")]
 
         async def checkpoint(name):
             assert not errors and not console_errors, (errors, console_errors)
             assert not external and not escaped_api and not failures, (external, escaped_api, failures)
-            assert await page.evaluate("""() => document.documentElement.scrollWidth <= innerWidth &&
+            assert await app.evaluate("""() => document.documentElement.scrollWidth <= innerWidth &&
                 [...document.querySelectorAll('dialog[open]')].every(n => n.scrollWidth <= n.clientWidth)"""), name + " horizontal overflow"
             phases.append(name)
             await page.screenshot(path=str(evidence / f"{width}-{name}.png"))
 
         async def wait_saved(text, mode):
-            await page.wait_for_function("""v => {
+            await app.wait_for_function("""v => {
                 const drafts=DeskBrowserPreview.snapshot().drafts;
                 const d=drafts && drafts[v.id];
                 return d && d.text===v.text && d.mode===v.mode;
             }""", arg={"id": SESSION, "text": text, "mode": mode})
 
         async def followups():
-            return await page.locator("#followup-list .followup-entry").evaluate_all("""rows => rows.map(n => ({
+            return await app.locator("#followup-list .followup-entry").evaluate_all("""rows => rows.map(n => ({
                 id:n.dataset.followup, heading:n.querySelector('h3').textContent, text:n.querySelector('pre').textContent}))""")
 
         try:
-            await page.goto(url)
-            await page.wait_for_function("document.querySelector('#home-list').getAttribute('aria-busy') === 'false'")
-            assert await page.locator("#home-list .native-row").count() == 3
-            assert await page.evaluate("DeskPreviewThreads.length") == 4
-            assert await page.evaluate("DeskPreviewThreads.filter(t=>t.archived).length") == 1
-            assert "Sample" in await page.locator("#home-list").inner_text()
-            banner = page.locator("#preview-banner")
+            app = await open_app(page, context, url, embedded)
+            await app.wait_for_function("document.querySelector('#home-list').getAttribute('aria-busy') === 'false'")
+            assert await app.locator("#home-list .native-row").count() == 3
+            assert await app.evaluate("DeskPreviewThreads.length") == 4
+            assert await app.evaluate("DeskPreviewThreads.filter(t=>t.archived).length") == 1
+            assert "Sample" in await app.locator("#home-list").inner_text()
+            banner = app.locator("#preview-banner")
             assert await banner.is_visible()
-            starter = await page.locator("#preview-start").bounding_box()
-            assert starter and starter["y"] + starter["height"] < await page.evaluate("innerHeight"), "Sample action is below the first viewport"
+            starter = await app.locator("#preview-start").bounding_box()
+            assert starter and starter["y"] + starter["height"] < await app.evaluate("innerHeight"), "Sample action is below the first viewport"
             provenance = (await banner.inner_text()).lower()
             assert "preview" in provenance and "sample" in provenance
             install_links = await banner.locator("a").evaluate_all("nodes => nodes.map(n => ({text:n.textContent,href:n.href}))")
@@ -260,18 +312,18 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             assert not any(row["path"] == "/api/history/index" and row["method"] == "POST" for row in await log())
             await checkpoint("home")
 
-            await page.locator("#preview-start").click()
-            assert await page.locator("#recall-query").input_value() == QUERY
-            await page.wait_for_function("!document.querySelector('#recall-index').disabled")
-            await page.locator("#recall-query").fill(QUERY)
-            await page.locator("#recall-search").click()
-            await page.wait_for_function("!document.querySelector('#recall-search').disabled")
-            assert await page.locator(".recall-result").count() == 0, "History was indexed without explicit action"
+            await app.locator("#preview-start").click()
+            assert await app.locator("#recall-query").input_value() == QUERY
+            await app.wait_for_function("!document.querySelector('#recall-index').disabled")
+            await app.locator("#recall-query").fill(QUERY)
+            await app.locator("#recall-search").click()
+            await app.wait_for_function("!document.querySelector('#recall-search').disabled")
+            assert await app.locator(".recall-result").count() == 0, "History was indexed without explicit action"
             assert (await snapshot())["sessions"] == []
-            assert "not indexed yet" in await page.locator("#recall-summary").inner_text()
-            assert await page.locator("#recall-index").count() == 1
-            assert await page.locator("#recall-index").evaluate("n => n.parentElement.id === 'recall-actions'")
-            assert await page.locator("#recall-index").evaluate("""n => {
+            assert "not indexed yet" in await app.locator("#recall-summary").inner_text()
+            assert await app.locator("#recall-index").count() == 1
+            assert await app.locator("#recall-index").evaluate("n => n.parentElement.id === 'recall-actions'")
+            assert await app.locator("#recall-index").evaluate("""n => {
                 const button=n.getBoundingClientRect(),modal=document.querySelector('#recall').getBoundingClientRect();
                 return button.top >= modal.top && button.bottom <= Math.min(modal.bottom,innerHeight) &&
                     button.left >= modal.left && button.right <= modal.right;
@@ -279,13 +331,13 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await checkpoint("literal-search")
 
             before = sum(row["path"] == "/api/recall" for row in await log())
-            await page.locator("#recall-index").click()
-            row = page.locator(f'.recall-result[data-thread="{THREAD}"][data-item="{ITEM}"]')
+            await app.locator("#recall-index").click()
+            row = app.locator(f'.recall-result[data-thread="{THREAD}"][data-item="{ITEM}"]')
             await row.wait_for()
-            await page.wait_for_function("!document.querySelector('#recall-search').disabled")
-            assert await page.locator("#recall-query").input_value() == QUERY
-            assert "scan completed" in await page.locator("#recall-index-status").inner_text()
-            assert await page.locator("#recall-index").evaluate("n => n.parentElement.id === 'recall-index-actions'")
+            await app.wait_for_function("!document.querySelector('#recall-search').disabled")
+            assert await app.locator("#recall-query").input_value() == QUERY
+            assert "scan completed" in await app.locator("#recall-index-status").inner_text()
+            assert await app.locator("#recall-index").evaluate("n => n.parentElement.id === 'recall-index-actions'")
             requests = await log()
             assert sum(r["path"] == "/api/recall" for r in requests) == before + 1, "Explicit index did not refresh unchanged query exactly once"
             assert sum(r["path"] == "/api/history/index" and r["method"] == "POST" for r in requests) == 1
@@ -293,54 +345,120 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await checkpoint("indexed-search")
 
             await row.locator(".recall-read").click()
-            await page.wait_for_function("document.querySelector('#history-reader-body').getAttribute('aria-busy') === 'false'")
-            assert THREAD in await page.locator("#history-reader-binding").inner_text()
-            matched = page.locator(".history-reader-target")
+            await app.wait_for_function("document.querySelector('#history-reader-body').getAttribute('aria-busy') === 'false'")
+            assert THREAD in await app.locator("#history-reader-binding").inner_text()
+            matched = app.locator(".history-reader-target")
             assert await matched.get_attribute("data-turn-id") == TURN
             assert await matched.get_attribute("data-item-id") == ITEM
             assert QUERY in (await matched.inner_text()).lower()
             assert (await snapshot())["sessions"] == [], "Read imported or resumed the sample"
             reads = [r for r in await log() if r["path"] == "/api/native/thread"]
             assert reads and reads[-1]["query"].get("id") == [THREAD], reads
+            # Finish the first task by inspecting this response's own supplied evidence.
+            read_only = await snapshot()
+            source_boundary = len(await log())
+            await matched.get_by_role('button', name='Read containing task', exact=True).click()
+            task_context = app.locator('.history-reader-task-context')
+            await task_context.wait_for()
+            assert TURN in await task_context.inner_text()
+            assert 'Review the checkout decision and retain one useful next step.' in await task_context.inner_text()
+            await task_context.get_by_role('button', name='Read this task’s evidence', exact=True).click()
+            command_row = app.locator(f'.history-reader-task-evidence-row[data-turn-id="{TURN}"][data-item-id="{EVIDENCE_ITEM}"]')
+            await command_row.wait_for()
+            assert 'printf sample-checkout' in await command_row.inner_text()
+            await command_row.get_by_role('button', name='Read full original item', exact=True).click()
+            command = app.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{EVIDENCE_ITEM}"]')
+            await command.wait_for()
+            assert await command.evaluate('n => n.open && Number(n.dataset.windowStart) === 0')
+            command_text = command.locator('pre.history-reader-text')
+            assert await command_text.text_content() == expected_command['visible_window']
+            await command_text.scroll_into_view_if_needed()
+            await command_text.evaluate('n => { n.scrollTop = 0; }')
+            await app.evaluate('() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+            assert await command_text.evaluate('''(pre, expected) => {
+                const walk = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+                let at = expected.output_start, text;
+                while ((text = walk.nextNode())) {
+                    if (at >= text.length) { at -= text.length; continue; }
+                    if (text.textContent.slice(at, at + expected.first_output_character.length) !== expected.first_output_character) return false;
+                    const range = document.createRange(); range.setStart(text, at);
+                    range.setEnd(text, at + expected.first_output_character.length);
+                    const clips = [pre, document.querySelector('#history-reader-body'), document.querySelector('#history-reader')].map(n => n.getBoundingClientRect());
+                    const top = Math.max(0, ...clips.map(r => r.top)), bottom = Math.min(innerHeight, ...clips.map(r => r.bottom));
+                    const left = Math.max(0, ...clips.map(r => r.left)), right = Math.min(innerWidth, ...clips.map(r => r.right));
+                    return [...range.getClientRects()].some(r => r.width > 0 && r.height > 0 && r.bottom > top && r.top < bottom && r.right > left && r.left < right);
+                }
+                return false;
+            }''', {'output_start': expected_command['output_start'],
+                   'first_output_character': expected_command['first_output_character']}), 'The exact supplied command output is not visibly readable'
+            await command.get_by_role('button', name='Copy full item text', exact=True).click()
+            await app.wait_for_function('document.querySelector(".history-reader-copy-status").textContent === "Full item text copied."')
+            assert await app.evaluate('window.__deskSampleCopies.at(-1)') == expected_command['full']
+            assert await app.locator('#history-reader-find-scope').input_value() == 'task'
+            assert await snapshot() == read_only, 'Reading task evidence changed sample preparation'
+            await app.get_by_role('button', name='Return to task evidence', exact=True).click()
+            await app.locator('.history-reader-task-evidence').wait_for()
+            await app.get_by_role('button', name='Return to original passage', exact=True).click()
+            assert await matched.get_attribute('data-turn-id') == TURN
+            assert await matched.get_attribute('data-item-id') == ITEM
+            assert QUERY in (await matched.inner_text()).lower()
+            evidence_reads = (await log())[source_boundary:]
+            assert all(r['method'] == 'GET' for r in evidence_reads), evidence_reads
+            assert not any(r['path'].startswith('/api/native/') for r in evidence_reads), evidence_reads
+            assert await snapshot() == read_only
             await checkpoint("read-original")
-            await page.locator("#history-reader-back").click()
+            await app.locator("#history-reader-back").click()
+            await row.wait_for()
+            assert await app.locator('#recall-query').input_value() == QUERY
+            assert await snapshot() == read_only
 
             await row.locator(".recall-open").click()
-            await page.wait_for_function("!document.querySelector('#task').hidden && !document.querySelector('#recall').open")
+            await app.wait_for_function("!document.querySelector('#task').hidden && !document.querySelector('#recall').open")
             sessions = (await snapshot())["sessions"]
             assert len(sessions) == 1 and sessions[0]["id"] == SESSION and sessions[0]["thread_id"] == THREAD, sessions
-            assert await page.locator("#activity .recall-target").get_attribute("data-item-id") == ITEM
+            assert await app.locator("#activity .recall-target").get_attribute("data-item-id") == ITEM
             imports = [r for r in await log() if r["path"] == "/api/import"]
             assert len(imports) == 1 and imports[0]["data"]["thread"] == THREAD, imports
             await checkpoint("continue-same-thread")
-            await page.wait_for_function("!$('native-outcome').hidden")
-            await page.locator('#native-outcome > summary').click()
+            await app.wait_for_function("!$('native-outcome').hidden")
+            await app.locator('#native-outcome > summary').click()
+            current_outcome = await app.evaluate('id => ({...state.native_outcomes[id]})', SESSION)
+            expected_response = sample_task_response_source(expected_command['task_chain'], current_outcome)
             boundary = len(await log())
-            await page.locator('#read-task-response').click()
-            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
-            assert await page.locator('.history-reader-target').get_attribute('data-turn-id') == TURN
-            assert await page.locator('.history-reader-target').get_attribute('data-item-id') == ITEM
+            await app.locator('#read-task-response').click()
+            await app.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            captured_task = await app.evaluate('({thread_id:selectedOriginalReview.thread_id, turn_id:selectedOriginalReview.turn_id})')
+            assert captured_task == {'thread_id': expected_response['thread_id'], 'turn_id': expected_response['turn_id']}
+            response_item = app.locator('.history-reader-target')
+            assert await response_item.get_attribute('data-turn-id') == expected_response['turn_id']
+            assert await response_item.get_attribute('data-item-id') == expected_response['item_id']
+            assert await response_item.locator('pre.history-reader-text').text_content() == expected_response['full']
+            response_status = await app.locator('#history-reader-response').inner_text()
+            assert 'Phase: ' + (expected_response['phase'] or 'unreported') in response_status
+            assert 'Native turn status at read: ' + expected_response['status'] in response_status
             response_reads = (await log())[boundary:]
-            assert len([r for r in response_reads if r['path']=='/api/native/task-response']) == 1
+            task_reads = [r for r in response_reads if r['path'] == '/api/native/task-response']
+            assert len(task_reads) == 1
+            assert task_reads[0]['query'] == {'thread': [expected_response['thread_id']], 'turn': [expected_response['turn_id']]}
             assert all(r['method']=='GET' for r in response_reads)
-            await page.locator('#history-reader-back').click()
+            await app.locator('#history-reader-back').click()
             await checkpoint('read-exact-sample-task-response')
 
             for count, text, mode in ((1, FIRST, "plan"), (2, SECOND, "native")):
-                await page.locator("#prompt").fill(text)
-                await page.locator("#turn-mode").select_option(mode)
-                await page.locator("#prepare-followup").click()
-                await page.wait_for_function("v => document.querySelector('#followup-count').textContent === String(v) && !document.querySelector('#prepare-followup').disabled", arg=count)
+                await app.locator("#prompt").fill(text)
+                await app.locator("#turn-mode").select_option(mode)
+                await app.locator("#prepare-followup").click()
+                await app.wait_for_function("v => document.querySelector('#followup-count').textContent === String(v) && !document.querySelector('#prepare-followup').disabled", arg=count)
             rows = await followups()
             assert [r["text"] for r in rows] == [FIRST, SECOND], rows
             assert rows[0]["heading"].startswith("1. Plan") and rows[1]["heading"].startswith("2. Work")
-            await page.locator(".followup-entry").nth(1).get_by_role("button", name="Move up", exact=True).click()
-            await page.wait_for_function("v => document.querySelector('#followup-list pre').textContent === v", arg=SECOND)
+            await app.locator(".followup-entry").nth(1).get_by_role("button", name="Move up", exact=True).click()
+            await app.wait_for_function("v => document.querySelector('#followup-list pre').textContent === v", arg=SECOND)
             rows = await followups()
             assert [r["text"] for r in rows] == [SECOND, FIRST]
             assert rows[0]["heading"].startswith("1. Work") and rows[1]["heading"].startswith("2. Plan")
-            await page.locator("#prompt").fill(DRAFT)
-            await page.locator("#turn-mode").select_option("plan")
+            await app.locator("#prompt").fill(DRAFT)
+            await app.locator("#turn-mode").select_option("plan")
             await wait_saved(DRAFT, "plan")
             saved = await snapshot()
             queued_ids = [r["id"] for r in rows]
@@ -348,41 +466,41 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
 
             # Exercise the shipped query-free entry without native open/resume.
             before_review = await log()
-            await page.locator("#show-preparation").click()
-            await page.wait_for_function("document.querySelector('#preparation-list').getAttribute('aria-busy') === 'false'")
-            prepared = page.locator(f'.preparation-session[data-session="{SESSION}"]')
+            await app.locator("#show-preparation").click()
+            await app.wait_for_function("document.querySelector('#preparation-list').getAttribute('aria-busy') === 'false'")
+            prepared = app.locator(f'.preparation-session[data-session="{SESSION}"]')
             assert await prepared.count() == 1
             await prepared.locator('button[aria-label^="Review preparation in "]').click()
-            assert await page.locator("#preparation-text").input_value() == DRAFT
-            assert await page.locator("#preparation-mode").input_value() == "plan"
-            assert await page.locator("#prompt").input_value() == DRAFT
-            await page.locator("#preparation-copy").click()
-            await page.wait_for_function("v => window.__deskSampleCopies?.at(-1) === v", arg=DRAFT)
-            source = page.locator(f'.preparation-followup[data-followup="{queued_ids[1]}"]')
+            assert await app.locator("#preparation-text").input_value() == DRAFT
+            assert await app.locator("#preparation-mode").input_value() == "plan"
+            assert await app.locator("#prompt").input_value() == DRAFT
+            await app.locator("#preparation-copy").click()
+            await app.wait_for_function("v => window.__deskSampleCopies?.at(-1) === v", arg=DRAFT)
+            source = app.locator(f'.preparation-followup[data-followup="{queued_ids[1]}"]')
             await source.get_by_role("button", name="Use in this session draft", exact=True).click()
-            assert await page.locator("#preparation-reuse").is_visible()
-            assert await page.locator("#preparation-text").input_value() == DRAFT, "Reuse overwrote the draft without a choice"
-            await page.locator("#preparation-append").click()
-            assert await page.locator("#preparation-text").input_value() == REUSED_DRAFT
-            assert await page.locator("#preparation-mode").input_value() == "plan"
-            assert await page.locator("#prompt").input_value() == DRAFT, "Local review changed the active draft before Save"
+            assert await app.locator("#preparation-reuse").is_visible()
+            assert await app.locator("#preparation-text").input_value() == DRAFT, "Reuse overwrote the draft without a choice"
+            await app.locator("#preparation-append").click()
+            assert await app.locator("#preparation-text").input_value() == REUSED_DRAFT
+            assert await app.locator("#preparation-mode").input_value() == "plan"
+            assert await app.locator("#prompt").input_value() == DRAFT, "Local review changed the active draft before Save"
             assert (await snapshot())["drafts"][SESSION]["text"] == DRAFT
             assert (await snapshot())["followups"][SESSION] == saved["followups"][SESSION]
             await source.get_by_role("button", name="Copy instruction", exact=True).click()
-            await page.wait_for_function("v => window.__deskSampleCopies?.at(-1) === v", arg=FIRST)
-            await page.locator("#preparation-save").click()
+            await app.wait_for_function("v => window.__deskSampleCopies?.at(-1) === v", arg=FIRST)
+            await app.locator("#preparation-save").click()
             await wait_saved(REUSED_DRAFT, "plan")
-            await page.wait_for_function("!document.querySelector('#preparation-save').disabled")
+            await app.wait_for_function("!document.querySelector('#preparation-save').disabled")
             assert (await snapshot())["followups"][SESSION] == saved["followups"][SESSION], "Explicit reuse changed source order or instructions"
             review_requests = (await log())[len(before_review):]
             assert any(r["path"] == "/api/preparation" and r["method"] == "GET" for r in review_requests)
             assert not any(r["method"] == "POST" and r["path"] in {"/api/import", "/api/open", "/api/turn", "/api/followups", "/api/followups/send"} for r in review_requests)
-            copied = await page.evaluate("window.__deskSampleCopies")
+            copied = await app.evaluate("window.__deskSampleCopies")
             before_open = len(await log())
-            await page.locator("#preparation-save-open").click()
-            await page.wait_for_function("!document.querySelector('#preparation').open && !document.querySelector('#task').hidden")
-            assert await page.locator("#prompt").input_value() == REUSED_DRAFT
-            assert await page.locator("#turn-mode").input_value() == "plan"
+            await app.locator("#preparation-save-open").click()
+            await app.wait_for_function("!document.querySelector('#preparation').open && !document.querySelector('#task').hidden")
+            assert await app.locator("#prompt").input_value() == REUSED_DRAFT
+            assert await app.locator("#turn-mode").input_value() == "plan"
             assert (await snapshot())["followups"][SESSION] == saved["followups"][SESSION]
             opens = [r for r in (await log())[before_open:] if r["path"] == "/api/open"]
             assert len(opens) == 1 and opens[0]["data"]["session"] == SESSION
@@ -390,25 +508,25 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             await checkpoint("prepared-work-reuse")
             captured.extend(await log())
 
-            await page.reload()
-            await page.wait_for_function("!document.querySelector('#task').hidden")
-            await page.wait_for_function("document.querySelector('#followup-count').textContent === '2'")
-            assert await page.locator("#prompt").input_value() == REUSED_DRAFT
-            assert await page.locator("#turn-mode").input_value() == "plan"
+            app = await reload_app(page, embedded)
+            await app.wait_for_function("!document.querySelector('#task').hidden")
+            await app.wait_for_function("document.querySelector('#followup-count').textContent === '2'")
+            assert await app.locator("#prompt").input_value() == REUSED_DRAFT
+            assert await app.locator("#turn-mode").input_value() == "plan"
             rows = await followups()
             assert [r["text"] for r in rows] == [SECOND, FIRST]
             assert [r["id"] for r in rows] == queued_ids
             preserved = await snapshot()
             assert preserved == saved, "Reload altered local sample preparation"
-            await page.locator("#show-preparation").click()
-            await page.wait_for_function("document.querySelector('#preparation-list').getAttribute('aria-busy') === 'false'")
-            await page.locator(f'.preparation-session[data-session="{SESSION}"]').locator('button[aria-label^="Review preparation in "]').click()
-            assert await page.locator("#preparation-text").input_value() == REUSED_DRAFT
-            assert await page.locator("#preparation-mode").input_value() == "plan"
-            assert await page.locator("#preparation-followups .preparation-followup").count() == 2
+            await app.locator("#show-preparation").click()
+            await app.wait_for_function("document.querySelector('#preparation-list').getAttribute('aria-busy') === 'false'")
+            await app.locator(f'.preparation-session[data-session="{SESSION}"]').locator('button[aria-label^="Review preparation in "]').click()
+            assert await app.locator("#preparation-text").input_value() == REUSED_DRAFT
+            assert await app.locator("#preparation-mode").input_value() == "plan"
+            assert await app.locator("#preparation-followups .preparation-followup").count() == 2
             assert await snapshot() == preserved, "Overview reread mutated restored preparation"
-            await page.locator("#preparation-close").click()
-            await page.locator("#followups summary").click()
+            await app.locator("#preparation-close").click()
+            await app.locator("#followups summary").click()
             await checkpoint("preserved-after-reload")
 
             # Reviewed original A -> different existing unsent B -> exact A.
@@ -416,23 +534,23 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             destination = "desk-" + destination_thread
             destination_draft = "Plan tomorrow's installation check; retain this unsent task."
             quote = "Retry only transient failures; preserve the original timeout result."
-            await page.locator("#browse").click()
-            await page.locator('#native-list .native-row').filter(has_text='Sample documentation review').get_by_role('button', name='Resume with current settings', exact=True).click()
-            await page.wait_for_function("id => selected===id && !opening", arg=destination)
-            await page.locator("#prompt").fill(destination_draft)
-            await page.locator("#turn-mode").select_option("plan")
-            await page.wait_for_function("v => DeskBrowserPreview.snapshot().drafts[v.id]?.text===v.text && DeskBrowserPreview.snapshot().drafts[v.id]?.mode==='plan'", arg={"id": destination, "text": destination_draft})
+            await app.locator("#browse").click()
+            await app.locator('#native-list .native-row').filter(has_text='Sample documentation review').get_by_role('button', name='Resume with current settings', exact=True).click()
+            await app.wait_for_function("id => selected===id && !opening", arg=destination)
+            await app.locator("#prompt").fill(destination_draft)
+            await app.locator("#turn-mode").select_option("plan")
+            await app.wait_for_function("v => DeskBrowserPreview.snapshot().drafts[v.id]?.text===v.text && DeskBrowserPreview.snapshot().drafts[v.id]?.mode==='plan'", arg={"id": destination, "text": destination_draft})
             for text in ("Check the installation command first.", "Review configuration after the launch command."):
-                await page.locator("#prompt").fill(text)
-                await page.locator("#prepare-followup").click()
-                await page.wait_for_function("!$('prepare-followup').disabled")
-            await page.locator("#prompt").fill(destination_draft)
-            await page.wait_for_function("v => DeskBrowserPreview.snapshot().drafts[v.id]?.text===v.text", arg={"id": destination, "text": destination_draft})
+                await app.locator("#prompt").fill(text)
+                await app.locator("#prepare-followup").click()
+                await app.wait_for_function("!$('prepare-followup').disabled")
+            await app.locator("#prompt").fill(destination_draft)
+            await app.wait_for_function("v => DeskBrowserPreview.snapshot().drafts[v.id]?.text===v.text", arg={"id": destination, "text": destination_draft})
             before_evidence = await snapshot()
-            await page.locator("#browse").click()
-            await page.locator('#native-list .native-row').filter(has_text='Sample checkout retry decision').locator('.native-read').click()
-            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
-            original_item = page.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{ITEM}"]')
+            await app.locator("#browse").click()
+            await app.locator('#native-list .native-row').filter(has_text='Sample checkout retry decision').locator('.native-read').click()
+            await app.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            original_item = app.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{ITEM}"]')
             await original_item.locator('pre').evaluate("""(n,quote) => {
                 const walker=document.createTreeWalker(n,NodeFilter.SHOW_TEXT);let node;
                 while(node=walker.nextNode()){const at=node.textContent.indexOf(quote);if(at<0)continue;
@@ -441,18 +559,18 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
                 throw Error('Sample original quote missing');
             }""", quote)
             await original_item.locator('.history-reader-review-evidence').click()
-            await page.wait_for_function("$('evidence-preparation').open && !DeskEvidencePreparation.state().pending")
-            reviewed = await page.evaluate("DeskEvidencePreparation.state()")
+            await app.wait_for_function("$('evidence-preparation').open && !DeskEvidencePreparation.state().pending")
+            reviewed = await app.evaluate("DeskEvidencePreparation.state()")
             assert reviewed['reference']['quote'] == quote and reviewed['reference']['thread_id'] == THREAD
             assert reviewed['reference']['turn_id'] == TURN and reviewed['reference']['item_id'] == ITEM
             assert len(reviewed['reference']['native_home']) == 64
             assert reviewed['destination']['session'] == destination and reviewed['destination']['mode'] == 'plan'
             assert await snapshot() == before_evidence, 'Review wrote sample storage'
-            await page.locator('#evidence-preparation-note').fill('Use the retained retry rule in the next installation check.')
-            await page.locator('#evidence-preparation-append').click()
-            await page.wait_for_function("!$('evidence-preparation').open && DeskEvidencePreparation.parse($('prompt').value).length===1")
-            await page.locator('#history-reader-back').click()
-            await page.locator('#history-close').click()
+            await app.locator('#evidence-preparation-note').fill('Use the retained retry rule in the next installation check.')
+            await app.locator('#evidence-preparation-append').click()
+            await app.wait_for_function("!$('evidence-preparation').open && DeskEvidencePreparation.parse($('prompt').value).length===1")
+            await app.locator('#history-reader-back').click()
+            await app.locator('#history-close').click()
             evidence_saved = await snapshot()
             assert evidence_saved['drafts'][destination]['text'].startswith(destination_draft + '\n\nNext-step note:')
             assert evidence_saved['drafts'][destination]['mode'] == 'plan'
@@ -460,50 +578,55 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
             assert evidence_saved['drafts'][SESSION] == before_evidence['drafts'][SESSION]
             await checkpoint('review-original-A-append-unsent-B')
             captured.extend(await log())
-            await page.reload()
-            await page.wait_for_function("id => selected===id && !opening && DeskEvidencePreparation.parse($('prompt').value).length===1", arg=destination)
-            await page.wait_for_function("$('followup-count').textContent==='2'")
+            app = await reload_app(page, embedded)
+            await app.wait_for_function("id => selected===id && !opening && DeskEvidencePreparation.parse($('prompt').value).length===1", arg=destination)
+            await app.wait_for_function("$('followup-count').textContent==='2'")
             assert await snapshot() == evidence_saved
-            if not await page.locator('#draft-evidence').evaluate('n=>n.open'):
-                await page.locator('#draft-evidence > summary').click()
-            await page.locator('#draft-evidence-list button').scroll_into_view_if_needed()
-            await page.locator('#prompt').evaluate("n=>{n.focus({preventScroll:true});n.setSelectionRange(5,16,'backward')}")
-            owner = await page.evaluate("({selected,text:$('prompt').value,mode:$('turn-mode').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection})")
+            if not await app.locator('#draft-evidence').evaluate('n=>n.open'):
+                await app.locator('#draft-evidence > summary').click()
+            await app.locator('#draft-evidence-list button').scroll_into_view_if_needed()
+            await app.locator('#prompt').evaluate("n=>{n.focus({preventScroll:true});n.setSelectionRange(5,16,'backward')}")
+            owner = await app.evaluate("({selected,text:$('prompt').value,mode:$('turn-mode').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection})")
             boundary = len(await log())
-            await page.locator('#draft-evidence-list button').focus()
-            await page.locator('#draft-evidence-list button').press('Enter')
-            await page.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
-            exact = page.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{ITEM}"]')
+            await app.locator('#draft-evidence-list button').focus()
+            await app.locator('#draft-evidence-list button').press('Enter')
+            await app.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
+            exact = app.locator(f'.history-reader-item[data-turn-id="{TURN}"][data-item-id="{ITEM}"]')
             assert await exact.locator('mark').text_content() == quote
-            assert await page.locator('#history-reader-saved-evidence-quote').text_content() == quote
+            assert await app.locator('#history-reader-saved-evidence-quote').text_content() == quote
             assert await snapshot() == evidence_saved
             source_reads = (await log())[boundary:]
             assert len([r for r in source_reads if r['path']=='/api/native/evidence-source']) == 1
             assert all(r['method']=='GET' for r in source_reads), source_reads
-            await page.locator('#history-reader-back').click()
-            restored = await page.evaluate("({selected,text:$('prompt').value,mode:$('turn-mode').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection})")
+            await app.locator('#history-reader-back').click()
+            restored = await app.evaluate("({selected,text:$('prompt').value,mode:$('turn-mode').value,start:$('prompt').selectionStart,end:$('prompt').selectionEnd,direction:$('prompt').selectionDirection})")
             assert restored == owner, (owner, restored)
             assert await snapshot() == evidence_saved
             await checkpoint('cold-saved-B-read-exact-A-return')
             captured.extend(await log())
 
             # Reset is scoped; unrelated same-origin browser state survives.
-            await page.evaluate("window.localStorage.setItem('preview-check-unrelated', 'keep')")
-            await page.locator("#prompt").fill("Discard this pending sample draft on reset.")
-            await page.locator("#preview-reset").click()
-            await page.wait_for_function("document.querySelector('#welcome')?.hidden === false && document.querySelector('#home-list')?.getAttribute('aria-busy') === 'false'")
+            await app.evaluate("window.localStorage.setItem('preview-check-unrelated', 'keep')")
+            await app.locator("#prompt").fill("Discard this pending sample draft on reset.")
+            app = await reset_app(page, app, embedded)
+            await app.wait_for_function("document.querySelector('#welcome')?.hidden === false && document.querySelector('#home-list')?.getAttribute('aria-busy') === 'false'")
             cleared = await snapshot()
             assert cleared["sessions"] == [] and cleared["drafts"] == {} and cleared["followups"] == {}, cleared
             assert not cleared["indexed"]
-            assert await page.locator("#task").is_hidden()
-            assert await page.evaluate("window.localStorage.getItem(DeskBrowserPreview.sessionKey)") is None
-            assert await page.evaluate("window.localStorage.getItem('preview-check-unrelated')") == "keep"
+            assert await app.locator("#task").is_hidden()
+            assert await app.evaluate("window.localStorage.getItem(DeskBrowserPreview.sessionKey)") is None
+            assert await app.evaluate("window.localStorage.getItem('preview-check-unrelated')") == "keep"
             await checkpoint("reset")
             captured.extend(await log())
 
             allowed_posts = {"/api/history/index", "/api/import", "/api/open", "/api/draft", "/api/followups", "/api/followups/reorder"}
             assert all(r["method"] != "POST" or r["path"] in allowed_posts for r in captured), captured
             receipt = {"viewport": width, "passed": True, "phases": phases,
+                "embedded": embedded, "actual_iframe": embedded,
+                "first_task": {"turn_id": TURN, "response_item_id": ITEM, "evidence_item_id": EVIDENCE_ITEM,
+                    "own_supplied_command_and_result": True, "same_response_and_search_return": True,
+                    "exact_visible_source_window": True, "full_command_output_equal": True, "literal_output_glyph_visible": True,
+                    "created_sessions": 0, "saved_drafts": 0, "additional_native_reads": 0},
                 "source": str(site), "provenance": provenance, "install_links": install_links,
                 "thread_id": THREAD, "matched_turn_id": TURN, "matched_item_id": ITEM,
                 "preserved": preserved, "reset": cleared, "simulated_api_requests": captured,
@@ -511,6 +634,8 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
                 "native_model_calls": 0, "external_requests": external, "javascript_errors": errors,
                 "console_errors": console_errors, "failed_requests": failures, "horizontal_overflow": False,
                 "unrelated_storage_preserved": True}
+            receipt['current_task_response'] = {k: expected_response[k] for k in ('thread_id', 'turn_id', 'item_id', 'phase', 'status')}
+            receipt['current_task_response'].update(full_source_text_equal=True, exact_captured_identity=True, native_reads=1)
             receipt['evidence_preparation'] = {'source': reviewed['reference'], 'destination': destination, 'cold_exact_return': True, 'read_only_source': True, 'queues_unchanged': True}
             receipt['prepared_work'] = {'query_free_entry': 'show-preparation', 'reviewed_session': SESSION,
                 'copied_texts': copied, 'explicit_append': True, 'saved_mode': 'plan', 'source_queue_unchanged': True,
@@ -524,7 +649,7 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
                 captured.extend(await log())
                 diagnostic = {"phases": phases, "errors": errors, "console": console_errors,
                     "external": external, "escaped_api": escaped_api, "failures": failures,
-                    "snapshot": await snapshot(), "api_requests": captured, "body": await page.locator("body").inner_text()}
+                    "snapshot": await snapshot(), "api_requests": captured, "body": await app.locator("body").inner_text()}
                 (evidence / f"failure-{width}.json").write_text(json.dumps(diagnostic, indent=2) + "\n")
             except Exception:
                 pass
@@ -547,7 +672,7 @@ async def main(args):
     task_evidence.mkdir(parents=True, exist_ok=True)
     embedded = 'data-preview-embedded="true"' in (site / "index.html").read_text()
     async with async_playwright() as playwright:
-        results = [await check(playwright, site, evidence, int(width), args.chromium, args.url) for width in args.widths.split(",")]
+        results = [await check(playwright, site, evidence, int(width), args.chromium, args.url, embedded) for width in args.widths.split(",")]
         lookup_results = [await check_lookup(playwright, site, lookup_evidence, int(width), args.chromium, embedded, args.url)
                           for width in args.widths.split(",")]
         task_results = [await check_task_context(playwright, site, task_evidence, int(width), args.chromium, embedded, args.url)

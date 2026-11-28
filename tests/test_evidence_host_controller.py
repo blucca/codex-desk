@@ -139,6 +139,15 @@ const receipt=await saveReviewedEvidence(payload,capture);assert.equal(receipt.t
 assert.equal(draftSaved.get('a').text,'Newer same-page saved task');assert.equal($('prompt').value,'Newer same-page saved task');assert.equal(draftEdits.get('a'),9);
 ''')
 
+    def test_no_selection_skips_null_items_and_keeps_exact_preflight_message(self):
+        self.run_js(r'''
+const payload={thread:clone(native),turn_id:'turn-A',item_id:'item-A',valid:()=>true};
+payload.thread.turns.unshift(null);payload.thread.turns[1].items.unshift(null);
+payload.thread.turns[1].items[1].text='x'.repeat(8001);assert.throws(()=>readerOptions.onEvidence(payload),/Select up to 8,000/);
+payload.item_id='missing';assert.throws(()=>readerOptions.onEvidence(payload),/selected original item is unavailable/);
+assert.equal(calls.length,0);assert.equal(posts().length,0);assert.equal(E.state(),null);
+''')
+
     def test_reader_review_preflight_rejects_missing_busy_and_unselected_long_item(self):
         self.run_js(r'''
 const payload={thread:clone(native),turn_id:'turn-A',item_id:'item-A',valid:()=>true,onReturn:()=>{sourceReturns++;}};

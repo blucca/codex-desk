@@ -1,8 +1,9 @@
 """Native task steps through Runtime._message, SQLite/HTTP and isolated Chromium."""
-import asyncio,copy,json,os,sys,traceback
+import asyncio,copy,json,os,sys,time,traceback
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit,quote
+from urllib.request import urlopen
 S=Path(os.environ.get('DESK_SOURCE',Path(__file__).resolve().parents[1])).resolve();sys.path.insert(0,str(S/'tests'))
 if os.environ.get('DESK_USE_INSTALLED')!='1':sys.path.insert(0,str(S))
 import codex_desk
@@ -20,7 +21,7 @@ from playwright.async_api import async_playwright
 OUT=Path(os.environ.get('DESK_TEST_EVIDENCE',Path(os.environ.get('DESK_TEST_TEMP',Path.cwd()/'temp'))/'native-steps'));OUT.mkdir(parents=True,exist_ok=True)
 STEPS=[{'step':'Inspect original failure 保留 <script>','status':'inProgress'},{'step':'Fix parser','status':'pending'},{'step':'Run verification','status':'pending'}]
 async def one(browser,width):
- f=NativeHTTPFixture();f.setUp();context=None;r={'width':width,'passed':False,'checks':[]};requests=[];errors=[]
+ f=NativeHTTPFixture();f.setUp();context=None;r={'width':width,'passed':False,'checks':[]};requests=[];errors=[];network=[]
  try:
   original=f.identifier;other='other-plan';f.desk.store.update(original,status='ready',thread_saved=1)
   f.desk.store.create(str(f.path),'default',identifier=other,name='Other selected Plan');f.desk.store.update(other,thread_id='native-other',status='ready',thread_saved=1)
@@ -38,6 +39,17 @@ async def one(browser,width):
   def plan(turn,steps,thread='native-original',explanation='Reported native work — exact résumé  '):event('turn/plan/updated',{'threadId':thread,'turnId':turn,'explanation':explanation,'plan':copy.deepcopy(steps)})
   def finish(turn,status):event('turn/completed',{'threadId':'native-original','turn':{'id':turn,'status':status,'items':[]}})
   context=await browser.new_context(viewport={'width':width,'height':900});page=await context.new_page();page.on('pageerror',lambda e:errors.append(str(e)));page.on('request',lambda q:requests.append({'method':q.method,'path':urlsplit(q.url).path}))
+  # Preserve transport boundaries for the observed held-open event replay stall.
+  # Payloads stay in the controlled fixture; only method/path/status are retained.
+  def transport(request,kind,status=None):
+   if urlsplit(request.url).path.startswith('/api/'):
+    network.append({'event':kind,'at':round(time.monotonic(),3),'method':request.method,
+      'path':urlsplit(request.url).path,'status':status,
+      'failure':request.failure if kind=='failed' else None})
+  page.on('request',lambda request:transport(request,'request'))
+  page.on('response',lambda response:transport(response.request,'response',response.status))
+  page.on('requestfinished',lambda request:transport(request,'finished'))
+  page.on('requestfailed',lambda request:transport(request,'failed'))
   await page.goto(f'http://127.0.0.1:{f.server.server_port}/');await page.locator(f'.session-row[data-session="{original}"] .session').click();await page.wait_for_function('(s)=>selected===s&&!opening',arg=original)
   before={sid:{'draft':load_draft(f.desk.store,sid),'queue':followup_snapshot(f.desk.store,sid)} for sid in [original,other]};boundary=len(requests)
   start('turn-one');plan('turn-one',STEPS);await page.wait_for_function("$('native-steps-current').textContent.includes('Inspect original failure')")
@@ -179,6 +191,17 @@ async def one(browser,width):
   if 'page' in locals():
    try:
     r['observed']=await page.evaluate('()=>({selected,opening,after,generation,nativeThreadId,currentTurn,steps:DeskNativeSteps.state(),error:$("error").textContent})')
+    r['transport']=network
+    # An independent bounded GET distinguishes server replay from browser routing.
+    # It is diagnostic evidence only: the original failed acceptance remains failed.
+    replay_started=time.monotonic()
+    try:
+     with urlopen(f'http://127.0.0.1:{f.server.server_port}/api/events?session='+quote(original)+'&after=0',timeout=2) as response:
+      replay=json.load(response)
+      r['direct_replay_probe']={'status':response.status,'seconds':round(time.monotonic()-replay_started,3),
+       'event_count':len(replay),'last_seq':replay[-1]['seq'] if replay else None}
+    except Exception as probe_error:
+     r['direct_replay_probe']={'error':str(probe_error),'seconds':round(time.monotonic()-replay_started,3)}
     r['retained_events']=[{'seq':row['seq'],'event':row['event']} for row in f.desk.store.events(original)]
     r['session']=f.desk.store.get(original)
     await page.screenshot(path=str(OUT/f'native-steps-failed-{width}.png'))

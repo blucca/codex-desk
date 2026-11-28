@@ -1,8 +1,19 @@
-# Find a past Codex answer, read it, then continue
+# Find an earlier investigation and read its own evidence
 
-Remember a phrase from a decision or test result, but not the conversation title? Search your local Codex history and read the original answer first. Continuing the task is a separate choice.
+Before repeating a Codex investigation, find the original task’s decision and inspect what its command or tool actually reported. Start with a remembered phrase, title or native conversation ID.
 
-[Try the interactive browser sample](https://blucca.github.io/codex-desk/demo/) — find the checkout retry decision, read its original answer, save a next task, then reload to return. No install is needed for this sample.
+[Try the interactive browser sample](https://blucca.github.io/codex-desk/demo/) — search `retry budget`, read the checkout task’s response, then inspect its `printf sample-checkout` command and reported result. Continuing, saving a next task and reloading to return are optional. No install is needed for this sample.
+
+## First task: read the decision and its own evidence
+
+Choose one earlier issue or decision and the check you need to make now. For example: “What retry budget did we decide on, and what did the original command report?”
+
+1. Search a remembered phrase using the steps below. If you know the native ID or title instead, use [the direct original lookup](find-original-by-id-or-instruction.md).
+2. In **Read original conversation**, inspect the matching response or tool item. Choose **Read containing task**, read its supplied instruction, then **Read this task’s evidence**.
+3. Open the relevant command or tool result with **Read full original item**. Compare that result with the task’s response; use **Read this task response** in the task context to read it directly.
+4. Decide which present-day investigation or check to change or avoid. **Copy full item text** and **Copy source reference** retain the exact result for your current work.
+
+That original read can finish the task. To continue work, make the separate choice below. [Task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) asks for this one investigation, the step reached, and its evidence or first blocker.
 
 [Watch the 20-second local demo](find-answer.gif) — synthetic checkout history.
 

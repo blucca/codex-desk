@@ -1202,7 +1202,8 @@ DeskHistoryReader.configure({api,onEvidence:payload=>{
   if(!destination)throw Error('Select an existing task to prepare with this original evidence.');
   if(destination.busy)throw Error('Wait for this task draft to finish saving before reviewing evidence.');
   if(!payload.selection_utf16){
-    const turn=payload.thread.turns.find(turn=>turn.id===payload.turn_id),item=turn?.items?.find(item=>item.id===payload.item_id);
+    const turn=payload.thread.turns.find(turn=>turn?.id===payload.turn_id),item=turn?.items?.find(item=>item?.id===payload.item_id);
+    if(!item)throw Error('The selected original item is unavailable. Read its source again.');
     if(Array.from(DeskHistoryReader.textForItem(item)).length>DeskEvidencePreparation.MAX_QUOTE)throw Error('Select up to 8,000 characters from this original item first.');
   }
   return DeskEvidencePreparation.reviewLoaded({thread:payload.thread,thread_id:payload.thread.id,

@@ -1,9 +1,9 @@
 # Codex Desk
 
-**Find a past Codex answer, then pick up the task.** Search your recent local history, read the original conversation, and continue in the same native thread when ready.
+**Find an earlier Codex investigation before repeating it.** Search your recent local history, read the exact task’s response and its own command or tool results, then decide which check to change or skip. Continue in the same native thread when you need to.
 
 
-**[Try the browser sample — no install](https://blucca.github.io/codex-desk/demo/)**: find the sample retry decision, read its original context, save a next-task draft, then reload to return. Sample preparation stays in this browser. Use the installer below for your own Codex history.
+**[Try the browser sample — no install](https://blucca.github.io/codex-desk/demo/)**: search `retry budget`, read the checkout task’s response, then inspect its `printf sample-checkout` command and reported result. Optional: continue the sample conversation, save a draft, then reload to return. Sample preparation stays in this browser. Use the installer below for your own Codex history.
 
 ![Codex Desk: index local history, find a retry decision, and read the original conversation](docs/find-answer.gif)
 
@@ -25,7 +25,7 @@ The current version is an alpha, so `--prerelease allow` selects the preview fro
 
 Keep that terminal running. Desk opens the **complete launch URL printed in that terminal** in your browser (normally at `http://127.0.0.1:8787`). Run the same command next time and open its newly printed URL; your saved conversations and drafts remain local.
 
-For a remembered answer, choose **Find a decision in past work → Index existing Codex history**, enter the phrase and choose **Search**, then **Read original conversation**. Use the original evidence to decide which check to change or skip; continuing the conversation is optional.
+For your first task, pick one earlier investigation you would otherwise repeat. Choose **Find a decision in past work → Index existing Codex history**, enter a remembered phrase and choose **Search**, then **Read original conversation**. From the matching response or tool item, choose **Read containing task → Read this task’s evidence** to inspect that task’s own results. Decide which check to change or skip; continuing the conversation is optional. [First-task guide](docs/find-past-answer.md#first-task-read-the-decision-and-its-own-evidence).
 
 If that address is already in use, use the complete URL in the existing Desk terminal to reopen that running server. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
 
@@ -194,7 +194,7 @@ The native launcher/profile smoke has passed on Ubuntu, Windows and macOS with C
 
 ## Feedback and development
 
-[Share a result or get task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml). Tell us one task, the step reached, and what helped or blocked you. Include the original evidence and any investigation it saved. If you return for another task, tell us what you reused. OS/native version are optional; for `--codex` setups, use the selected executable's version probe in the Mac/Windows guide above. [Browser sample feedback](https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml). Suggestions and contributions are welcome.
+[Task help: find one earlier investigation](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml). Tell us the decision or result you need to find, the step reached, and the task’s own evidence or first blocker. For a useful read, say which check it changed or avoided. If you return for another task, tell us what you reused. OS/native version are optional; for `--codex` setups, use the selected executable's version probe in the Mac/Windows guide above. [Browser sample feedback](https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml). Suggestions and contributions are welcome.
 
 From a source checkout:
 

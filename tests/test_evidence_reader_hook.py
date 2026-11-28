@@ -12,7 +12,7 @@ const visibleTypes=new Set(['agentMessage']),str=v=>typeof v==='string'?v:'';
 const current=()=>live,available=()=>live,rowKey=r=>JSON.stringify([r.turn.id,r.item.id]);
 const captureView=()=>({selection:'exact original range',scroll:72}),restoreView=(v,t)=>returned.push({v,t});
 const range={key:rowKey(row),start:23,end:31},selectedText=()=>range;
-function node(tag,text,cls){return {tag,text,cls,children:[],isConnected:true,disabled:false,append(...n){this.children.push(...n);},setAttribute(){}};}
+function node(tag,text,cls){return {tag,text,cls,children:[],listeners:{},isConnected:true,disabled:false,append(...n){this.children.push(...n);},setAttribute(){},addEventListener(type,listener){(this.listeners[type] ||= []).push(listener);}};}
 const detail=node('details'),status=()=>detail.children[0].children.find(n=>n.cls==='history-reader-copy-status');
 const review=()=>detail.children[0].children.find(n=>n.cls==='history-reader-review-evidence');
 const textFor=()=> 'Exact source 🌱 duplicate duplicate';

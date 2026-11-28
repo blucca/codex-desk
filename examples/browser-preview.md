@@ -2,7 +2,18 @@
 
 [Open the interactive preview](https://blucca.github.io/codex-desk/demo/).
 
-Choose **Find the sample answer** in the preview header to open content search with `retry budget` filled in, or use **Find a decision in past work** and enter it yourself. Then choose **Search** → **Index existing Codex history** → **Read original conversation** → **Back to search** → **Continue this conversation**. Write a Plan draft, save two follow-ups, reorder them, then choose **Prepared work**. Review and append a queued instruction to its own draft, **Save draft and open** to return to that exact unsent Plan, then reload to find the same preparation.
+## First task: find the retry decision and read its own evidence
+
+1. Choose **Find the sample answer** in the preview header. Content search opens with `retry budget` filled in; **Find a decision in past work** opens the same search if you want to enter it yourself.
+2. Choose **Index existing Codex history**, then **Search**. On **Sample checkout retry decision**, choose **Read original conversation** and read the retry-budget response.
+3. From that response, choose **Read containing task** → **Read this task’s evidence**. Open the `printf sample-checkout` command with **Read full original item** and read its reported output. The supplied instruction, response and command all belong to `sample-checkout-turn`.
+4. Use **Return to task evidence** or **Return to original passage** to review the same task. **Back to search** returns to the matching result.
+
+The sample uses synthetic evidence. For your own work, choose one earlier investigation and use its response and command/tool result to decide which check to change or skip. [Task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) takes that investigation, the step reached, and its evidence or first blocker. [Sample feedback](https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml) records the sample steps you tried.
+
+## Optional: prepare the next task and return
+
+From the search result, choose **Continue this conversation**. Write a Plan draft, save two follow-ups, reorder them, then choose **Prepared work**. Review and append a queued instruction to its own draft, **Save draft and open** to return to that exact unsent Plan, then reload to find the same preparation.
 
 To carry an original excerpt into another task, open **Sample documentation review**, write an unsent Plan, and use **Browse existing Codex sessions** to **Read original conversation** for the checkout sample. Select the retry rule and choose **Review evidence for task** → **Append to draft**. Reload, then expand **Referenced originals in this draft** and choose **Read referenced original** to revisit the same checkout answer and return to the unsent documentation Plan. See the [evidence preparation guide](../docs/evidence-preparation.md).
 

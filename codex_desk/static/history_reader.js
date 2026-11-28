@@ -361,9 +361,9 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(query.length<1 || query.length>200){findControls('Enter 1–200 characters to find in this original.');el('find-query').focus();return;}
     resetFindMatches();
     const ticket=version,search=++findVersion;
-    const scope=taskEvidenceScoped()?taskReview.evidence:null,scopeCapture=scope?.capture;
+    const scope=taskEvidenceScoped()?taskReview.evidence:null;
     const valid=()=>search===findVersion && current(ticket) && (!scope || taskReview?.evidence===scope && taskEvidenceScoped());
-    const eligible=scope?new Set(root.DeskTaskEvidence.list(source,scopeCapture,textFor,item=>visibleTypes.has(item.type)).items.filter(item=>item.available).map(item=>item.item_id)):null;
+    const eligible=findRowPredicate(scope);
     finding=true;findSubmitted=true;findQuery=query;findGroups=[];findTotal=0;findCursor=-1;findControls();render(false);
     if(el('match').textContent==='Showing the matching original native turn and item.')
       el('match').textContent='The saved search result identifies its original native turn and item. Find navigation is independent.';
@@ -374,7 +374,7 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
       for(let index=0;index<rows.length;index++) {
         if(!valid())return;
         const item=rows[index].item;
-        if(!item || !visibleTypes.has(item.type) || scope && (rows[index].turn.id!==scopeCapture.turn_id || !eligible.has(item.id)))continue;
+        if(!eligible(rows[index]))continue;
         const spans=await root.DeskHistoryFind.spansAsync(textFor(item),query,valid);
         if(!valid() || spans===null)return;
         if(spans.length){groups.push({index,spans,first:total});total+=spans.length;}
@@ -386,6 +386,13 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     } catch {
       if(valid()){finding=false;findControls('The original text could not be searched. Choose Find to retry.');}
     }
+  }
+  function findRowPredicate(scope) {
+    const capture=scope?.capture;
+    const items=scope?new Set(root.DeskTaskEvidence.list(source,capture,textFor,item=>visibleTypes.has(item.type))
+      .items.filter(item=>item.available).map(item=>item.item_id)):null;
+    return row=>!!row.item && visibleTypes.has(row.item.type) && (!scope ||
+      row.turn.id===capture.turn_id && items.has(row.item.id));
   }
   function markText(container,text,start,end) {
     container.replaceChildren();
@@ -424,11 +431,31 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(typeof evidenceReview==='function'){
       const review=node('button','Review evidence for task','history-reader-review-evidence');review.type='button';
       review.onmousedown=event=>{if(event.button===0 && selectedText()?.key===rowKey(row))event.preventDefault();};
+      let keyboardView=null,keyboardOwner=null,keyboardActivation=false;
+      const clearKeyboard=()=>{keyboardView=keyboardOwner=null;keyboardActivation=false;};
+      const keyboardCurrent=()=>keyboardView && keyboardOwner.source===source && keyboardOwner.find===findVersion &&
+        keyboardOwner.refresh===refreshVersion && keyboardOwner.task===taskReview && keyboardOwner.mode===taskReview?.mode &&
+        available(ticket) && detail.isConnected && keyboardView.selection?.key===rowKey(row) &&
+        textFor(row.item).slice(keyboardView.selection.start,keyboardView.selection.end)===keyboardView.selection.text;
+      detail.addEventListener('keydown',event=>{
+        if(event.key==='Tab'){
+          const selection=selectedText();
+          if(selection?.key===rowKey(row)){
+            keyboardView=captureView();keyboardOwner={source,find:findVersion,refresh:refreshVersion,task:taskReview,mode:taskReview?.mode};
+          }else if(selection || !keyboardCurrent())clearKeyboard();
+        }else if(event.target===review && (event.key==='Enter' || event.key===' '))keyboardActivation=!!keyboardCurrent();
+        else clearKeyboard();
+      });
+      detail.addEventListener('pointerdown',clearKeyboard);
+      detail.addEventListener('focusout',event=>{if(!detail.contains(event.relatedTarget))clearKeyboard();});
       review.onclick=async()=>{
-        if(!available(ticket) || !detail.isConnected)return;
-        const selection=selectedText(),key=rowKey(row);
+        if(!available(ticket) || !detail.isConnected){clearKeyboard();return;}
+        const live=selectedText(),saved=keyboardActivation && keyboardCurrent()?keyboardView:null,key=rowKey(row);
+        const selection=live || saved?.selection,view=captureView();
+        if(!live && saved){Object.assign(view,saved,{focus:view.focus});}
+        clearKeyboard();
         const range=selection?.key===key?{start:selection.start,end:selection.end}:null;
-        const view=captureView();review.disabled=true;
+        review.disabled=true;
         try{
           await evidenceReview({thread:source,turn_id:row.turn.id,item_id:row.item.id,
             text_for_item:textFor,selection_utf16:range,valid:()=>current(ticket)&&detail.isConnected,
@@ -756,15 +783,15 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
     if(view && current(ticket))restoreView(view,ticket);
   }
   async function refreshFind(query,anchor,ticket,previousMatches=null){
-    const search=++findVersion,scope=taskEvidenceScoped()?taskReview.evidence:null,scopeCapture=scope?.capture;
+    const search=++findVersion,scope=taskEvidenceScoped()?taskReview.evidence:null;
     const valid=()=>search===findVersion && current(ticket) && (!scope || taskReview?.evidence===scope && taskEvidenceScoped());
-    const eligible=scope?new Set(root.DeskTaskEvidence.list(source,scopeCapture,textFor,item=>visibleTypes.has(item.type)).items.filter(item=>item.available).map(item=>item.item_id)):null;
+    const eligible=findRowPredicate(scope);
     preserveChrome(()=>{finding=true;findGroups=[];findTotal=0;findCursor=-1;findControls();},ticket);
     const groups=[];let total=0;
     try{
       for(let index=0;index<rows.length;index++){
         if(!valid())return;
-        const item=rows[index].item;if(!item || !visibleTypes.has(item.type))continue;
+        const item=rows[index].item;if(!eligible(rows[index]))continue;
         const spans=await root.DeskHistoryFind.spansAsync(textFor(item),query,valid);
         if(!valid() || spans===null)return;
         if(spans.length){groups.push({index,spans,first:total});total+=spans.length;}

@@ -4,7 +4,7 @@ title: "[Browser sample]: "
 body:
   - type: markdown
     attributes:
-      value: "Try the sample at https://blucca.github.io/codex-desk/demo/. Your feedback helps choose the next useful workflow."
+      value: "Try https://blucca.github.io/codex-desk/demo/: find retry budget, read the checkout task’s response, then inspect its printf sample-checkout command and reported result. Tell us the step reached or first blocker. Continuing and saving preparation are optional."
   - type: dropdown
     id: reached-step
     attributes:
@@ -13,6 +13,7 @@ body:
         - Open recent sample work
         - Index and search for retry budget
         - Read original conversation
+        - Read one task’s own evidence
         - Continue sample conversation
         - Save Plan draft or follow-ups
         - Reload and return
@@ -25,15 +26,15 @@ body:
     attributes:
       label: What happened?
       description: Tell us the result you reached or the first control that did not work as expected.
-      placeholder: I read the original retry-budget answer, saved my next task, and reloaded to find it still there.
+      placeholder: I found the retry-budget response and read that same task’s printf sample-checkout command and reported result.
     validations:
       required: true
   - type: textarea
     id: own-work
     attributes:
       label: Would this help with your own Codex work?
-      description: Describe one old answer or next task you want to return to. If you stopped before installing, tell us what got in the way.
-      placeholder: I use the Codex CLI and want to reopen a test decision from last week, then prepare the next verification.
+      description: Describe one earlier investigation and the check its original evidence would help you change or avoid. If you stopped before installing, tell us what got in the way.
+      placeholder: I use the Codex CLI and want to find last week’s retry decision and its command output before repeating the timeout check.
     validations:
       required: true
   - type: input
