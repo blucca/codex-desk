@@ -498,15 +498,26 @@ Text characters ${hit.start+1}–${hit.end}`,'history-reader-identity'));
           const paint=(message,disabled)=>{status.textContent=message;copyButtons.forEach(button=>button.disabled=disabled);restoreView(view,ticket);};
           paint('Copying excerpt with source…',true);
           try{
-            if(!root.navigator?.clipboard?.writeText)throw Error('Clipboard access is unavailable.');
-            const result=await api('/api/native/home');
-            if(!valid())return false;
-            const reference=root.DeskEvidencePreparation.capture(request.source,{native_home:result?.home_namespace,
-              thread_id:request.source.id,turn_id:row.turn.id,item_id:row.item.id,
-              start_utf16:selection.start,end_utf16:selection.end,expected_quote:selection.text,textFor});
-            const block=root.DeskEvidencePreparation.format(reference);
-            if(!valid())return false;
-            await root.navigator.clipboard.writeText(block);
+            const clipboard=root.navigator?.clipboard;
+            const deferred=clipboard?.write && typeof root.ClipboardItem==='function' && typeof root.Blob==='function';
+            if(!deferred && !clipboard?.writeText)throw Error('Clipboard access is unavailable.');
+            const prepare=async()=>{
+              const result=await api('/api/native/home');
+              if(!valid())throw Error('Copy cancelled.');
+              const reference=root.DeskEvidencePreparation.capture(request.source,{native_home:result?.home_namespace,
+                thread_id:request.source.id,turn_id:row.turn.id,item_id:row.item.id,
+                start_utf16:selection.start,end_utf16:selection.end,expected_quote:selection.text,textFor});
+              const block=root.DeskEvidencePreparation.format(reference);
+              if(!valid())throw Error('Copy cancelled.');
+              return block;
+            };
+            if(deferred){
+              // Reserve the native clipboard write inside this genuine gesture;
+              // its one plain-text Blob still waits for the same owned namespace read.
+              const data=prepare().then(block=>new root.Blob([block],{type:'text/plain'}));
+              data.catch(()=>{});
+              await clipboard.write([new root.ClipboardItem({'text/plain':data})]);
+            }else await clipboard.writeText(await prepare());
             if(!valid())return false;
             paint('Excerpt with source copied.',false);return true;
           }catch(error){

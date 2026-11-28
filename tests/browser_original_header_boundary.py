@@ -218,10 +218,17 @@ async def check(width,pw,evidence):
                 if not BOUNDARY_BEFORE:assert held_same and held_view['selection']==QUOTE,(held_before,held_after,held_view)
                 await passage();release=await begin_hold();await mutate('completed',0)
                 await page.set_viewport_size({'width':width,'height':900 if width==1250 else 844});await frames()
-                box=await target().locator('pre').bounding_box();await page.mouse.move(box['x']+box['width']/2,min(box['y']+box['height']/2,750));await page.mouse.wheel(0,105)
+                # Responsive layout can move the retained item outside the
+                # reader while its fresh read is held. Reveal the actual source
+                # before a physical wheel; a negative viewport point is no gesture.
+                await target().locator('pre').scroll_into_view_if_needed();await frames()
+                wheel_clip=await target().evaluate("n=>{const p=n.querySelector('pre').getBoundingClientRect(),b=$('history-reader-body').getBoundingClientRect(),r=$('history-reader').getBoundingClientRect();return {left:Math.max(p.left,b.left,r.left,0),right:Math.min(p.right,b.right,r.right,innerWidth),top:Math.max(p.top,b.top,r.top,0),bottom:Math.min(p.bottom,b.bottom,r.bottom,innerHeight),inner:n.querySelector('pre').scrollTop}}")
+                assert wheel_clip['right']>wheel_clip['left'] and wheel_clip['bottom']>wheel_clip['top'],wheel_clip
+                await page.mouse.move((wheel_clip['left']+wheel_clip['right'])/2,(wheel_clip['top']+wheel_clip['bottom'])/2);await page.mouse.wheel(0,105)
+                await page.wait_for_function("n=>document.querySelector('.history-reader-item[data-item-id=\"A-command\"] pre').scrollTop>n",arg=wheel_clip['inner'])
                 await page.wait_for_timeout(150);await frames();wheel_before=await observe();await release_hold(release);wheel_after=await observe();await unchanged()
                 wheel_same=wheel_before['first_visible']['output_offset']==wheel_after['first_visible']['output_offset']
-                observations.append({'case':'held-header-Refresh-resize-newer-physical-wheel-wins','before':wheel_before,'after':wheel_after,'same_output_character':wheel_same})
+                observations.append({'case':'held-header-Refresh-resize-newer-physical-wheel-wins','wheel_clip':wheel_clip,'before':wheel_before,'after':wheel_after,'same_output_character':wheel_same})
                 if not BOUNDARY_BEFORE:assert wheel_same,(wheel_before,wheel_after)
                 await passage();release=await begin_hold();await mutate('inProgress',None)
                 await page.set_viewport_size({'width':opposite,'height':900 if opposite==1250 else 844});await frames()

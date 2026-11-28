@@ -103,5 +103,41 @@ assert.equal(E.parse(writes[0])[0].reference.projection,E.PROJECTION);assert.equ
 source.turns[0].items.push({...row.item});assert.equal(await artifact.onclick(),false);assert.equal(writes.length,0);assert(!artifact.disabled);
 ''')
 
+    def test_deferred_native_write_is_reserved_before_namespace_finishes(self):
+        self.check(r'''
+root.Blob=Blob;root.ClipboardItem=class{constructor(data){this.data=data;}};
+let reserved=0,release;namespaceHold=new Promise(resolve=>release=resolve);
+root.navigator.clipboard.write=async items=>{reserved++;assert.equal(items.length,1);
+ const blob=await items[0].data['text/plain'];assert.equal(blob.type,'text/plain');writes.push(await blob.text());};
+delete root.navigator.clipboard.writeText;
+const pending=artifact.onclick();assert.equal(reserved,1);assert.equal(writes.length,0);
+release();assert(await pending);assert.equal(writes.length,1);
+const reference=E.parse(writes[0])[0].reference;assert.equal(reference.quote,quote);
+assert.equal(reference.native_home,'a'.repeat(64));assert.equal(writes[0],E.format(reference));
+assert.deepEqual(liveSelection,selection);assert.equal(status.textContent,'Excerpt with source copied.');
+''')
+
+    def test_deferred_blob_rejects_changed_source_epoch_or_detached_owner(self):
+        for change in ['readingIntentEpoch++', 'source={...source}', 'detail.isConnected=false']:
+            with self.subTest(change=change):
+                self.check(r'''
+root.Blob=Blob;root.ClipboardItem=class{constructor(data){this.data=data;}};
+let reserved=0,release;namespaceHold=new Promise(resolve=>release=resolve);
+root.navigator.clipboard.write=async items=>{reserved++;const blob=await items[0].data['text/plain'];writes.push(await blob.text());};
+const pending=artifact.onclick();assert.equal(reserved,1);
+''' + change + r''';release();assert.equal(await pending,false);assert.equal(writes.length,0);
+assert.notEqual(status.textContent,'Excerpt with source copied.');
+''')
+
+    def test_native_reservation_error_retains_selection_and_allows_exact_retry(self):
+        self.check(r'''
+root.Blob=Blob;root.ClipboardItem=class{constructor(data){this.data=data;}};
+root.navigator.clipboard.write=async()=>{throw Error('Denied native clipboard reservation');};
+assert.equal(await artifact.onclick(),false);assert(!artifact.disabled);assert.deepEqual(liveSelection,selection);
+assert(status.textContent.includes('Denied native clipboard reservation'));
+root.navigator.clipboard.write=async items=>{const blob=await items[0].data['text/plain'];writes.push(await blob.text());};
+assert(await artifact.onclick());assert.equal(writes.length,1);assert.equal(E.parse(writes[0])[0].reference.quote,quote);
+''')
+
 if __name__ == '__main__':
     unittest.main()
