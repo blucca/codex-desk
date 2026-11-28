@@ -244,7 +244,9 @@ async def check(playwright, site, evidence, width, chromium, public_url=None):
         try:
             await page.goto(url)
             await page.wait_for_function("document.querySelector('#home-list').getAttribute('aria-busy') === 'false'")
-            assert await page.locator("#home-list .native-row").count() == 4
+            assert await page.locator("#home-list .native-row").count() == 3
+            assert await page.evaluate("DeskPreviewThreads.length") == 4
+            assert await page.evaluate("DeskPreviewThreads.filter(t=>t.archived).length") == 1
             assert "Sample" in await page.locator("#home-list").inner_text()
             banner = page.locator("#preview-banner")
             assert await banner.is_visible()

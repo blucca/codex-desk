@@ -116,6 +116,13 @@ async def check(playwright, site, evidence, width, chromium, embedded, public_ur
 
             async def original(thread):
                 await app.locator('#browse').click()
+                scope='archived' if thread.get('archived') else 'current'
+                await app.locator('#history-source').select_option(scope)
+                await app.wait_for_function("!$('history-search-submit').disabled")
+                await app.locator('#history-search').fill(thread['name'])
+                await app.locator('#history-search').press('Enter')
+                await app.wait_for_function("!$('history-search-submit').disabled")
+                assert await app.locator('#history-source').input_value()==scope
                 await app.locator('#native-list .native-row').filter(has_text=thread['name']).locator('.native-read').click()
                 await app.wait_for_function("$('history-reader').open && $('history-reader-body').getAttribute('aria-busy')==='false'")
                 assert await app.evaluate('getComputedStyle(document.documentElement).overflowAnchor') == 'none'
