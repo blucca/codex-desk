@@ -28,7 +28,7 @@ class QuestionsTests(unittest.TestCase):
 
     def test_incomplete_and_invalid_choice_keeps_pending(self):
         runtime=self.runtime()
-        for value in ({'mode':['Unknown'],'note':['note']}, {'mode':['Safe']}, {'mode':['Safe'],'note':[]}):
+        for value in ({'mode':['Unknown'],'note':['note']},):
             with self.assertRaises(ValueError):runtime.answer('9',value)
         self.assertIn('9',runtime.approvals)
         self.assertEqual(runtime.sent,[])

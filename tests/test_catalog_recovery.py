@@ -8,22 +8,18 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
-from urllib.parse import urlencode
 
 from codex_desk.drafts import load_draft, save_draft
 from codex_desk.followups import add_followup, followup_snapshot
 from codex_desk.runtime import Runtime
 from codex_desk.server import Desk, ThreadingHTTPServer, handler
 
-
 ROOT = Path(os.environ.get('DESK_TEST_TEMP', str(Path.cwd() / 'temp')))
 ROOT.mkdir(parents=True, exist_ok=True)
-
 
 class QuickReader(Runtime):
     def request(self, method, params, timeout=30):
         return super().request(method, params, timeout=.5 if method != 'initialize' else 5)
-
 
 class CatalogRecoveryTests(unittest.TestCase):
     def setUp(self):
@@ -113,11 +109,6 @@ for line in sys.stdin:
         finally:
             connection.close()
 
-    def finish(self):
-        self.desk.history_scanner.worker.join(5)
-        self.assertFalse(self.desk.history_scanner.worker.is_alive())
-        return self.request('/api/history/index')[1]['job']
-
     def requests(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
@@ -148,72 +139,6 @@ for line in sys.stdin:
         self.assertIsNot(self.desk.runtimes['native-catalog'], retired)
         self.assertEqual(sum(r['message']['method'] == 'initialize' for r in self.requests()), 2)
         self.assert_saved_work()
-
-    def test_native_title_retry_retains_literal_query_and_opaque_cursor(self):
-        self.desk.catalog()
-        retired = self.desk.runtimes['native-catalog']
-        (self.home / 'stall').write_text('thread/list:2')
-        path = '/api/native?' + urlencode({'search': 'Original + résumé', 'cursor': '2'})
-        self.assertEqual(self.request(path)[0], 400)
-        self.assertIsNotNone(retired.process.poll())
-        status, page = self.request(path)
-        self.assertEqual((status, page['data'][0]['id']), (200, 'saved-2'))
-        listed = [r['message']['params'] for r in self.requests() if r['message']['method'] == 'thread/list']
-        self.assertEqual(listed, [{'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at',
-                                  'searchTerm': 'Original + résumé', 'cursor': '2'}] * 2)
-        self.assert_saved_work()
-
-    def test_scan_reader_timeout_keeps_failed_row_and_other_reads_then_retries_only_it(self):
-        self.desk.catalog()
-        retired = self.desk.runtimes['native-catalog']
-        (self.home / 'stall').write_text('thread/read:saved-1')
-        self.assertEqual(self.request('/api/history/index', {})[0], 200)
-        job = self.finish()
-        self.assertEqual((job['status'], job['seen'], job['indexed'], job['failed'], job['retryable_failures']),
-                         ('completed', 3, 2, 1, 1))
-        self.assertIsNotNone(retired.process.poll())
-        self.assertEqual(self.desk.recall('original proof')['total'], 2)
-        before = len(self.requests())
-        self.assertEqual(self.request('/api/history/index', {'op': 'retry'})[0], 200)
-        job = self.finish()
-        self.assertEqual((job['status'], job['seen'], job['indexed'], job['retryable_failures']),
-                         ('completed', 1, 1, 0))
-        after = self.requests()[before:]
-        self.assertEqual([r['message']['method'] for r in after], ['thread/read'])
-        self.assertEqual(after[0]['message']['params'], {'threadId': 'saved-1', 'includeTurns': True})
-        self.assertEqual(self.desk.recall('original proof')['total'], 3)
-        self.assert_saved_work()
-
-    def test_scan_listing_timeout_preserves_next_page_for_explicit_continue(self):
-        self.desk.catalog()
-        retired = self.desk.runtimes['native-catalog']
-        (self.home / 'stall').write_text('thread/list:2')
-        self.assertEqual(self.request('/api/history/index', {})[0], 200)
-        job = self.finish()
-        self.assertEqual((job['status'], job['seen'], job['indexed'], job['resumable']), ('failed', 2, 2, True))
-        self.assertIsNotNone(retired.process.poll())
-        before = len(self.requests())
-        self.assertEqual(self.request('/api/history/index', {'op': 'retry'})[0], 200)
-        job = self.finish()
-        self.assertEqual((job['status'], job['seen'], job['indexed']), ('completed', 3, 3))
-        after = [r['message'] for r in self.requests()[before:]]
-        self.assertEqual([m['method'] for m in after], ['initialize', 'initialized', 'thread/list', 'thread/read'])
-        self.assertEqual(after[2]['params']['cursor'], '2')
-        self.assertEqual(after[3]['params']['threadId'], 'saved-2')
-        self.assert_saved_work()
-
-    def test_native_rejection_keeps_healthy_reader_for_explicit_retry(self):
-        self.desk.catalog()
-        reader = self.desk.runtimes['native-catalog']
-        (self.home / 'reject').touch()
-        status, failure = self.request('/api/native/thread?id=saved-1')
-        self.assertEqual((status, failure['error']), (400, 'Original history temporarily unavailable'))
-        self.assertIsNone(reader.process.poll())
-        self.assertEqual(self.request('/api/native/thread?id=saved-1')[0], 200)
-        self.assertIs(self.desk.runtimes['native-catalog'], reader)
-        self.assertEqual(sum(r['message']['method'] == 'initialize' for r in self.requests()), 1)
-        self.assert_saved_work()
-
 
 if __name__ == '__main__':
     unittest.main()

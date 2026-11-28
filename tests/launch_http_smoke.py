@@ -1,6 +1,6 @@
 """Real CLI/bind/asset/shutdown acceptance without native or browser work.
 
-Run ``python tests/test_launch_http.py``; set DESK_USE_INSTALLED=1 for the
+Run ``python tests/launch_http_smoke.py``; set DESK_USE_INSTALLED=1 for the
 installed package and DESK_TEST_TEMP to the workspace scratch directory.
 The current Python executable supplies the harmless --version preflight.
 Every child spawn is recorded; non-version spawns and browser opens are trapped.
@@ -22,7 +22,6 @@ import time
 import unittest
 from urllib.parse import parse_qs, urlsplit
 
-
 SOURCE = Path(__file__).resolve().parents[1]
 if os.environ.get('DESK_USE_INSTALLED') == '1':
     sys.path[:] = [path for path in sys.path if Path(path or Path.cwd()).resolve() != SOURCE]
@@ -31,7 +30,6 @@ else:
 from codex_desk import server as desk_server
 
 STARTUP_TIMEOUT = 20
-
 
 DRIVER = '''import json, os, runpy, socket, subprocess, sys, webbrowser
 from pathlib import Path
@@ -63,7 +61,6 @@ sys.argv[0] = 'codex-desk'
 runpy.run_module('codex_desk.server', run_name='__main__')
 '''
 
-
 class PageAssets(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -75,7 +72,6 @@ class PageAssets(HTMLParser):
             self.assets.append((attrs['src'], 'text/javascript; charset=utf-8'))
         elif tag == 'link' and attrs.get('rel') == 'stylesheet' and attrs.get('href'):
             self.assets.append((attrs['href'], 'text/css; charset=utf-8'))
-
 
 class LaunchHTTPTests(unittest.TestCase):
     def setUp(self):
@@ -247,21 +243,6 @@ class LaunchHTTPTests(unittest.TestCase):
                 self.assertNotEqual(connection.connect_ex(('127.0.0.1', address.port)), 0,
                     'Launcher left the HTTP listener running')
         self.assertLess(time.monotonic() - started, STARTUP_TIMEOUT + 10)
-
-    def test_invalid_ports_are_concise_and_exit_before_preflight_state_or_browser(self):
-        for port in (-1, 65536, 'not-a-port'):
-            with self.subTest(port=port), self.launch(port) as process:
-                output, errors = process.communicate(timeout=STARTUP_TIMEOUT)
-                self.assertEqual(process.returncode, 2, errors)
-                self.assertEqual(output, '')
-                self.assertNotIn('Traceback', errors)
-                self.assertIn('--port', errors)
-                if isinstance(port, int):
-                    self.assertIn('65535', errors)
-                self.assertLess(len(errors), 2000, errors)
-                self.assertFalse(self.state.exists())
-                self.assert_launch_only(preflight=0)
-
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

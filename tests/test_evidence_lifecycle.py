@@ -17,17 +17,11 @@ from codex_desk.followups import (
 from codex_desk.preparation import preparation_snapshot
 from codex_desk.runtime import Store
 from codex_desk.server import Desk
-from test_turn_request_integration import TurnRequestIntegrationTests
-
+from native_request_fixture import NativeRequestFixture
 
 QUOTE = 'Retry budget: café\u0301🙂 — 2 attempts.'
 
-
-class EvidenceLifecycleTests(TurnRequestIntegrationTests):
-    for _name in TurnRequestIntegrationTests.__dict__:
-        if _name.startswith('test_'):
-            locals()[_name] = None
-
+class EvidenceLifecycleTests(NativeRequestFixture):
     def setUp(self):
         super().setUp()
         folder = self.path / 'removed-source-A'
@@ -192,5 +186,4 @@ class EvidenceLifecycleTests(TurnRequestIntegrationTests):
         self.assert_preparation()
         self.assert_source_unattached()
 
-
-del TurnRequestIntegrationTests
+del NativeRequestFixture

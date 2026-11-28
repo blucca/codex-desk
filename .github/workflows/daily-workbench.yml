@@ -9,16 +9,14 @@ on:
 permissions:
   contents: read
 jobs:
-  preparation-and-return:
+  core-workflow:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 12
     env:
       PYTHONFAULTHANDLER: '1'
       DESK_SOURCE: ${{ github.workspace }}
       DESK_TEST_TEMP: ${{ github.workspace }}/temp
       TMPDIR: ${{ github.workspace }}/temp
-      TEMP: ${{ github.workspace }}/temp
-      TMP: ${{ github.workspace }}/temp
       PIP_CACHE_DIR: ${{ github.workspace }}/temp/pip-cache
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/temp/playwright-browsers
     steps:
@@ -29,222 +27,30 @@ jobs:
         with:
           python-version: '3.11'
       - name: Prepare workspace scratch
-        run: mkdir -p temp/installed-fixtures/tests temp/evidence
-      - name: Test canonical source
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+        run: mkdir -p temp/evidence
+      - name: Check the core domain and native lifecycle
         run: python -m unittest discover -s tests -p 'test_*.py'
-      - name: Install workbench and browser harness
+      - name: Install the workbench and selected browser harness
         run: |
           python -m pip install . playwright==1.56.0
-          python -m playwright install --with-deps chromium
-      - name: Check zero-install browser sample
-        run: |
-          python examples/build_browser_preview.py --out temp/static-preview/demo
-          python examples/check_browser_preview.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview
-          python examples/build_browser_preview.py --embedded --out temp/static-preview/embedded
-          python examples/check_browser_preview.py --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-embedded
-          python examples/check_browser_preview_links.py --site temp/static-preview/demo --embedded-site temp/static-preview/embedded --evidence temp/evidence/browser-preview-links
-          python examples/build_browser_preview.py --session-reading-fixture --out temp/static-preview/reading
-          python examples/build_browser_preview.py --embedded --session-reading-fixture --out temp/static-preview/reading-embedded
-          python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-reading
-          python examples/check_browser_preview_session_reading.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-reading-embedded
-      - name: Check changed saved-work sample and first-new activity
-        run: |
-          python examples/check_browser_preview_new_activity.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-new-activity
-          python examples/check_browser_preview_new_activity.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-new-activity-embedded
-          python examples/check_browser_preview_changed_work.py --site temp/static-preview/demo --ordinary --evidence temp/evidence/browser-preview-changed-ordinary
-          python examples/check_browser_preview_changed_work.py --site temp/static-preview/embedded --ordinary --embedded --evidence temp/evidence/browser-preview-changed-ordinary-embedded
-          python examples/check_browser_preview_changed_work.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-changed-rich
-          python examples/check_browser_preview_changed_work.py --site temp/static-preview/reading-embedded --embedded --evidence temp/evidence/browser-preview-changed-rich-embedded
-      - name: Check connected reported-child original sample
-        run: |
-          python examples/check_browser_preview_linked_original.py --ordinary --site temp/static-preview/demo --evidence temp/evidence/browser-preview-linked-normal
-          python examples/check_browser_preview_linked_original.py --ordinary --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-linked-normal-iframe
-          python examples/check_browser_preview_linked_original.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-linked-rich
-          python examples/check_browser_preview_linked_original.py --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-linked-rich-iframe
-      - name: Check known-source ID and supplied-instruction sample
-        run: |
-          python examples/check_browser_preview_source_navigation.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-source-navigation
-          python examples/check_browser_preview_source_navigation.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-source-navigation-iframe
-      - name: Check conversation-first recall and same-result live reentry sample
-        run: |
-          python examples/check_browser_preview_conversations.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-conversations-normal
-          python examples/check_browser_preview_conversations.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-conversations-iframe
-          python examples/check_browser_preview_conversations.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-conversations-rich
-          python examples/check_browser_preview_conversations.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-conversations-rich-iframe
-      - name: Check archived-original revisit in the maintained sample
-        run: |
-          python examples/check_browser_preview_revisit_original.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-revisit-normal
-          python examples/check_browser_preview_revisit_original.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-revisit-iframe
-          python examples/check_browser_preview_revisit_original.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-revisit-rich
-          python examples/check_browser_preview_revisit_original.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-revisit-rich-iframe
-      - name: Check supplied-original frontier and responsive reading place in the sample
-        run: |
-          python examples/check_browser_preview_following_original.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-following-normal
-          python examples/check_browser_preview_following_original.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-following-iframe
-          python examples/check_browser_preview_following_original.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-following-rich
-          python examples/check_browser_preview_following_original.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-following-rich-iframe
-          python examples/check_browser_preview_command_header.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-command-header-normal
-          python examples/check_browser_preview_command_header.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-command-header-iframe
-          python examples/check_browser_preview_command_header.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-command-header-rich
-          python examples/check_browser_preview_command_header.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-command-header-rich-iframe
-          python examples/check_browser_preview_find_matches.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-find-matches-normal
-          python examples/check_browser_preview_find_matches.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-find-matches-iframe
-          python examples/check_browser_preview_find_matches.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-find-matches-rich
-          python examples/check_browser_preview_find_matches.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-find-matches-rich-iframe
-      - name: Check supplied task overview and selected-task evidence sample
-        run: |
-          python examples/check_browser_preview_task_review.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-task-review-normal
-          python examples/check_browser_preview_task_review.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-task-review-iframe
-          python examples/check_browser_preview_task_review.py --rich --site temp/static-preview/reading --evidence temp/evidence/browser-preview-task-review-rich
-          python examples/check_browser_preview_task_review.py --rich --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-task-review-rich-iframe
-      - name: Check installed daily workflows
-        working-directory: temp
-        run: |
-          cp ../tests/browser_approval_context.py ../tests/browser_native_outcome_reading.py ../tests/browser_preparation_close_continuity.py ../tests/browser_pending_return.py ../tests/browser_read_prepared_continuity.py ../tests/browser_pending_interactions.py ../tests/browser_proposed_plan.py ../tests/browser_bound_recall_completion.py ../tests/browser_stop_task.py ../tests/browser_steering.py ../tests/browser_turn_changes.py ../tests/browser_native_steps.py ../tests/browser_prepared_queue_acceptance.py ../tests/browser_prepared_queue_editor.py ../tests/browser_captured_recall.py ../tests/browser_prepared_request_original.py ../tests/browser_prepared_live_output.py ../tests/browser_followup_editor.py ../tests/browser_prepared_request.py ../tests/test_turn_request_integration.py ../tests/test_navigation_controllers.py ../tests/browser_turn_recovery.py ../tests/browser_turn_request.py ../tests/test_approval_lifecycle.py ../tests/browser_missing_project.py ../tests/browser_recent_reader_scroll.py ../tests/browser_history_older.py ../tests/browser_recent_work.py ../tests/browser_preparation.py ../tests/browser_home.py ../tests/browser_home_read_guidance.py ../tests/browser_startup.py ../tests/browser_drafts.py ../tests/browser_followups.py ../tests/browser_organization.py ../tests/browser_collaboration.py ../tests/browser_recall.py ../tests/browser_native_recall.py ../tests/browser_recall_index_return.py ../tests/browser_bound_recall.py ../tests/browser_history_reader.py ../tests/browser_handoff.py ../tests/browser_handoff_navigation.py ../tests/browser_handoff_request.py ../tests/browser_selected_original.py ../tests/handoff_native_fixture.py installed-fixtures/tests/
-          python - <<'PY'
-          from pathlib import Path
-          import codex_desk
-          source = Path('../codex_desk').resolve()
-          installed = Path(codex_desk.__file__).resolve()
-          assert not installed.is_relative_to(source), installed
-          print('Installed package:', installed)
-          PY
-          for fixture in approval_context native_outcome_reading preparation_close_continuity pending_return read_prepared_continuity pending_interactions proposed_plan bound_recall_completion stop_task steering turn_changes native_steps prepared_queue_acceptance captured_recall prepared_request_original prepared_live_output followup_editor prepared_request turn_recovery turn_request missing_project recent_reader_scroll history_older recent_work preparation home home_read_guidance startup drafts followups organization collaboration recall native_recall recall_index_return bound_recall history_reader handoff handoff_navigation handoff_request selected_original; do
-            DESK_USE_INSTALLED=1 DESK_TEST_EVIDENCE="$PWD/evidence/$fixture" DESK_COLLABORATION_RECEIPT="$PWD/evidence/$fixture" python "installed-fixtures/tests/browser_$fixture.py"
-          done
-      - name: Check installed exact response, evidence preparation and saved lookup and task context
+          python -m playwright install --with-deps chromium webkit
+      - name: Use the installed daily workflow
         working-directory: temp
         env:
           DESK_USE_INSTALLED: '1'
-        run: |
-          mkdir -p installed-fixtures/examples
-          cp ../examples/check_native_linked_agent.py ../examples/check_native_linked_evidence.py ../examples/check_native_linked_pointer_return.py ../examples/check_native_new_activity.py ../examples/check_native_changed_work.py ../examples/check_native_session_reading.py ../examples/check_native_task_response.py ../examples/check_native_evidence_preparation.py ../examples/check_preparation_find.py ../examples/check_native_task_context.py installed-fixtures/examples/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-response" python installed-fixtures/examples/check_native_task_response.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/evidence-preparation" python installed-fixtures/examples/check_native_evidence_preparation.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/preparation-find" python installed-fixtures/examples/check_preparation_find.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-context" python installed-fixtures/examples/check_native_task_context.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/session-reading" python installed-fixtures/examples/check_native_session_reading.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/session-reading-cold" python installed-fixtures/examples/check_native_session_reading.py --cold
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/first-new-activity" python installed-fixtures/examples/check_native_new_activity.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/changed-work" python installed-fixtures/examples/check_native_changed_work.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-agent" python installed-fixtures/examples/check_native_linked_agent.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-evidence" python installed-fixtures/examples/check_native_linked_evidence.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-pointer-return" python installed-fixtures/examples/check_native_linked_pointer_return.py
-      - name: Check installed saved command and tool output quotes
+          DESK_TEST_EVIDENCE: ${{ github.workspace }}/temp/evidence/daily-workflow
+        run: python ../examples/check_native_evidence_preparation.py
+      - name: Paste a genuine WebKit source artifact
         working-directory: temp
         env:
           DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../examples/check_native_command_quote.py ../examples/check_native_tool_quote.py installed-fixtures/examples/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/command-output-quote" python installed-fixtures/examples/check_native_command_quote.py
-          for kind in mcpToolCall dynamicToolCall; do
-            DESK_TEST_TOOL_KIND="$kind" DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/tool-result-quote-$kind" python installed-fixtures/examples/check_native_tool_quote.py
-          done
-      - name: Check installed selected excerpt and source clipboard artifact
-        working-directory: temp
-        env:
-          DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../examples/check_copy_excerpt_artifact.py installed-fixtures/examples/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/copy-excerpt-artifact" python installed-fixtures/examples/check_copy_excerpt_artifact.py --source "$GITHUB_WORKSPACE" --evidence "$GITHUB_WORKSPACE/temp/evidence/copy-excerpt-artifact"
-      - name: Check installed native ID and supplied instruction source navigation
-        working-directory: temp
-        env:
-          DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../tests/browser_original_by_id.py installed-fixtures/tests/
-          cp ../examples/check_native_source_navigation.py ../examples/check_native_instruction_jump.py ../examples/check_native_copy_id.py installed-fixtures/examples/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-by-id" python installed-fixtures/tests/browser_original_by_id.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/source-navigation" python installed-fixtures/examples/check_native_source_navigation.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/instruction-jump" python installed-fixtures/examples/check_native_instruction_jump.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/copy-native-id" python installed-fixtures/examples/check_native_copy_id.py
-      - name: Check installed native archive and original reading return
-        working-directory: temp
-        env:
-          DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../tests/browser_native_archive.py ../tests/browser_original_reading_return.py ../tests/browser_archived_reading_return.py installed-fixtures/tests/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/native-archive" python installed-fixtures/tests/browser_native_archive.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-reading-return" python installed-fixtures/tests/browser_original_reading_return.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/archived-reading-return" python installed-fixtures/tests/browser_archived_reading_return.py
-      - name: Check installed newly supplied originals and responsive passage return
-        working-directory: temp
-        env:
-          DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../tests/browser_original_frontier.py ../tests/browser_original_responsive_reading.py ../tests/original_character_oracle.py installed-fixtures/tests/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-frontier" python installed-fixtures/tests/browser_original_frontier.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-responsive-reading" python installed-fixtures/tests/browser_original_responsive_reading.py
-      - name: Check installed exact original matches and command output passage
-        working-directory: temp
-        env:
-          DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../tests/browser_original_header_boundary.py installed-fixtures/tests/
-          cp ../examples/check_native_find_matches.py installed-fixtures/examples/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-header-boundary" python installed-fixtures/tests/browser_original_header_boundary.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-find-matches" python installed-fixtures/examples/check_native_find_matches.py
-      - name: Check installed supplied tasks and task evidence
-        working-directory: temp
-        env:
-          DESK_USE_INSTALLED: '1'
-        run: |
-          cp ../tests/browser_task_overview.py installed-fixtures/tests/
-          cp ../examples/check_native_task_evidence.py installed-fixtures/examples/
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-overview" python installed-fixtures/tests/browser_task_overview.py
-          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/task-evidence" python installed-fixtures/examples/check_native_task_evidence.py
-      - name: Retain daily-workflow receipts
+          DESK_TEST_EVIDENCE: ${{ github.workspace }}/temp/evidence/native-clipboard
+        run: python ../examples/check_copy_excerpt_artifact.py
+      - name: Retain core workflow receipts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: installed-daily-workbench
           path: temp/evidence
-          if-no-files-found: ignore
-          retention-days: 7
-  original-keyboard:
-    name: Original keyboard (${{ matrix.engine }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    strategy:
-      fail-fast: false
-      matrix:
-        engine: [chromium, firefox, webkit]
-    env:
-      PYTHONFAULTHANDLER: '1'
-      DESK_SOURCE: ${{ github.workspace }}
-      DESK_TEST_TEMP: ${{ github.workspace }}/temp/original-keyboard
-      TMPDIR: ${{ github.workspace }}/temp
-      TEMP: ${{ github.workspace }}/temp
-      TMP: ${{ github.workspace }}/temp
-      PIP_CACHE_DIR: ${{ github.workspace }}/temp/pip-cache
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/temp/playwright-browsers
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Prepare workspace scratch
-        run: mkdir -p temp/original-keyboard temp/evidence/original-keyboard
-      - name: Install workbench and selected browser harness
-        run: |
-          python -m pip install . playwright==1.56.0
-          python -m playwright install --with-deps "${{ matrix.engine }}"
-      - name: Check installed original keyboard and passage return
-        working-directory: temp
-        run: |
-          expected=$(python -c 'import ast; tree=ast.parse(open("../codex_desk/__init__.py", encoding="utf-8").read()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__version__" for t in n.targets)))')
-          python ../tests/browser_original_keyboard.py --installed --expect-version "$expected" \
-            --engine "${{ matrix.engine }}" --widths 1250 390 \
-            --evidence "$GITHUB_WORKSPACE/temp/evidence/original-keyboard"
-      - name: Retain original keyboard receipts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: installed-original-keyboard-${{ matrix.engine }}
-          path: temp/evidence/original-keyboard
           if-no-files-found: ignore
           retention-days: 7

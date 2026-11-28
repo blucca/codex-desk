@@ -37,6 +37,6 @@ Desk runs its own app-server with the selected binary. It uses your native Codex
 
 Delivered Desk **0.1.0a30** passed native list → explicit index → two phrase hits → exact original → restart-cache acceptance with the official macOS bundle's **codex-cli 0.171.0-alpha.13.2**. The fixture uses isolated synthetic `vscode` and `cli` legacy histories, with an `exec` source excluded by the normal native source filter. No model tasks or personal Desktop histories are used in this check.
 
-[Bundled-history checker](../examples/check_desktop_history.py) · [Manual macOS acceptance workflow](../.github/workflows/desktop-history.yml)
+[Installation and launch options](../README.md#install-the-preview)
 
 [Try the labeled browser sample](https://blucca.github.io/codex-desk/demo/) · [Installation and launch options](../README.md#install-the-preview)

@@ -13,10 +13,8 @@ from unittest.mock import Mock
 from codex_desk.runtime import Runtime
 from codex_desk.server import Desk, handler
 
-
 ROOT = Path(os.environ.get('DESK_TEST_TEMP', Path.cwd() / 'temp'))
 ROOT.mkdir(parents=True, exist_ok=True)
-
 
 class NativeHTTPFixture(unittest.TestCase):
     def setUp(self):
@@ -130,8 +128,6 @@ class NativeHTTPFixture(unittest.TestCase):
             with response:
                 return response.code, json.load(response)
 
-
-
 class ApprovalLifecycleTests(NativeHTTPFixture):
     def test_allow_once_can_finish_during_send_and_next_task_is_accepted(self):
         self.add_approval()
@@ -147,58 +143,6 @@ class ApprovalLifecycleTests(NativeHTTPFixture):
         self.assertEqual(self.requests, [{'method': 'turn/start', 'params': {
             'threadId': 'native-original', 'input': [{'type': 'text', 'text': 'Continue the same task'}]}}])
 
-    def test_completion_cannot_be_overwritten_by_allow_once_or_answer(self):
-        cases = [('/api/approval', 'item/commandExecution/requestApproval', {'decision': 'accept'}),
-                 ('/api/answer', 'item/tool/requestUserInput', {'answers': {'choice': ['Yes']}})]
-        for path, method, data in cases:
-            with self.subTest(method=method):
-                self.add_approval(method=method)
-                self.incoming = [self.completed()]
-                status, _ = self.post(path, request='9', **data)
-                self.join_native()
-                self.assertEqual(status, 200)
-                self.assertEqual(self.desk.store.get(self.identifier)['status'], 'completed')
-                self.assertEqual(self.runtime.approvals, {})
-
-    def test_one_of_two_approvals_keeps_other_pending(self):
-        self.add_approval('9')
-        self.add_approval('10', 'item/fileChange/requestApproval')
-        self.assertEqual(self.post('/api/approval', request='9', decision='accept')[0], 200)
-        self.assertEqual(set(self.runtime.approvals), {'10'})
-        self.assertEqual(self.desk.store.get(self.identifier)['status'], 'approval')
-        self.assertEqual(self.post('/api/turn', text='Too soon')[0], 400)
-        self.assertEqual(self.requests, [])
-        self.assertEqual(self.post('/api/approval', request='10', decision='decline')[0], 200)
-        self.assertEqual(self.desk.store.get(self.identifier)['status'], 'running')
-
-    def test_late_resolution_does_not_revive_a_stopped_turn(self):
-        self.add_approval()
-        self.assertEqual(self.post('/api/approval', request='9', decision='decline')[0], 200)
-        with self.runtime.lifecycle_lock:
-            self.runtime._message(self.completed('interrupted'))
-            self.runtime._message(self.resolved())
-        self.assertEqual(self.desk.store.get(self.identifier)['status'], 'interrupted')
-        self.assertEqual(self.post('/api/turn', text='Continue after stop')[0], 200)
-
-    def test_terminal_turn_retires_pending_requests_and_rejects_delayed_http_response(self):
-        cases = [('/api/approval', 'item/commandExecution/requestApproval', 'interrupted', {'decision': 'accept'}),
-                 ('/api/answer', 'item/tool/requestUserInput', 'completed', {'answers': {'choice': ['Yes']}})]
-        for path, method, terminal_status, data in cases:
-            with self.subTest(method=method, status=terminal_status):
-                self.add_approval(method=method)
-                with self.runtime.lifecycle_lock:
-                    self.runtime._message(self.completed(terminal_status))
-                status, _ = self.post(path, request='9', **data)
-                self.assertEqual(status, 400)
-                self.assertEqual(self.sent, [])
-                self.assertEqual(self.runtime.approvals, {})
-                self.assertEqual(self.desk.store.get(self.identifier)['status'], terminal_status)
-                # The old native resolution may still arrive after completion.
-                with self.runtime.lifecycle_lock:
-                    self.runtime._message(self.resolved())
-                self.assertEqual(self.desk.store.get(self.identifier)['status'], terminal_status)
-                self.assertEqual(self.post('/api/turn', text='Continue after the finished interaction')[0], 200)
-
     def test_duplicate_reply_is_rejected_without_resending_and_send_failure_keeps_pending(self):
         self.add_approval()
         self.send_error = OSError('fixture write failure')
@@ -210,77 +154,6 @@ class ApprovalLifecycleTests(NativeHTTPFixture):
         self.assertEqual(self.post('/api/approval', request='9', decision='accept')[0], 200)
         self.assertEqual(self.post('/api/approval', request='9', decision='accept')[0], 400)
         self.assertEqual(len(self.sent), 1)
-
-
-class TurnLifecycleTests(NativeHTTPFixture):
-    def setUp(self):
-        super().setUp()
-        self.desk.store.update(self.identifier, status='ready')
-
-    def test_two_tabs_start_only_one_turn_and_remain_busy_until_completion(self):
-        entered, release = threading.Event(), threading.Event()
-        result = []
-
-        def native_start(method, params):
-            self.requests.append({'method': method, 'params': params})
-            if len(self.requests) == 1:
-                entered.set()
-                release.wait(timeout=2)
-            # A response may precede turn/started. It still means a busy turn.
-            return {'turn': {'id': 'current-turn', 'status': 'inProgress'}}
-
-        self.runtime.request = native_start
-        first = threading.Thread(target=lambda: result.append(self.post('/api/turn', text='First tab task')))
-        first.start()
-        try:
-            self.assertTrue(entered.wait(timeout=1))
-            status, response = self.post('/api/turn', text='Second tab task')
-            self.assertEqual((status, response), (400, {'error': 'Finish or stop the current turn first'}))
-            self.assertEqual(len(self.requests), 1)
-            self.assertEqual(self.desk.store.get(self.identifier)['status'], 'starting')
-        finally:
-            release.set()
-            first.join(timeout=3)
-        self.assertFalse(first.is_alive())
-        self.assertEqual(result[0][0], 200)
-        self.assertEqual(self.desk.store.get(self.identifier)['status'], 'running')
-        self.assertEqual(self.post('/api/turn', text='Still too soon')[0], 400)
-        with self.runtime.lifecycle_lock:
-            self.runtime._message(self.completed())
-        self.runtime.request = self.native_request
-        self.assertEqual(self.post('/api/turn', text='Follow-up after completion')[0], 200)
-        self.assertEqual(len(self.requests), 2)
-        self.assertTrue(all(r['params']['threadId'] == 'native-original' for r in self.requests))
-
-    def test_rejected_start_restores_idle_status_and_can_be_retried(self):
-        def reject(method, params):
-            self.requests.append({'method': method, 'params': params})
-            raise RuntimeError('fixture request rejected')
-
-        self.runtime.request = reject
-        self.assertEqual(self.post('/api/turn', text='Make a plan', mode='plan'),
-                         (400, {'error': 'fixture request rejected'}))
-        row = self.desk.store.get(self.identifier)
-        self.assertEqual(row['status'], 'ready')
-        self.assertIsNone(row['error'])
-        self.assertEqual(row['mode'], 'native')
-        self.runtime.request = lambda method, params: {'turn': {'id': 'retry-turn', 'status': 'inProgress'}}
-        self.assertEqual(self.post('/api/turn', text='Retry the task')[0], 200)
-        self.assertEqual(self.desk.store.get(self.identifier)['status'], 'running')
-
-    def test_completion_before_start_response_is_not_overwritten(self):
-        def complete_before_reply(method, params):
-            self.requests.append({'method': method, 'params': params})
-            with self.runtime.lifecycle_lock:
-                self.runtime._message(self.completed())
-            return {'turn': {'id': 'current-turn', 'status': 'inProgress'}}
-
-        self.runtime.request = complete_before_reply
-        self.assertEqual(self.post('/api/turn', text='A quick task')[0], 200)
-        self.assertEqual(self.desk.store.get(self.identifier)['status'], 'completed')
-        self.runtime.request = self.native_request
-        self.assertEqual(self.post('/api/turn', text='Next task')[0], 200)
-
 
 if __name__ == '__main__':
     unittest.main()

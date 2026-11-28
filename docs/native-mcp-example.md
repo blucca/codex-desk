@@ -60,25 +60,10 @@ The final native usage snapshot reported these cumulative counters:
 
 The latest reported request was **11,499 tokens**, included within the cumulative total above.
 
-## Run the two response cases offline
-
-The [synthetic stdio fixture](../examples/native_mcp_fixture.py) preserves the exact success and deliberate-error responses used in this recording. From the repository checkout, with Python 3:
-
-```sh
-python3 examples/check_native_mcp_fixture.py
-```
-
-Expected stdout:
-
-```text
-PASS: 2 tool-call cases; initialize/list/ping verified
-```
-
-The [check script](../examples/check_native_mcp_fixture.py) sends initialization, tool discovery, the two calls and a ping over stdin/stdout, and checks five replies plus the exact success/error payloads. It needs no account, model or network connection.
-
 ## Inspect the implementation
+
+The [synthetic stdio fixture](../examples/native_mcp_fixture.py) retains the exact tool discovery, success and deliberate-error responses used in this recording. It is the reference fixture for the recorded native exchange.
 
 - [Native tool-evidence formatter](../codex_desk/evidence.py)
 - [Reviewed handoff builder](../codex_desk/handoff.py)
-- [Focused tool-result tests](../tests/test_tool_evidence.py)
-- [Served-asset regression test](../tests/test_assets.py)
+- [Core native lifecycle acceptance](../.github/workflows/daily-workbench.yml)

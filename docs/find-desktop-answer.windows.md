@@ -51,4 +51,4 @@ The official signed **OpenAI.Codex 26.1120.6357.0** package was provisioned with
 
 The isolated synthetic legacy `vscode`/`cli` fixture passed list → explicit index → two phrase hits → exact original messages → cache after restart. No manual WindowsApps ACL or ownership changes were made. The fixture preserves config/auth and original rollouts and sends no model tasks. Consumer Store installation and personal Desktop-created history are separate checkpoints; your own ordinary-user version check selects this entry.
 
-[Bundled-history checker](../examples/check_desktop_history.py) · [Try the labeled browser sample](https://blucca.github.io/codex-desk/demo/) · [Installation and launch options](../README.md#install-the-preview)
+[Try the labeled browser sample](https://blucca.github.io/codex-desk/demo/) · [Installation and launch options](../README.md#install-the-preview)

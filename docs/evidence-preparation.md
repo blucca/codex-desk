@@ -177,27 +177,4 @@ From a source checkout with Python 3.11+:
 DESK_TEST_TEMP="$PWD/temp/evidence-example" PYTHONPATH=. python3 examples/evidence_preparation.py
 ```
 
-The [installed browser example](../examples/check_native_evidence_preparation.py)
-drives the actual reader and draft controls at 1250- and 390-pixel widths using
-controlled local native history. It selects the second quote in a long command
-output, reviews/appends locally, returns to its exact text window, and exercises
-changed/missing-source and cold-return paths. Both examples use generated fixture
-content. See [the complete workbench guide](workbench.md) for ordinary preparation
-and admission controls.
-
-The [browser-sample task-context check](../examples/check_browser_preview_task_context.py)
-reproduces tool evidence → its own supplied instruction → that task's response →
-the original passage → the unsent outer task across all three sample histories.
-It also checks a targeted no-input task without substituting a neighboring prompt.
-After building the maintained preview:
-
-```sh
-python3 examples/check_browser_preview_task_context.py --site temp/browser-preview/demo --evidence temp/browser-preview/task-context-checks
-python3 examples/check_browser_preview_task_context.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/embedded-task-context-checks
-```
-
-The [installed instruction-jump check](../examples/check_native_instruction_jump.py)
-uses 27 supplied matching instructions, literal Unicode/punctuation, late source
-text, keyboard result paging and each task’s own historical response. At 1250/390
-it preserves a genuinely pointer-selected original quote, the result row/query,
-current Plan and both queues, and the outer unsent preparation editor.
+The [installed daily journey](../examples/check_native_evidence_preparation.py) follows a remembered original into preparation, a cold source return and recovery of one completed Run. The [narrow WebKit clipboard journey](../examples/check_copy_excerpt_artifact.py) copies a reviewed excerpt with its source and physically pastes the same artifact. Both use controlled local native history. [Daily CI](../.github/workflows/daily-workbench.yml) owns their installed execution. See [the workflow reference](workbench.md) for ordinary preparation and admission controls.
