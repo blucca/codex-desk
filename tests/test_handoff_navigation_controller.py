@@ -40,7 +40,8 @@ function unchanged(){assert.strictEqual($('prompt').value,draft.text);assert.str
 class HandoffNavigationTests(unittest.TestCase):
     def check(self,body):
         source=APP.read_text();fragment=source[source.index('let handoffSource='):source.index('let providerEditing=')]
-        code=SETUP+fragment+'\n(async()=>{'+body+r'''
+        original_read=source[source.index('let nativeIdVersion=0;'):source.index('function resetNative() {')]
+        code=SETUP+original_read+fragment+'\n(async()=>{'+body+r'''
 unchanged();process.stdout.write(JSON.stringify({passed:true}));
 })().catch(e=>{process.stderr.write(e.stack);process.exitCode=1;});
 '''

@@ -71,6 +71,13 @@ For later launches, use `codex-desk` in the activated environment, or `.\.venv\S
 
 ## Find an earlier answer
 
+Have a native thread ID? **Browse all conversations** → **Native conversation ID**
+→ **Read original by ID**; **Copy native conversation ID** in the reader keeps it
+for next time. Remember a title? Use **Search titles**. In an open
+original, **Read containing task** → **Jump to supplied user instruction** finds
+your prompt; **Find in this original conversation** finds reply/tool text.
+[Choose the entrance and carry its own response into your current draft — English / 中文](docs/find-original-by-id-or-instruction.md).
+
 1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
 2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
 3. Enter a word or phrase from the answer, command output or tool result, then **Search**. You can search while indexing: when the explicit scan completes, an unchanged submitted query in the active search dialog refreshes once. Edits stay unsent; choose **Search** after changing the phrase or scope. Choose **Read original conversation** on a native result to inspect the matching evidence—even if its project folder has been removed. Use **Next matches** / **Previous matches** to reach later results. Your selected task and draft stay unchanged; **Back to search** keeps the query, page and results. In the reader, **Find in this original conversation** locates text across every supplied item and long-output window; **Previous match** / **Next match** (F3 / Shift+F3) visits each occurrence. **Copy full item text** and **Copy source reference** let you reuse the exact evidence in today's work.

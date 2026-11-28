@@ -32,6 +32,13 @@ uvx --refresh --prerelease allow codex-desk@latest
 
 ## 2. 按答案中的文字查找
 
+已有原生 thread ID 时，用 **Browse all conversations** → **Native conversation ID**
+→ **Read original by ID** 直接阅读；记得标题时用 **Search titles**。已打开的原文中，
+**Read containing task** → **Jump to supplied user instruction** 查找自己的指令，
+**Find in this original conversation** 查找答案／工具文字。
+[完整短流程：ID → 指令 → 同回合回答 → 保存引句并返回当前草稿](find-original-by-id-or-instruction.md#中文)。
+
+
 1. 首页点击 **Find a decision in past work**；已有会话打开时，点击侧栏 **Search saved content**。
 2. 点击 **Index existing Codex history**，明确读取最近更新的最多 **200 个原生会话**，包括尚未在 Desk 打开过的历史。等状态显示完成，核对 seen／indexed／unchanged／failed 数量。索引只读取历史并保存本地缓存，不创建会话绑定或发送任务。
 3. 先保持 **All indexed projects**。在 **Saved content query** 输入旧答案、命令输出或工具结果中实际出现的 **2–200 个字符**，再点击 **Search** 或按 Enter。索引进行中也可以提交查询；明确启动的索引完成后，仍在当前搜索对话框中、未修改的已提交查询会自动刷新一次。搜索按字面文字匹配，忽略大小写并规范化 Unicode。修改文字或范围后，点击 **Search** 提交修改。

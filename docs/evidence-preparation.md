@@ -8,7 +8,9 @@ that saved preparation to the exact turn, item and occurrence in A.
 
 1. Write B's next task, choose **Work** or **Plan**, and wait for **Draft saved locally**.
 2. Use **Recent work**, title browsing or saved-content search to find A. Choose
-   **Read original conversation**.
+   **Read original conversation**. With a known native thread ID, use **Browse all
+   conversations** → **Native conversation ID** → **Read original by ID** instead.
+   [ID → instruction → own response → B quote/return](find-original-by-id-or-instruction.md).
 3. Find the relevant answer, command result or tool evidence. **Find in this
    original conversation** searches the full supplied item text, including later
    text windows. Use **Next match** when the same words occur more than once.
@@ -81,6 +83,26 @@ belongs to another task and is not used in its place. Navigating task context,
 instruction and response uses the already-read original snapshot. **Refresh
 original** is the separate action that reads the native source again.
 
+## Jump to a remembered user instruction
+
+Within task context, enter a phrase in **Jump to supplied user instruction** and
+choose **Find instructions**. The search uses all addressable user-message items
+in the already-loaded original, with literal punctuation and NFKC/casefold Unicode
+matching. Assistant replies, tool output and the reader’s role labels are excluded.
+
+Results show the exact thread/turn/item and an original-text snippet, up to **20
+matching instructions per page**. Use **Next instruction matches** to reach later
+rows. Choose **Read task for this instruction** to open that exact turn’s existing
+task context; its matching instruction is emphasized. **Read full instruction**
+highlights the original phrase in its complete text window, and **Read this task
+response** reads that turn’s own reported response.
+
+**Return to instruction matches** restores the entered query, result page, exact
+row and reading position. **Return to original passage** restores the original
+Find occurrence, selected excerpt and text window. **Refresh original** searches
+the refreshed snapshot using the last submitted phrase while keeping any newer,
+unsubmitted query text. Existing Plan drafts and prepared queues stay in place.
+
 ## Continue through ordinary preparation
 
 - **Prepared work → Review draft and follow-ups** reads the same saved text independently of today's selected task. **Browse originals for this draft** explicitly chooses that row as the destination; review and append there using its normal save. The draft, saved queue and captured request each offer **Read referenced original**.
@@ -144,3 +166,9 @@ After building the maintained preview:
 python3 examples/check_browser_preview_task_context.py --site temp/browser-preview/demo --evidence temp/browser-preview/task-context-checks
 python3 examples/check_browser_preview_task_context.py --embedded --site temp/browser-preview/embedded --evidence temp/browser-preview/embedded-task-context-checks
 ```
+
+The [installed instruction-jump check](../examples/check_native_instruction_jump.py)
+uses 27 supplied matching instructions, literal Unicode/punctuation, late source
+text, keyboard result paging and each task’s own historical response. At 1250/390
+it preserves a genuinely pointer-selected original quote, the result row/query,
+current Plan and both queues, and the outer unsent preparation editor.

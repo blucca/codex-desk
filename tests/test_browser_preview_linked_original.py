@@ -39,6 +39,32 @@ class BrowserPreviewLinkedOriginalTests(unittest.TestCase):
         self.assertNotIn('desk-' + preview.CHILD, fixture['events'])
         self.assertNotIn('desk-' + preview.CHILD, fixture['pending'])
 
+    def test_known_id_and_instruction_entrance_uses_existing_fourth_original(self):
+        base = Path(os.environ.get('DESK_TEST_TEMP', ROOT.parents[1] / 'temp'))
+        base.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base, prefix='source-entry-sample-') as temporary:
+            for embedded in (False, True):
+                output = preview.build(Path(temporary) / str(embedded), embedded=embedded)
+                html = (output / 'index.html').read_text()
+                self.assertIn('id="history-id-form"', html)
+                self.assertIn('id="history-id-read"', html)
+                self.assertIn('sample-child-thread</code> by ID', html)
+                self.assertIn('reported retry result</code>', html)
+                child = preview.sample_threads()[-1]
+                self.assertEqual(child['id'], preview.CHILD)
+                prompts = [i for i in child['turns'][0]['items'] if i['type'] == 'userMessage']
+                self.assertEqual(len(prompts), 1)
+                self.assertIn('reported retry result', prompts[0]['content'][0]['text'])
+                self.assertEqual(sum(len(t['items']) for s in preview.sample_threads() for t in s['turns']), 13)
+                for asset in (ROOT / 'codex_desk/static').iterdir():
+                    if asset.is_file() and asset.name not in ('app.js', 'index.html'):
+                        expected = asset.read_bytes()
+                        if asset.name == 'reading_checkpoint.js':
+                            expected = expected.replace(b"'codex-desk-reading-checkpoints-v1'", repr(preview.READING_KEY).encode())
+                        elif asset.name == 'new-activity.js':
+                            expected = expected.replace(b"'codex-desk-activity-review-v1'", repr(preview.REVIEW_KEY).encode())
+                        self.assertEqual((output / asset.name).read_bytes(), expected)
+
     @unittest.skipUnless(NODE, 'Node is needed for sample transport units')
     def test_linked_read_exact_namespace_ids_and_truthful_history_counts_no_child_writes(self):
         base = Path(os.environ.get('DESK_TEST_TEMP', ROOT.parents[1] / 'temp'))

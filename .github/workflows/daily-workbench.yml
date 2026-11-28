@@ -63,6 +63,10 @@ jobs:
           python examples/check_browser_preview_linked_original.py --ordinary --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-linked-normal-iframe
           python examples/check_browser_preview_linked_original.py --site temp/static-preview/reading --evidence temp/evidence/browser-preview-linked-rich
           python examples/check_browser_preview_linked_original.py --embedded --site temp/static-preview/reading-embedded --evidence temp/evidence/browser-preview-linked-rich-iframe
+      - name: Check known-source ID and supplied-instruction sample
+        run: |
+          python examples/check_browser_preview_source_navigation.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-source-navigation
+          python examples/check_browser_preview_source_navigation.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-source-navigation-iframe
       - name: Check installed daily workflows
         working-directory: temp
         run: |
@@ -96,6 +100,17 @@ jobs:
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-agent" python installed-fixtures/examples/check_native_linked_agent.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-evidence" python installed-fixtures/examples/check_native_linked_evidence.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-pointer-return" python installed-fixtures/examples/check_native_linked_pointer_return.py
+      - name: Check installed native ID and supplied instruction source navigation
+        working-directory: temp
+        env:
+          DESK_USE_INSTALLED: '1'
+        run: |
+          cp ../tests/browser_original_by_id.py installed-fixtures/tests/
+          cp ../examples/check_native_source_navigation.py ../examples/check_native_instruction_jump.py ../examples/check_native_copy_id.py installed-fixtures/examples/
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/original-by-id" python installed-fixtures/tests/browser_original_by_id.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/source-navigation" python installed-fixtures/examples/check_native_source_navigation.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/instruction-jump" python installed-fixtures/examples/check_native_instruction_jump.py
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/copy-native-id" python installed-fixtures/examples/check_native_copy_id.py
       - name: Retain daily-workflow receipts
         if: always()
         uses: actions/upload-artifact@v4

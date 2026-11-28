@@ -52,11 +52,11 @@ These are Codex CLI **0.171.0** default bindings. If you changed them, use `/key
 
 An issue comes back. You remember its identifier or a phrase, but not the conversation title. Before repeating the investigation, find what was already decided and what the command or tool actually reported.
 
-1. **Find the evidence.** Explicitly index recent native history, search the issue ID or literal phrase, and read the matching original answer, command or tool result. Reading leaves your selected task and draft in place.
+1. **Find the evidence.** Read a known native ID directly, browse a remembered title, or explicitly index recent native history and search a literal phrase. Within the loaded original, jump to a supplied user instruction or Find answer/tool text. [Choose the entrance](find-original-by-id-or-instruction.md). Reading leaves your selected task and draft in place.
 2. **Decide the remaining work.** Use the original evidence to identify today's next check. If the next task belongs in the old conversation, choose **Continue this conversation** from its existing project folder. If it informs another task you already have open, keep preparing that task instead.
 3. **Park preparation when interrupted.** In the conversation you choose to work on, write an unsent Work or Plan draft, or save ordered follow-ups. Reload the page, or stop and relaunch Desk with the same state directory to return to that saved conversation and preparation. Choose when to send it.
 
-[Try the browser sample](https://blucca.github.io/codex-desk/demo/) with three synthetic histories, then [install Desk](../README.md#install-the-preview) for your own work. Finding and reading an answer is useful on its own; continuation and preparation are optional. The sample saves preparation in browser storage; an installed Desk saves it in local SQLite.
+[Try the browser sample](https://blucca.github.io/codex-desk/demo/) with three primary synthetic histories and an independent linked original, then [install Desk](../README.md#install-the-preview) for your own work. Finding and reading an answer is useful on its own; continuation and preparation are optional. The sample saves preparation in browser storage; an installed Desk saves it in local SQLite.
 
 Desk's content index covers a bounded recent window: 200 conversations per pass by default, with coverage and text limits visible in the UI. [The answer-search guide](find-past-answer.md) explains older title browsing, original reading and the full return workflow.
 

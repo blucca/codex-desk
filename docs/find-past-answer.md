@@ -43,3 +43,12 @@ For work beyond the recent index window, choose **Index next older conversations
 [Python snapshot-search example: original thread/turn/item IDs](native-history-search-example.md)
 
 [中文首次使用指南](first-project.zh-CN.md) · [Full workflow reference](workbench.md) · [Ask for task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml)
+
+### Copy an ID for a later original read
+
+In a loaded original’s reader header, **Copy native conversation ID** copies its
+complete bare ID. Paste that value into **Native conversation ID** when browsing
+originals. The copied ID belongs to the original you are reading—including a
+linked child—not the task selected behind it. The action becomes available after
+the native source is successfully read. **Copy source reference** beside each item
+still copies the existing multiline provenance with conversation, turn and item.

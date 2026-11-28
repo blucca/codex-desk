@@ -1,6 +1,6 @@
 # Codex Desk workflow reference
 
-[Install and first use](../README.md#install-the-preview) · [中文指南](first-project.zh-CN.md)
+[Install and first use](../README.md#install-the-preview) · [ID/title/instruction/body entrances — English / 中文](find-original-by-id-or-instruction.md) · [中文指南](first-project.zh-CN.md)
 
 ## Read the selected task's original
 
@@ -23,6 +23,8 @@ An unconfirmed request stays in the **Retained Run request** panel. Check its na
 In **Open a project**, enter part of a conversation title in **Search conversation titles**, then click **Find existing sessions** or press Enter. For conversations from other projects, open **Browse existing Codex sessions** in the sidebar, enter the title text and click **Search titles**.
 
 Project results match the conversation's exact saved working directory (`cwd`): a session started in a subfolder requires that folder or the global browser. The exact saved folder can be entered even after it has been removed: **Find existing sessions** still searches its titles, and **Read original conversation** opens the original evidence. Missing-folder results have no Resume action; starting a new conversation stays unavailable until the folder is restored. **Back to project results** retains the query, loaded pages and source row. Global browsing uses the selected Codex home. Search matches native extracted titles, not message text, command output or MCP results.
+
+Have the exact native thread ID already? In **Browse existing Codex sessions**, paste it into **Native conversation ID** and choose **Read original by ID**. The existing original reader reads that ID in the current Codex home, even if its project folder is gone. **Back to conversation ID** retains the ID and title query, rows and page. **Retry read** and **Refresh original** keep the same captured ID/home. Reading leaves the selected task, unsent draft and follow-ups in place.
 
 Editing the query clears old results and pagination; submit it again to search. Leave the title field blank to list conversations in that scope. **Load more** continues the same submitted title query and scope.
 
