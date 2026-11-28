@@ -163,7 +163,8 @@ const sampleBefore=window.DeskBrowserPreview.snapshot(),storedBefore=stored;
 """.replace('FIXTURE',json.dumps(fixture)).replace('API_SOURCE',json.dumps((root/'examples/browser-preview/preview-api.js').read_text()))
         self.check(r"""
 $('show-recent').focus();$('show-recent').onclick();await settle();
-assert($('recent-work').open);assert.strictEqual($('home-list').children.length,4);
+assert($('recent-work').open);assert.strictEqual($('home-list').children.length,3);
+assert.strictEqual(fixture.threads.at(-1).archived,true);
 assert($('recent-selected-status').textContent.includes('Sample checkout retry decision · saved'));
 const second=$('home-list').children[1];await second.querySelector('.native-read').onclick();
 assert.strictEqual(reads[0].result.thread_id,fixture.threads[1].id);

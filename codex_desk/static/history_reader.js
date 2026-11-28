@@ -14,6 +14,7 @@
   let loading=false,originalItems=0,unsupportedItems=0,turnOnlyRows=0;
   let findVersion=0,finding=false,findSubmitted=false,findQuery='',findGroups=[],findTotal=0,findCursor=-1;
   let taskReview=null;
+  let readingHome=null,readingStorage=null,readingRestoreEpoch=0,readingUnavailable=false;
 
   let nativeIdCopy=null;
   function nativeIdCopyControls() {
@@ -39,7 +40,48 @@
   function current(ticket) {
     return ticket===version && el('').open && (!options?.valid || options.valid());
   }
+  function originalReadingStore() {
+    if(!readingStorage && root.DeskReadingCheckpoint)try{readingStorage=root.DeskReadingCheckpoint.createOriginal(root.localStorage);}catch{return null;}
+    return readingStorage;
+  }
+  function explicitReadingTarget() {
+    return !!(requested?.turn_id || requested?.item_id || requested?.match_text || options?.taskResponse || options?.savedReference);
+  }
+  function saveOriginalReading() {
+    if(!source || loading || readingUnavailable || !readingHome || explicitReadingTarget() || (options?.valid && !options.valid()))return;
+    const view=taskReview?.passage?.view || captureView();
+    if(!view.anchor)return;
+    try{
+      const identity=key=>{const [turn_id,item_id]=JSON.parse(key);return {turn_id,item_id};};
+      originalReadingStore()?.put({native_home:readingHome,thread_id:source.id},{latest:false,
+        anchor:{...identity(view.anchor.key),offset:view.anchor.offset,screen_top:view.anchor.screenTop},
+        window_scroll:{top:view.outer,left:view.outerLeft || 0},reader_scroll:{top:view.scroll,left:view.scrollLeft || 0},
+        item_views:Array.from(view.items,([key,row])=>({...identity(key),open:row.open,window_start:row.start,scroll_top:row.scroll,scroll_left:row.left || 0})),turn_views:[]});
+    }catch{}
+  }
+  function originalReadingView() {
+    if(!readingHome || explicitReadingTarget())return null;
+    const owner={native_home:readingHome,thread_id:source.id},catalog={...owner,turn_ids:source.turns.map(turn=>turn?.id),
+      items:rows.filter(row=>row.item).map(row=>({turn_id:row.turn.id,item_id:row.item.id}))};
+    let resolved;try{resolved=originalReadingStore()?.restore(owner,catalog);}catch{return null;}
+    if(!resolved || resolved.status==='checkpoint_missing')return null;
+    if(!resolved.available){readingUnavailable=true;el('status').textContent='Previous original reading place unavailable in this fresh native read.';return null;}
+    const saved=resolved.view,key=JSON.stringify([saved.anchor.turn_id,saved.anchor.item_id]);
+    const index=rows.findIndex(row=>rowKey(row)===key);page=Math.floor(index/PAGE_ENTRIES);
+    return {items:new Map(saved.item_views.map(row=>[JSON.stringify([row.turn_id,row.item_id]),
+      {start:row.window_start,open:row.open,scroll:row.scroll_top,left:row.scroll_left}])),
+      anchor:{key,offset:saved.anchor.offset,screenTop:saved.anchor.screen_top},scroll:saved.reader_scroll.top,scrollLeft:saved.reader_scroll.left,
+      outer:saved.window_scroll.top,outerLeft:saved.window_scroll.left,page};
+  }
+  function settleOriginalReading(view,ticket) {
+    // Keep source availability independent of metadata lookup, and finish
+    // geometry only while the original read and the user's intent still own it.
+    const readingEpoch=readingRestoreEpoch,findEpoch=findVersion;
+    root.requestAnimationFrame?.(()=>{
+      if(current(ticket) && readingEpoch===readingRestoreEpoch && findEpoch===findVersion)restoreView(view,ticket);});
+  }
   function invalidate() {
+    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;
     ++version;++refreshVersion;refreshing=false;const callback=options?.onReturn;
     options=null;source=null;requested=null;rows=[];loading=false;targetIndex=-1;unavailableThread=null;taskReview=null;taskControls();resetNativeIdCopy();
     el('response').hidden=true;el('response').textContent='';el('original').hidden=true;el('saved-evidence').hidden=true;el('saved-evidence-quote').textContent='';
@@ -52,6 +94,7 @@
       if(owner!==expected)return false;
       options.dismissOwner=true;
     }
+    saveOriginalReading();
     if(el('').open)el('').close();invalidate();return true;
   }
   function available(ticket=version) {
@@ -121,7 +164,7 @@
     el('find-query').value='';findControls();
   }
   function manualFindNavigation() {
-    findCursor=-1;
+    readingUnavailable=false;findCursor=-1;
     if(finding){++findVersion;finding=false;findSubmitted=false;findGroups=[];findTotal=0;
       findControls('Find canceled by navigation. Choose Find to search this original.');}
     else findControls();
@@ -134,6 +177,7 @@
     return span?{index:group.index,...span}:null;
   }
   function jumpFind(direction=1) {
+    readingUnavailable=false;
     if(!source || !available() || finding || !findTotal)return;
     if(findCursor<0){
       const group=direction>0?findGroups.find(group=>group.index>=page*PAGE_ENTRIES)
@@ -322,7 +366,7 @@
     earlier.onclick=()=>moveText(start-TEXT_CHARS);later.onclick=()=>moveText(start+TEXT_CHARS);
     windowText(start);detail.append(summary,identity,range,pre,controls);
     detail.open=saved?.open ?? (matched || ['userMessage','agentMessage','plan'].includes(item.type));
-    if(saved)pre.scrollTop=saved.scroll;
+    if(saved){pre.scrollTop=saved.scroll;pre.scrollLeft=saved.left || 0;}
     copyControls(detail,row,text,ticket);
     if(matched && (occurrence || !phrase || at>=0) && visibleTypes.has(item.type)) {
       detail.classList.add('history-reader-target');detail.tabIndex=-1;
@@ -426,7 +470,7 @@
     const box=body.getBoundingClientRect();let anchor=null,focus=null;
     for(const item of viewItems()){
       const key=elementKey(item),pre=item.querySelector('.history-reader-text'),rect=item.getBoundingClientRect();
-      items.set(key,{start:Number(item.dataset.windowStart)||0,open:item.open,scroll:pre?.scrollTop || 0});
+      items.set(key,{start:Number(item.dataset.windowStart)||0,open:item.open,scroll:pre?.scrollTop || 0,left:pre?.scrollLeft || 0});
       if(!anchor && rect.bottom>box.top)anchor={key,offset:rect.top-box.top,screenTop:rect.top};
       if(item===active || item.contains(active)){
         const controls=Array.from(item.querySelectorAll('button,summary,pre'));
@@ -434,13 +478,13 @@
       }
     }
     return {items,anchor,focus,taskFocus:active?.dataset?.taskAction && body.contains(active)?active.dataset.taskAction:null,
-      selection:selectedText(),scroll:body.scrollTop,outer:el('').scrollTop,page,first:rowKey(rows[page*PAGE_ENTRIES])};
+      selection:selectedText(),scroll:body.scrollTop,scrollLeft:body.scrollLeft,outer:el('').scrollTop,outerLeft:el('').scrollLeft,page,first:rowKey(rows[page*PAGE_ENTRIES])};
   }
   function restoreView(view,ticket){
     if(!current(ticket))return;
     const body=el('body'),items=viewItems();
-    for(const item of items){const saved=view.items.get(elementKey(item));if(saved)item.querySelector('.history-reader-text').scrollTop=saved.scroll;}
-    body.scrollTop=view.scroll;
+    for(const item of items){const saved=view.items.get(elementKey(item));if(saved){const pre=item.querySelector('.history-reader-text');pre.scrollTop=saved.scroll;pre.scrollLeft=saved.left || 0;}}
+    body.scrollTop=view.scroll;body.scrollLeft=view.scrollLeft || 0;
     if(view.anchor){const item=items.find(item=>elementKey(item)===view.anchor.key);
       if(item)body.scrollTop+=item.getBoundingClientRect().top-body.getBoundingClientRect().top-view.anchor.offset;}
     if(view.focus){
@@ -453,6 +497,7 @@
       if(target && !target.disabled)target.focus({preventScroll:true});}
     restoreSelectedText(view.selection);
     if(Number.isFinite(view.outer))el('').scrollTop=view.outer;
+    if(Number.isFinite(view.outerLeft))el('').scrollLeft=view.outerLeft;
     if(Number.isFinite(view.anchor?.screenTop)){
       const item=items.find(item=>elementKey(item)===view.anchor.key);
       if(item)el('').scrollTop+=item.getBoundingClientRect().top-view.anchor.screenTop;
@@ -557,6 +602,18 @@
     el('error').hidden=true;el('retry').hidden=true;el('match').textContent='';el('coverage').textContent='';
     el('previous').hidden=el('next').hidden=true;el('original').hidden=true;unavailableThread=null;
     try {
+      if(!explicitReadingTarget() && root.DeskReadingCheckpoint){
+        const readingEpoch=readingRestoreEpoch,findEpoch=findVersion;
+        const rememberHome=home=>{
+          if(!current(ticket))return;
+          if(typeof home!=='string' || !/^[a-f0-9]{64}$/.test(home))return;
+          readingHome=home;
+          if(readingEpoch!==readingRestoreEpoch || findEpoch!==findVersion)return;
+          if(source && !loading){const view=originalReadingView();if(view){render(false,view);settleOriginalReading(view,ticket);}}
+        };
+        if(options?.nativeHome)rememberHome(options.nativeHome);
+        else Promise.resolve(api('/api/native/home')).then(result=>rememberHome(result?.home_namespace),()=>{});
+      }
       let thread=preloaded;
       if(!thread && options?.taskResponse){
         const result=await api('/api/native/task-response?thread='+encodeURIComponent(requested.thread_id)+'&turn='+encodeURIComponent(requested.turn_id));
@@ -594,7 +651,9 @@
           phrase && (Number.isInteger(requested.match_start)?textFor(row.item).slice(requested.match_start,requested.match_start+phrase.length)!==phrase:!textFor(row.item).includes(phrase))?'The saved phrase is no longer at its captured location in this original native item. You can still read the conversation.':
           'Showing the matching original native turn and item.';
       } else el('match').textContent='Original native history, without opening or resuming a task.';
-      render();return true;
+      const view=originalReadingView();render(!view,view);
+      if(view)settleOriginalReading(view,ticket);
+      return true;
     } catch(error) {
       if(!current(ticket)){if(ticket===version && el('').open)close();return false;}
       el('status').textContent=options?.taskResponse?'The captured task response could not be read. Retry keeps this same native thread and turn.':'The original conversation could not be read.';
@@ -607,6 +666,7 @@
   async function show(result,callbacks={}) {
     if(!api)throw new Error('Native history reader is not configured.');
     if(callbacks.valid && !callbacks.valid())return false;
+    saveOriginalReading();readingHome=null;readingUnavailable=false;++readingRestoreEpoch;
     ++version;++refreshVersion;refreshing=false;loading=false;source=null;rows=[];targetIndex=-1;taskReview=null;taskControls();refreshControls();resetNativeIdCopy();
     resetFind();
     requested={...result};options=callbacks;unavailableThread=null;el('response').hidden=true;el('response').textContent='';el('original').hidden=true;el('saved-evidence').hidden=true;el('saved-evidence-quote').textContent='';
@@ -882,7 +942,12 @@
       else if(el('find-query').value.trim())submitFind(event.shiftKey?-1:1);
       else el('find-query').focus();
     });
+    el('body').addEventListener('pointerdown',event=>{if(event.target.closest?.('.history-reader-item'))readingUnavailable=false;});
+    el('body').addEventListener('wheel',()=>{readingUnavailable=false;},{passive:true});
+    for(const type of ['pointerdown','wheel','keydown'])el('').addEventListener(type,()=>{++readingRestoreEpoch;},{passive:true});
+    el('').addEventListener('cancel',saveOriginalReading);
     el('').addEventListener('close',()=>{if(!el('').open)invalidate();});
+    root.addEventListener?.('pagehide',saveOriginalReading);
   }
   root.DeskHistoryReader={configure,show,close,textForItem:textFor};
 })(typeof globalThis==='undefined'?this:globalThis);

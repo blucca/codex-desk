@@ -63,3 +63,12 @@ Desk's content index covers a bounded recent window: 200 conversations per pass 
 Launch this separate local workbench from the terminal with your installed Codex CLI and current configuration. Desk runs its own app-server.
 
 [Find a past answer from your existing macOS Desktop history](find-desktop-answer.macos.md).
+
+## Revisit a native archived original
+
+Use **Browse all conversations** → **Native history** → **Archived conversations** → search title →
+**Read original conversation**. Read evidence without restoring the native task.
+Close and explicitly reopen the same original to continue from its browser-local
+reading place in fresh native text. Keep the same launch Codex home. An exact
+saved quote or response target takes precedence over normal remembered reading.
+See [ID, instruction and original-return workflow](find-original-by-id-or-instruction.md).

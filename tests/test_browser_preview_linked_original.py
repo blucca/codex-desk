@@ -60,7 +60,7 @@ class BrowserPreviewLinkedOriginalTests(unittest.TestCase):
                     if asset.is_file() and asset.name not in ('app.js', 'index.html'):
                         expected = asset.read_bytes()
                         if asset.name == 'reading_checkpoint.js':
-                            expected = expected.replace(b"'codex-desk-reading-checkpoints-v1'", repr(preview.READING_KEY).encode())
+                            expected = expected.replace(b"'codex-desk-reading-checkpoints-v1'", repr(preview.READING_KEY).encode()).replace(b"'codex-desk-original-reading-checkpoints-v1'", repr(preview.ORIGINAL_READING_KEY).encode())
                         elif asset.name == 'new-activity.js':
                             expected = expected.replace(b"'codex-desk-activity-review-v1'", repr(preview.REVIEW_KEY).encode())
                         self.assertEqual((output / asset.name).read_bytes(), expected)
@@ -104,7 +104,8 @@ for(const name of ['sample-data.js',...(process.argv[2]==='True'?['session-readi
  assert.equal((await request('/api/native/evidence-source?home='+home+'&thread='+child.id,{x:1})).status,400);
  assert.deepEqual(window.DeskBrowserPreview.snapshot(),before);assert.deepEqual(Object.fromEntries(stored),raw);
  assert.equal(before.sessions.length,1);assert.equal(before.sessions[0].thread_id,parent.id);
- assert.equal((await request('/api/native')).body.data.length,4);
+ assert.equal((await request('/api/native')).body.data.length,3);
+ assert.deepEqual((await request('/api/native?archived=true')).body.data.map(t=>t.id),[child.id]);
  const index=await request('/api/history/index',{});assert.equal(index.body.job.seen,4);assert.equal(index.body.job.indexed,4);assert.equal(index.body.coverage.indexed_threads,4);
  assert.equal(index.body.coverage.indexed_items,threads.reduce((n,t)=>n+t.turns.reduce((m,turn)=>m+turn.items.length,0),0));
  const find=await request('/api/recall?q='+encodeURIComponent('Child decisive evidence'));

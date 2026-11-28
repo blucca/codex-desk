@@ -87,6 +87,16 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 
 [Short guide: find a past Codex answer and reopen its task](docs/find-past-answer.md)
 
+### Rehearse the linked-original return
+
+The maintained browser sample includes the checkout parent's reported linked
+child original. Expand collaboration → **Read linked agent original** → Find
+`Child decisive evidence — café🙂 项目 exact source.` → F3 → Copy/review the second
+quote → append once to the existing unsent Plan. The saved child reference returns
+to the same editor and parent passage; **Back to Changed work** restores its row
+and scope. [Build and check both hosting modes at 1250/390](examples/browser-preview.md#read-the-reported-linked-original-and-reuse-its-exact-quote).
+
+
 ## Bring your existing work
 
 1. **Your recent Codex work** appears on the first screen, including the project folder. Choose **Read original conversation** to inspect evidence without opening a task, including when its project folder is gone. Click **Resume conversation** when you want to continue work in an available folder. From an active or restored task, choose **Recent work** to review the same list. **Back to recent work** returns to the original row; **Return to selected task** closes the overview without reopening the task or changing its draft, mode, or prepared follow-ups. The selected task’s live status stays visible in the overview.
@@ -98,6 +108,12 @@ Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-
 *Example first screen. Listing recent work runs no task; Resume is an explicit choice.*
 
 Know the title? **Browse all conversations** searches native conversation titles across folders. **Open a project** lets you choose an exact folder, another retained profile, or explicitly start a new conversation. Enter the exact saved folder even if it has been removed: **Find existing sessions** and **Read original conversation** still work. Restore the folder to resume or start new work. For a custom Codex history location, add `--codex-home /your/codex-home` to the launch command.
+
+For native archived history, choose **Archived conversations** under **Native history**
+in **Browse all conversations** (sidebar **Browse existing Codex sessions**), then
+search its title and read the original without restoring or resuming it. Close and
+explicitly reopen that original to return to its browser-local reading passage in
+fresh native text. [Original lookup and revisit guide](docs/find-original-by-id-or-instruction.md).
 
 [中文：打开已有会话并继续工作](docs/first-project.zh-CN.md) · [Illustrated walkthrough](docs/task-walkthrough.md)
 
@@ -156,12 +172,3 @@ Browser regressions use controlled local HTTP/SQLite, with no provider calls. Se
 ## License
 
 MIT.
-
-### Sample linked original and local Plan return
-
-The maintained browser sample includes the checkout parent's reported linked
-child original. Expand collaboration → **Read linked agent original** → Find
-`Child decisive evidence — café🙂 项目 exact source.` → F3 → Copy/review the second
-quote → append once to the existing unsent Plan. The saved child reference returns
-to the same editor and parent passage; **Back to Changed work** restores its row
-and scope. [Build and check both hosting modes at 1250/390](examples/browser-preview.md#read-the-reported-linked-original-and-reuse-its-exact-quote).

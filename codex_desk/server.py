@@ -542,6 +542,10 @@ def handler(desk, access_token=None):
                 if url.path == '/api/native':
                     params = parse_qs(url.query, keep_blank_values=True)
                     options = {'limit': 30, 'modelProviders': [], 'sortKey': 'updated_at'}
+                    if 'archived' in params:
+                        if len(params['archived']) != 1 or params['archived'][0] not in ('true', 'false'):
+                            raise ValueError('Choose one native history scope: archived=true or archived=false')
+                        options['archived'] = params['archived'][0] == 'true'
                     scope = None
                     if 'cwd' in params:
                         project = desk.history_project_path(params['cwd'][0])

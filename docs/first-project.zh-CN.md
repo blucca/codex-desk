@@ -111,9 +111,9 @@ uvx --refresh --prerelease allow codex-desk@latest
 
 ## 直接审阅当前会话的原文
 
-在已选任务的顶部点击 **Read original conversation**，或从任务活动区域按 F3。原文从最新一页打开；Find 能检索全部可读原文，包括其他页和长工具输出。原文内 F3／Shift+F3 跳到下一处／上一处命中。任务输入框里的 F3 不触发这个入口。
+在已选任务的顶部点击 **Read original conversation**，或从任务活动区域按 F3。原文恢复上次记住的阅读位置；首次阅读时从最新一页打开；Find 能检索全部可读原文，包括其他页和长工具输出。原文内 F3／Shift+F3 跳到下一处／上一处命中。任务输入框里的 F3 不触发这个入口。
 
-**Refresh original** 只重新读取同一个原生会话，不运行任务。加载和失败时保留上次成功读取的内容；当前查询、已知条目和文本窗口保持原位。修改或取消过的 Find 不会被自动重新提交。返回任务保留未发送的 Work／Plan 草稿和排队指令；项目目录缺失或续接失败时，有保存的原生会话标识仍可读取原文。关闭原文后本次阅读视图结束。
+**Refresh original** 只重新读取同一个原生会话，不运行任务。加载和失败时保留上次成功读取的内容；当前查询、已知条目和文本窗口保持原位。修改或取消过的 Find 不会被自动重新提交。返回任务保留未发送的 Work／Plan 草稿和排队指令；项目目录缺失或续接失败时，有保存的原生会话标识仍可读取原文。关闭原文后本次 Find 和选区结束；主动重新打开同一原文时，从新读取的文本恢复条目、窗口和阅读位置。
 
 ## 从另一个任务审阅未确认的 Run 请求
 
@@ -126,3 +126,14 @@ uvx --refresh --prerelease allow codex-desk@latest
 在 **Search saved content** 输入记得的原句，也能找到当前未确认的 Work/Plan 任务请求；即使已清空原草稿和队列，捕获的指令仍可检索。选择 **Review captured request** 查看精确原文和请求 ID，使用 **Read original conversation** 检查它所捕获的原会话。
 
 **Return to results** 保留查询、项目范围、结果页和位置，不切换当前任务或覆盖独立的 Prepared 编辑器。明确记录是否已开始后，选择 **Search** 更新同一结果页；已解决请求不再列入未确认请求的检索。
+
+## 返回已归档原会话与上次阅读处
+
+在 **Browse all conversations** 的 **Native history** 中选 **Archived conversations**，搜索标题，
+再 **Read original conversation**；Codex 会话仍保持归档。保存 Desk 任务的
+**Show archived** 是另一项操作。
+
+关闭原文或刷新页面后，主动重新读取同一原生 home 的同一会话，此浏览器会在
+新读取的原文中恢复实际条目、文本窗口、展开状态和阅读位置。刷新页面本身不
+读取原文；保存引句、指定回答等准确来源入口仍优先定位各自段落。当前任务的
+Plan 和待发指令保持原样。

@@ -52,3 +52,16 @@ originals. The copied ID belongs to the original you are reading—including a
 linked child—not the task selected behind it. The action becomes available after
 the native source is successfully read. **Copy source reference** beside each item
 still copies the existing multiline provenance with conversation, turn and item.
+
+### Return to an original you closed
+
+In **Browse all conversations**, **Native history** offers **Current conversations** or
+**Archived conversations** before title search. Reading an archived row keeps its
+native archive state. Local **Show archived** and search **Include archived
+sessions** still refer to saved Desk entries.
+
+After finding a passage in an original, close the reader. Explicitly reopen that
+same native conversation to return to its remembered item/window and reading
+position using a fresh native read. The same browser retains this position after
+a page reload; reload itself starts no original read. An exact saved quote,
+response or search-result target opens that target first.

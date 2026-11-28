@@ -9,6 +9,7 @@ import shutil
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = 'https://blucca.github.io/codex-desk/demo/'
 READING_KEY = 'codex-desk-browser-preview-reading-checkpoints-v1'
+ORIGINAL_READING_KEY = 'codex-desk-browser-preview-original-reading-checkpoints-v1'
 REVIEW_KEY = 'codex-desk-browser-preview-activity-review-v1'
 CHILD = 'sample-child-thread'
 CHILD_TURN = 'sample-child-turn'
@@ -27,7 +28,7 @@ def child_original():
     text = 'CHILD START\n' + '\n'.join(
         f'Child source line {n:04d} — retain the captured retry instruction and independent original.'
         + (' ' + CHILD_QUOTE if n in (50, 900) else '') for n in range(1200)) + '\nCHILD END'
-    return {'id': CHILD, 'name': 'Sample linked retry original', 'cwd': '/sample/projects/checkout-child',
+    return {'id': CHILD, 'name': 'Sample linked retry original', 'archived': True, 'cwd': '/sample/projects/checkout-child',
             'cwdExists': False, 'modelProvider': 'sample', 'updatedAt': 1795649999,
             'turns': [{'id': CHILD_TURN, 'status': 'completed', 'items': [
                 {'id': 'sample-child-question', 'type': 'userMessage', 'content': [{'type': 'text',
@@ -99,7 +100,7 @@ def build(output, embedded=False, session_reading_fixture=False):
     html = (assets / 'index.html').read_text()
     html = re.sub(r'(src|href)="/([^"/]+)"', r'\1="./\2"', html)
     html = html.replace('<title>Codex Desk</title>', '<title>Try Codex Desk — interactive browser sample</title><meta name="description" content="Find a sample Codex answer, read its original context, prepare the next task and reload to return. Try the real interface without installing."><link rel="canonical" href="'+PUBLIC+'">')
-    banner = '''<section id="preview-banner" aria-label="Browser sample preview"><div><strong>Codex Desk · interactive sample preview</strong><p>Try: Find a decision → search <b>retry budget</b> → Index history → Read original → Continue → save a Plan draft → reload.</p><p>Have a source ID? In <b>Browse existing Codex sessions</b>, read <code>sample-child-thread</code> by ID. Open its task context and find <code>reported retry result</code> in supplied instructions.</p><p>Sample conversations and preparation stay in this browser. The installed workbench uses your own Codex history and local database.</p></div><nav aria-label="Preview actions"><button id="preview-start" type="button">Find the sample answer</button><a href="https://github.com/blucca/codex-desk#install-the-preview">Install for your own work</a><a href="https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml">Share sample feedback</a><button id="preview-reset" type="button">Reset sample</button></nav><p id="preview-notice" role="status"></p></section>'''
+    banner = '''<section id="preview-banner" aria-label="Browser sample preview"><div><strong>Codex Desk · interactive sample preview</strong><p>Try: Find a decision → search <b>retry budget</b> → Index history → Read original → Continue → save a Plan draft → reload.</p><p>Have a source ID? In <b>Browse existing Codex sessions</b>, read <code>sample-child-thread</code> by ID. Open its task context and find <code>reported retry result</code> in supplied instructions.</p><p>Revisit: choose <b>Archived native conversations</b>, search <b>linked retry original</b>, read its later passage, close it, then explicitly reopen by title or known ID. Reload keeps the reading place, not an open original.</p><p>Sample conversations and preparation stay in this browser. The installed workbench uses your own Codex history and local database.</p></div><nav aria-label="Preview actions"><button id="preview-start" type="button">Find the sample answer</button><a href="https://github.com/blucca/codex-desk#install-the-preview">Install for your own work</a><a href="https://github.com/blucca/codex-desk/issues/new?template=browser-preview.yml">Share sample feedback</a><button id="preview-reset" type="button">Reset sample</button></nav><p id="preview-notice" role="status"></p></section>'''
     html = html.replace('<body>', '<body>'+banner)
     if embedded:
         html = html.replace('<html lang="en">', '<html lang="en" data-preview-embedded="true">')
@@ -117,7 +118,7 @@ def build(output, embedded=False, session_reading_fixture=False):
     (output / 'app.js').write_text(app)
     checkpoint = output / 'reading_checkpoint.js'
     if checkpoint.exists():
-        checkpoint.write_text(checkpoint.read_text().replace("'codex-desk-reading-checkpoints-v1'", repr(READING_KEY)))
+        checkpoint.write_text(checkpoint.read_text().replace("'codex-desk-reading-checkpoints-v1'", repr(READING_KEY)).replace("'codex-desk-original-reading-checkpoints-v1'", repr(ORIGINAL_READING_KEY)))
     review = output / 'new-activity.js'
     if review.exists():
         review.write_text(review.read_text().replace("'codex-desk-activity-review-v1'", repr(REVIEW_KEY)))

@@ -19,6 +19,7 @@ const root={DeskEvidencePreparation:{resolve:(r,h,t,f)=>{assert.strictEqual(r,re
 const api=async path=>{reads.push(path);if(hold)await hold;return reply || {home_namespace:reference.native_home,thread:{id:'original-A',turns:[]}};};
 const show=async (target,callbacks)=>{shows.push({target,callbacks});options=callbacks;source=callbacks.preloadedThread;requested=target;taskReview=null;++version;return true;};
 const findControls=()=>findUpdates++,render=(scroll,view)=>renders.push({scroll,view});
+const saveOriginalReading=()=>{};
 const invalidate=()=>{const cb=options?.onReturn;options=null;source=null;requested=null;++version;cb?.();};
 const settle=()=>new Promise(resolve=>setTimeout(resolve,0));
 '''

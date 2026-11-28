@@ -45,7 +45,7 @@ class BrowserPreviewChangedWorkTests(unittest.TestCase):
                         self.assertEqual((output/name).read_bytes(),(ROOT/'codex_desk/static'/name).read_bytes(),name)
                     self.assertEqual((output/'preview-api.js').read_bytes(),(ROOT/'examples/browser-preview/preview-api.js').read_bytes())
                     self.assertEqual((output/'app.js').read_text(),(ROOT/'codex_desk/static/app.js').read_text().replace("'codex-desk-session'","'codex-desk-browser-preview-session-v1'"))
-                    self.assertEqual((output/'reading_checkpoint.js').read_text(),(ROOT/'codex_desk/static/reading_checkpoint.js').read_text().replace("'codex-desk-reading-checkpoints-v1'",repr(preview.READING_KEY)))
+                    self.assertEqual((output/'reading_checkpoint.js').read_text(),(ROOT/'codex_desk/static/reading_checkpoint.js').read_text().replace("'codex-desk-reading-checkpoints-v1'",repr(preview.READING_KEY)).replace("'codex-desk-original-reading-checkpoints-v1'",repr(preview.ORIGINAL_READING_KEY)))
                     self.assertEqual((output/'new-activity.js').read_text(),(ROOT/'codex_desk/static/new-activity.js').read_text().replace("'codex-desk-activity-review-v1'",repr(preview.REVIEW_KEY)))
                     html=(output/'index.html').read_text()
                     self.assertIn('./changed-work-view.js',html)

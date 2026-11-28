@@ -9,7 +9,8 @@ READER=Path(__file__).resolve().parents[1]/'codex_desk/static/history_reader.js'
 NODE=shutil.which('node')
 FIXTURE=r"""
 const assert=require('assert'),frames=[],targets=[];
-const root={DeskHistoryTasks:require(TASK_HELPER)};let taskReview=null;
+const root={DeskHistoryTasks:require(TASK_HELPER)};let taskReview=null,readingRestoreEpoch=0,readingUnavailable=false;
+function saveOriginalReading(){}
 const document={body:{},activeElement:null};document.activeElement=document.body;
 class Element {
   constructor(){this.children=[];this.isConnected=true;this.scrollTop=0;this.dataset={};this.listeners={};this.className='';this.classList={add:()=>{}};}
@@ -17,7 +18,7 @@ class Element {
   replaceChildren(){for(const child of this.children)child.disconnect();this.children=[];if(document.activeElement!==queryInput)document.activeElement=document.body;}
   disconnect(){this.isConnected=false;for(const child of this.children)child.disconnect();}
   querySelector(selector){if(selector==='mark')return null;for(const child of this.children){if(child.className==='history-reader-target')return child;const found=child.querySelector(selector);if(found)return found;}return null;}
-  addEventListener(type,callback){this.listeners[type]=callback;}
+  addEventListener(type,callback){const previous=this.listeners[type];this.listeners[type]=event=>{previous?.(event);callback(event);};}
   contains(target){return this===target || this.children.some(child=>child.contains(target));}
   getBoundingClientRect(){return {top:100};}
   focus(options){document.activeElement=this;this.focusOptions=options;}

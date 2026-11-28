@@ -11,7 +11,8 @@ ITEM=SOURCE[SOURCE.index('  function itemNode('):SOURCE.index('  function render
 BOUNDS=SOURCE[SOURCE.index('  function bounds('):SOURCE.index('  function findControls(')]
 VIEW=SOURCE[SOURCE.index('  function captureView()'):SOURCE.index('  function refreshControls()')]
 HANDLERS=r'''
-el('').addEventListener=()=>{};
+el('').addEventListener=el('body').addEventListener=()=>{};
+let readingRestoreEpoch=0,readingUnavailable=false;function saveOriginalReading(){}
 function close(){}function read(){}function movePage(){}function submitFind(){}function jumpFind(){}function invalidate(){}
 '''+CONFIGURE+"\nconfigure({api});\n"
 

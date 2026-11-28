@@ -4,11 +4,11 @@
 
 ## Read the selected task's original
 
-Use **Read original conversation** in the selected-task header, or F3 from its activity. The reader starts at the latest native page; Find searches the complete readable original across all pages and long text windows. F3/Shift+F3 inside the reader moves between matches. F3 in a task textarea keeps its normal editing behavior.
+Use **Read original conversation** in the selected-task header, or F3 from its activity. The reader uses its remembered original passage; on a first read it starts at the latest native page; Find searches the complete readable original across all pages and long text windows. F3/Shift+F3 inside the reader moves between matches. F3 in a task textarea keeps its normal editing behavior.
 
 Original reading uses the saved parent thread identity, independently of task execution. A retained original remains readable after a failed resume or a missing project folder. **Return to selected task** restores the current keyboard origin without reopening the task or changing its unsent Work/Plan draft and prepared follow-ups.
 
-**Refresh original** explicitly reads that same native conversation again. The last successful snapshot stays visible while it loads and if the refresh fails. The latest page, known native item, text window, disclosure and query remain owned by the reader. An unchanged submitted Find is recomputed; edited or canceled Find text is not submitted by Refresh. A removed item or occurrence is reported rather than silently substituted. Closing the reader ends that reading view; Refresh continuity is within the open view.
+**Refresh original** explicitly reads that same native conversation again. The last successful snapshot stays visible while it loads and if the refresh fails. The latest page, known native item, text window, disclosure and query remain owned by the reader. An unchanged submitted Find is recomputed; edited or canceled Find text is not submitted by Refresh. A removed item or occurrence is reported rather than silently substituted. Closing ends the current Find and selection. Explicit reopening restores the source-bound item/window and reading place from fresh original text.
 
 ## Run a prepared task and recover its receipt
 
@@ -207,3 +207,15 @@ While reading a saved task, open a command or MCP result, scroll its evidence, o
 Reloading the same browser page restores that place after a fresh native read. Reading metadata contains only the home namespace, native source IDs and view coordinates. It keeps the most recent 100 task owners, up to 40 item and 40 turn views per owner, within a 1 MiB UTF-16 budget. Content, draft text and pending answers remain in their existing locations.
 
 **Latest output ↓** deliberately follows the end instead. A direct original, response, search or preparation destination takes precedence over remembered activity. If the exact original item is gone or its native turn identity changed, **Previous reading place unavailable** appears; choose Latest or another original destination. Changing the native home or thread opens that source’s own view.
+
+### Native archive and original reading return
+
+The native catalog's **Archived conversations** source reads retained Codex originals without
+restoring them. Its title filter, loaded rows and source selection stay captured
+on reader return. This is separate from archiving saved Desk tasks.
+
+A normal explicit original reopening restores this browser's source-bound
+turn/item/window/disclosure and reading position after a fresh read, including
+after a page reload. Exact recalled items, task responses and saved quotations
+continue to open their own requested passages. Reading remains independent of
+the selected task's Plan and queued instructions.

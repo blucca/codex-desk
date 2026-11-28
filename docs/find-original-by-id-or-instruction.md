@@ -25,6 +25,20 @@ Literal punctuation is retained, with case and Unicode forms normalized. In the
 original reader, **Copy native conversation ID** keeps that exact ID in your notes
 for the next lookup.
 
+### Revisit a native archived original
+
+In **Browse all conversations**, choose **Archived conversations** under **Native history**,
+then search its title and choose **Read original conversation**. The original stays
+archived in Codex. This native catalog choice is separate from **Show archived**
+for saved Desk tasks.
+
+This browser remembers an original's supplied turn/item, displayed text window,
+opened items and reading position for its native home and conversation. Close the
+reader, or reload Desk, then explicitly read the same original again to return to
+that passage in freshly read text. A saved quotation or other exact source target
+opens its requested passage instead. The reader's Find query and selected text are
+for the current reading visit; the remembered position contains view metadata.
+
 ### Start with your own history
 
 [Install and launch Desk](../README.md#install-the-preview) using your existing
@@ -103,6 +117,17 @@ ID／标题入口直接读取当前原生历史；指令跳转先打开原会话
 标题搜索匹配标题，指令跳转匹配用户消息，原文 Find 匹配可读内容项。搜索保留
 字面标点，忽略大小写并规范化 Unicode。原文查看器中的 **Copy native conversation ID**
 复制当前原会话的准确 ID，便于保存到笔记中下次查找。
+
+### 回看原生已归档会话
+
+在 **Browse all conversations** 的 **Native history** 中选 **Archived conversations**，搜索标题后
+选择 **Read original conversation**。会话仍保持 Codex 原生归档状态；这个目录
+选择与保存 Desk 任务的 **Show archived** 分开。
+
+此浏览器按原生 home／会话记住实际 turn／item、文本窗口、展开状态和阅读位置。
+关闭查看器或刷新 Desk 后，主动重新读取同一原会话，就从新读取的原文回到该段。
+保存引句等准确来源入口仍优先打开指定段落。Find 查询和文字选区属于本次阅读；
+记住的是阅读视图元数据。
 
 ### 连接自己的历史，保留当前 B
 
