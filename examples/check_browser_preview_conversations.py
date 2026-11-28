@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintained source-first discovery from exact supplied sample items, then return."""
+"""Maintained source-first discovery and live same-result reentry from exact sample items."""
 import argparse
 import asyncio
 import json
@@ -31,9 +31,10 @@ def oracle(threads,saved,query):
     return result
 
 async def check(p,site,evidence,width,chromium,embedded,rich):
-    prefix=f'{width}-'+('iframe' if embedded else 'direct');report={'passed':False,'width':width,'actual_iframe':embedded,'rich':rich,'checks':[]};errors=[];external=[]
+    prefix=f'{width}-'+('iframe' if embedded else 'direct');report={'passed':False,'width':width,'actual_iframe':embedded,'rich':rich,'checks':[],'reentry':[]};errors=[];external=[]
     with static_server(site) as (url,received,escaped):
         browser=await p.chromium.launch(executable_path=chromium,headless=True,args=['--no-sandbox','--disable-dev-shm-usage']);context=await browser.new_context(viewport={'width':width,'height':900 if width==1250 else 844})
+        report['browser']=browser.version
         page=await context.new_page();page.set_default_timeout(15000);page.on('pageerror',lambda e:errors.append(str(e)));app=None
         async def isolate(route):
             if urlsplit(route.request.url).netloc!=urlsplit(url).netloc:external.append(route.request.url);await route.abort()
@@ -43,6 +44,55 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
         async def search():await app.locator('#recall-query').press('Enter');await ready()
         async def saved():return await app.evaluate('DeskBrowserPreview.snapshot()')
         async def native():return await app.evaluate("DeskBrowserPreview.requests.filter(r=>['/api/native/thread','/api/native/evidence-source','/api/native/task-response'].includes(r.path.split('?')[0]))")
+        async def picked_place():
+            return await app.evaluate('''() => {const node=document.activeElement,row=node.closest('.recall-result');
+                return {query:$('recall-query').value,project:$('recall-project').value,archived:$('recall-archived').checked,
+                    grouped:$('recall-grouped').checked,source:$('recall-source-label').textContent,
+                    summary:$('recall-summary').textContent,focus:node.className,
+                    row:row?{kind:row.dataset.kind??null,session:row.dataset.session??null,thread:row.dataset.thread??null,
+                        item:row.dataset.item??null,group:row.dataset.group??null,groupKind:row.dataset.groupKind??null}:null,
+                    scroll:$('recall').scrollTop,resultsScroll:$('recall-results').scrollTop};}''')
+        async def same_result_reentry(name,button=False,paged=False):
+            before=await picked_place();assert before['row'] is not None and before['focus'] in ('recall-read','recall-group'),before
+            if paged:assert 'Items 31–60' in before['summary'] and before['scroll']>100,before
+            reads=len(await native());lookups=await app.evaluate('DeskBrowserPreview.requests.filter(r=>r.path.startsWith("/api/recall?")).length')
+            picked_scroll=before['scroll']
+            if button:
+                # A pointer click first brings the header into view. Measure the
+                # real preclose position rather than demanding an earlier viewport.
+                await app.locator('#recall-close').evaluate('''node=>node.addEventListener('pointerdown',()=>{
+                    window.__recallClosePlace={scroll:$('recall').scrollTop,resultsScroll:$('recall-results').scrollTop};
+                },{once:true,capture:true})''')
+                await app.locator('#recall-close').click()
+                before.update(await app.evaluate('window.__recallClosePlace'))
+            else:await page.keyboard.press('Escape')
+            await frames(app);assert not await app.locator('#recall').evaluate('node=>node.open')
+            await app.locator('#search-saved-content').focus();await page.keyboard.press('Enter');await ready()
+            after=await picked_place();receipt={'check':name,'method':'Close button' if button else 'Escape','before':before,'after':after,
+                'same_row':before['row']==after['row'],'same_focus':before['focus']==after['focus'],
+                'scroll_delta':after['scroll']-before['scroll'],'results_scroll_delta':after['resultsScroll']-before['resultsScroll'],
+                'picked_before_close_scroll':picked_scroll,'new_original_reads':len(await native())-reads,
+                'new_search_reads':await app.evaluate('DeskBrowserPreview.requests.filter(r=>r.path.startsWith("/api/recall?")).length')-lookups}
+            report['reentry'].append(receipt)
+            assert receipt['same_row'] and receipt['same_focus'],receipt
+            assert abs(receipt['scroll_delta'])<=1 and abs(receipt['results_scroll_delta'])<=1,receipt
+            assert {k:v for k,v in before.items() if k not in ('scroll','resultsScroll')}=={k:v for k,v in after.items() if k not in ('scroll','resultsScroll')},receipt
+            assert receipt['new_original_reads']==receipt['new_search_reads']==0,receipt
+            await checkpoint(name)
+        async def pick_thirteenth_read():
+            # Paging deliberately focuses the first read. Traverse real controls
+            # to a later remembered item instead of assigning a selection variable.
+            assert await app.locator('.recall-read').first.evaluate('node=>node===document.activeElement')
+            for _ in range(24):await page.keyboard.press('Tab')
+            assert await app.locator('.recall-read').nth(12).evaluate('node=>node===document.activeElement')
+            item=await app.locator('.recall-read').nth(12).evaluate('node=>node.closest("article").dataset.item')
+            n=len(await native());await page.keyboard.press('Enter')
+            await app.wait_for_function("$('history-reader').open&&$('history-reader-body').getAttribute('aria-busy')==='false'")
+            assert len(await native())==n+1 and await app.locator('.history-reader-target').get_attribute('data-item-id')==item
+            await app.locator('#history-reader-back').focus();await page.keyboard.press('Enter');await frames(app)
+            assert await app.locator('.recall-read').nth(12).evaluate('node=>node===document.activeElement')
+            return item
+
         async def checkpoint(name):
             assert await saved()==expected
             assert await app.evaluate('({selected,nativeThreadId,generation})')==owner
@@ -84,12 +134,19 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             await app.locator(f'[data-group="{A}"] .recall-group').click();await ready();await app.locator('#recall-next').click();await ready()
             assert 'Items 31–60' in await app.locator('#recall-summary').inner_text()
             last=await app.evaluate('DeskBrowserPreview.requests.filter(r=>r.path.startsWith("/api/recall?")).at(-1)');assert parse_qs(urlsplit(last['path']).query)['source_session']==[A]
-            item=await app.locator('.recall-result').first.get_attribute('data-item');n=len(await native());await app.locator('.recall-read').first.click();await app.wait_for_function("$('history-reader').open&&$('history-reader-body').getAttribute('aria-busy')==='false'")
-            assert len(await native())==n+1;assert await app.locator('.history-reader-target').get_attribute('data-item-id')==item
-            await app.locator('#history-reader-back').click();await frames(app);assert 'Items 31–60' in await app.locator('#recall-summary').inner_text()
+            item=await pick_thirteenth_read()
+            await same_result_reentry('source-page-picked-original-Escape-reopen-exact-live-place',paged=True)
+            await same_result_reentry('source-page-picked-original-Close-button-reopen-exact-live-place',button=True,paged=True)
             await app.locator('#recall-source-back').click();await ready();assert await app.evaluate(f"document.activeElement.closest('article').dataset.group==='{A}'")
             calls=await native();assert len(calls)==2 and all(c['method']=='GET' for c in calls);await checkpoint('exact-saved-source-item-page-original-and-group-return')
-            report.update(passed=True,oracle=[{'kind':k[0],'id':k[1],'matched_items':v} for k,v in counts.items()],native_reads=len(calls),native_admissions=0)
+            await same_result_reentry('grouped-picked-conversation-Escape-reopen-exact-live-place')
+            await app.locator('#recall-grouped').uncheck();await search();await app.locator('#recall-next').click();await ready()
+            assert 'Items 31–60' in await app.locator('#recall-summary').inner_text()
+            assert await pick_thirteenth_read()==item
+            await same_result_reentry('all-item-page-picked-original-Escape-reopen-exact-live-place',paged=True)
+            await same_result_reentry('all-item-page-picked-original-Close-button-reopen-exact-live-place',button=True,paged=True)
+            calls=await native();assert len(calls)==3 and all(c['method']=='GET' for c in calls)
+            report.update(passed=True,oracle=[{'kind':k[0],'id':k[1],'matched_items':v} for k,v in counts.items()],native_reads=len(calls),native_admissions=0,reentry_cases=len(report['reentry']),new_original_reads_on_reentry=0,new_search_reads_on_reentry=0)
         except Exception as e:
             import traceback
             report.update(error=str(e),traceback=traceback.format_exc());await page.screenshot(path=str(evidence/f'{prefix}-failure.png'))

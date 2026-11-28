@@ -52,6 +52,7 @@ const snapshot=()=>({parent:element('recall-index').parentElement.id,disabled:el
   indexStatus:element('recall-index-status').textContent,error:element('recall-index-error').hidden?null:element('recall-index-error').textContent,
   retryVisible:!element('recall-index-retry').hidden,retryText:element('recall-index-retry').textContent,
   olderVisible:!element('recall-index-older').hidden,olderDisabled:element('recall-index-older').disabled,
+  recoveryVisible:!element('recall-empty-history').hidden,
   recentText:element('recall-index').textContent,query:element('recall-query').value,scope:element('recall-project').value,
   projects:element('recall-project').children.map(n=>n.value),requests:requests.map(r=>({...r}))});
 (async()=>{
@@ -61,6 +62,7 @@ const snapshot=()=>({parent:element('recall-index').parentElement.id,disabled:el
   const before=snapshot();
   if(scenario.scan){element('recall-index').onclick();await settle();}
   if(scenario.recover){failGet=false;element('recall-index-retry').onclick();await settle();}
+  if(scenario.edit){element('recall-query').value='new unsent query';element('recall-query').oninput();await settle();}
   process.stdout.write(JSON.stringify({initial,before,after:snapshot()}));
 })().catch(e=>{process.stderr.write(e.stack);process.exitCode=1;});
 """
@@ -95,6 +97,27 @@ class RecallFirstUseTests(unittest.TestCase):
         self.assertIn('No saved content matches', before['summary'])
         self.assertNotIn('not indexed yet', before['summary'])
         self.assertFalse(any(r['method'] == 'POST' for r in before['requests']))
+
+    def test_zero_matches_offer_explicit_older_and_archived_recovery(self):
+        result = self.run_context(scan=True)
+        self.assertFalse(result['initial']['recoveryVisible'])
+        self.assertTrue(result['after']['recoveryVisible'])
+        html = (SOURCE.parent / 'index.html').read_text(encoding='utf-8')
+        recovery = html.split('<p id="recall-empty-history"', 1)[1].split('</p>', 1)[0]
+        for control in ('Index next older conversations', 'Close', 'Browse all conversations',
+                        'Browse existing Codex sessions', 'Native history', 'Archived conversations',
+                        'Search titles', 'Native conversation ID', 'Read original by ID'):
+            self.assertIn(control, recovery)
+        self.assertIn('Include archived sessions', recovery)
+        self.assertIn('saved Desk entries', recovery)
+        self.assertEqual(sum(r['method'] == 'POST' for r in result['after']['requests']), 1)
+
+    def test_unsent_query_edits_hide_stale_recovery_without_a_lookup(self):
+        result = self.run_context(scan=True, edit=True)
+        self.assertTrue(result['before']['recoveryVisible'])
+        self.assertFalse(result['after']['recoveryVisible'])
+        self.assertEqual(result['after']['query'], 'new unsent query')
+        self.assertEqual(sum(r['path'].startswith('/api/recall?') for r in result['after']['requests']), 2)
 
     def test_cached_projects_are_available_before_query_and_refresh_preserves_exact_saved_scope(self):
         result = self.run_context(threads=3, projects=['/missing/alpha', '/missing/beta'],

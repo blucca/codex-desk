@@ -67,7 +67,7 @@ jobs:
         run: |
           python examples/check_browser_preview_source_navigation.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-source-navigation
           python examples/check_browser_preview_source_navigation.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-source-navigation-iframe
-      - name: Check conversation-first recall sample
+      - name: Check conversation-first recall and same-result live reentry sample
         run: |
           python examples/check_browser_preview_conversations.py --site temp/static-preview/demo --evidence temp/evidence/browser-preview-conversations-normal
           python examples/check_browser_preview_conversations.py --embedded --site temp/static-preview/embedded --evidence temp/evidence/browser-preview-conversations-iframe

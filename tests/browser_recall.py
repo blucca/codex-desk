@@ -144,12 +144,14 @@ async def check(width, playwright, evidence):
             native_before = json.dumps(threads, sort_keys=True)
             actual_recall = desk.recall
 
-            def controlled_recall(q, cwd=None, include_archived=False, limit=30, offset=0):
+            def controlled_recall(q, cwd=None, include_archived=False, limit=30, offset=0,
+                                   view='items', source_session=None, source_thread=None):
                 recalls.append({'q': q, 'cwd': cwd, 'archived': include_archived, 'limit': limit})
                 wait_hold('query', q)
                 if q == 'fixture-error':
                     raise RuntimeError('Fixture saved-content store unavailable')
-                return actual_recall(q, cwd, include_archived, limit, offset)
+                return actual_recall(q, cwd, include_archived, limit, offset,
+                                     view=view, source_session=source_session, source_thread=source_thread)
 
             desk.recall = controlled_recall
             server = desk_server.ThreadingHTTPServer(('127.0.0.1', 0), desk_server.handler(desk))

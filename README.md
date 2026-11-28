@@ -5,9 +5,9 @@
 
 **[Try the browser sample — no install](https://blucca.github.io/codex-desk/demo/)**: search `retry budget`, read the checkout task’s response, then inspect its `printf sample-checkout` command and reported result. Optional: continue the sample conversation, save a draft, then reload to return. Sample preparation stays in this browser. Use the installer below for your own Codex history.
 
-![Codex Desk: index local history, find a retry decision, and read the original conversation](docs/find-answer.gif)
+![Find a remembered decision, read its exact answer and inspect that task’s own command result](docs/first-task.gif)
 
-*Synthetic checkout example: index local history, search “retry budget”, and read the original answer.*
+*20-second synthetic checkout walkthrough: search “retry budget” → read the exact answer → inspect its own command result. Decide which check to change or skip; continuing is optional.*
 
 <a name="development-preview"></a>
 
@@ -25,7 +25,7 @@ The current version is an alpha, so `--prerelease allow` selects the preview fro
 
 Keep that terminal running. Desk opens the **complete launch URL printed in that terminal** in your browser (normally at `http://127.0.0.1:8787`). Run the same command next time and open its newly printed URL; your saved conversations and drafts remain local.
 
-For your first task, pick one earlier investigation you would otherwise repeat. Choose **Find a decision in past work → Index existing Codex history**, enter a remembered phrase and choose **Search**, then **Read original conversation**. From the matching response or tool item, choose **Read containing task → Read this task’s evidence** to inspect that task’s own results. Decide which check to change or skip; continuing the conversation is optional. [First-task guide](docs/find-past-answer.md#first-task-read-the-decision-and-its-own-evidence).
+For your first task, pick one earlier investigation you would otherwise repeat. Choose **Find a decision in past work → Index existing Codex history**, enter a remembered phrase and choose **Search**, then **Read original conversation**. From the matching response or tool item, choose **Read containing task → Read this task’s evidence** to inspect that task’s own results. Decide which check to change or skip; continuing the conversation is optional. [First-task guide](docs/find-past-answer.md#first-task-read-the-decision-and-its-own-evidence). [Expected history missing?](docs/find-past-answer.md#if-your-expected-investigation-is-missing)
 
 If that address is already in use, use the complete URL in the existing Desk terminal to reopen that running server. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
 

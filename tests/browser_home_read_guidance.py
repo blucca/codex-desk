@@ -82,7 +82,8 @@ async def check(width, case, playwright, evidence):
             assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             await page.screenshot(path=str(evidence / f'home-{case}-{width}.png'))
             if case == 'empty':
-                guidance = 'No saved conversations' in message and 'Open a project' in message
+                guidance = ('No current conversations' in message and 'Browse all conversations' in message
+                            and 'Archived conversations' in message and '--codex-home' in message)
             else:
                 guidance = 'Read original evidence' in message and 'unavailable' in message
                 # The first screen now exposes read-only evidence directly.

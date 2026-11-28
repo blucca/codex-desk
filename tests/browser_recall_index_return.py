@@ -81,8 +81,10 @@ async def check(width, case, playwright, evidence):
                 return job
             desk.history_scanner.start = start
         ordinary_recall = desk.recall
-        def recall(q, cwd=None, include_archived=False, limit=30, offset=0):
-            data = ordinary_recall(q, cwd, include_archived, limit, offset)
+        def recall(q, cwd=None, include_archived=False, limit=30, offset=0,
+                   view='items', source_session=None, source_thread=None):
+            data = ordinary_recall(q, cwd, include_archived, limit, offset,
+                                   view=view, source_session=source_session, source_thread=source_thread)
             queries.append({'q': q, 'cwd': cwd, 'archived': include_archived,
                             'total': data['total'], 'native_coverage': data['coverage']['native']})
             count = sum(row['q'] == q for row in queries)

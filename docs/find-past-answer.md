@@ -15,7 +15,33 @@ Choose one earlier issue or decision and the check you need to make now. For exa
 
 That original read can finish the task. To continue work, make the separate choice below. [Task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) asks for this one investigation, the step reached, and its evidence or first blocker.
 
-[Watch the 20-second local demo](find-answer.gif) — synthetic checkout history.
+[Watch the 20-second first-task walkthrough](first-task.gif) — synthetic checkout history: remembered phrase → exact answer → its own command result → the present-day check to change or skip.
+
+## If your expected investigation is missing
+
+The first screen lists **current** native conversations. Content search starts
+with Desk's retained cache; a new installation needs the explicit index step.
+
+- **An archived conversation:** choose **Browse all conversations** (sidebar
+  **Browse existing Codex sessions**), set **Native history** to **Archived
+  conversations**, then use **Search titles**. Choose **Read original
+  conversation** on its row. With its native ID, enter **Native conversation ID**
+  and choose **Read original by ID**. Read its own task response and command/tool
+  result using the first-task steps above. **Include archived sessions** in
+  content search refers to saved Desk entries.
+- **An older current conversation:** after the recent index finishes, choose
+  **Index next older conversations** when available and submit the phrase again.
+  A title or native ID can open its original directly.
+- **Work from another Codex home:** relaunch with
+  `--codex-home /the/home-used-for-that-work`. Use a separate `--state-dir` when
+  switching to a separate set of histories; retain the original launch options
+  to return to its cache and saved preparation.
+
+If recent history reports an error, read that error and choose **Retry** after
+correcting its native setup. Check the launch command's
+**`--codex`** and **`--codex-home`** options. Pass a different checked executable
+or history location with those options. Start new work with **Open a project** when that
+is your intended task.
 
 ## Install once, then find the answer
 

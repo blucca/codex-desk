@@ -116,7 +116,7 @@ async def check():
                 assert 'Check the empty-cart state next.' in await page.locator('#prompt').input_value()
                 results.append({'case':'return-same-thread-and-draft','noCatalogRequest':True}); await context.close()
                 controls['empty']=True; context,page=await visit(390)
-                await page.wait_for_function('document.querySelector("#home-status").textContent.includes("No saved conversations")')
+                await page.wait_for_function('document.querySelector("#home-status").textContent.includes("No current conversations")')
                 await page.locator('#home-project').click(); await page.locator('#project').wait_for(); await page.locator('#cancel').click()
                 await page.locator('#home-browse').click(); await page.locator('#history').wait_for()
                 results.append({'case':'empty-home-actions'}); await context.close(); controls.clear()
