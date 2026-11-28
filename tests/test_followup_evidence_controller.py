@@ -75,3 +75,50 @@ world.a.reservation={token:'captured-token',entry_id:'one',revision:1,mode:'nati
 world.a.entries[0].text='Revised queued instruction without reference';world.a.entries[0].revision=2;await DeskFollowups.refresh();
 await sourceButton($('followup-review')).onclick();assert.equal(readCalls.length,1);assert.equal(readCalls[0].callbacks.backLabel,'Return to captured instruction');assert.equal(readCalls[0].target.thread_id,'source-A');
 ''')
+ def test_unedited_saved_row_redrawn_by_other_entry_returns_to_same_reference_control(self):
+  self.check(r'''
+const read=sourceButton(row('one'));read.focus();$('followup-list').scrollTop=127;globalThis.scrollY=243;
+await read.onclick();const reader=readCalls[0];assert(reader.callbacks.valid());
+world.a.entries[1].text='Other tab changed only second instruction';world.a.entries[1].revision++;
+await DeskFollowups.refresh();const returned=sourceButton(row('one'));assert(!read.isConnected);assert.notStrictEqual(returned,read);
+$('prompt').focus();$('followup-list').scrollTop=0;reader.callbacks.onReturn();
+assert.strictEqual(document.activeElement,returned);assert.equal($('followup-list').scrollTop,127);
+assert.equal(readCalls.length,1);assert.equal(returned.focusOptions.preventScroll,true);
+''')
+ def test_same_row_two_references_restore_exact_ordinal_never_equal_other_row(self):
+  self.check(r'''
+const second={...original.turns[0].items[0],id:'second-native-item'};original.turns[0].items.push(second);
+const ref2=E.capture(original,{native_home:reference.native_home,thread_id:original.id,turn_id:'source-turn',item_id:second.id,start_utf16:6,end_utf16:projected.length});
+world.a.entries[0].text+='\n\n'+E.format(ref2);world.a.entries[1].text=world.a.entries[0].text;await DeskFollowups.refresh();
+const buttons=row('one').referencePanel.children,read=buttons[1];read.focus();await read.onclick();
+assert.equal(readCalls[0].target.item_id,'second-native-item');
+world.a.entries[2].text='Other saved entry revision';await DeskFollowups.refresh();
+const returned=row('one').referencePanel.children[1];assert(!read.isConnected);readCalls[0].callbacks.onReturn();
+assert.strictEqual(document.activeElement,returned);assert.notStrictEqual(document.activeElement,row('one').referencePanel.children[0]);
+assert.notStrictEqual(document.activeElement,row('two').referencePanel.children[1]);
+''')
+ def test_changed_deleted_or_reordered_owner_cannot_restore_equal_reference_elsewhere(self):
+  self.check(r'''
+const initial=clone(world.a);
+for(const change of [()=>{world.a.entries[0].revision++;},()=>{world.a.entries.shift();},()=>{world.a.entries.reverse();world.a.entries.forEach((entry,index)=>{entry.order=index+1;entry.revision++;});}]){
+ world.a=clone(initial);world.a.entries[1].text=world.a.entries[0].text;await DeskFollowups.refresh();
+ await sourceButton(row('one')).onclick();const reader=readCalls.at(-1);change();await DeskFollowups.refresh();
+ assert(!reader.callbacks.valid());$('prompt').focus();reader.callbacks.onReturn();assert.strictEqual(document.activeElement,$('prompt'));
+}
+''')
+ def test_reference_body_change_cannot_restore_control_with_same_native_ids(self):
+  self.check(r'''
+await sourceButton(row('one')).onclick();const reader=readCalls[0];
+world.a.entries[0].text=world.a.entries[0].text.replace('> Decisive','> Changed');world.a.entries[0].revision++;
+await DeskFollowups.refresh();assert(!sourceButton(row('one')));assert(!reader.callbacks.valid());
+$('prompt').focus();reader.callbacks.onReturn();assert.strictEqual(document.activeElement,$('prompt'));
+''')
+ def test_captured_instruction_return_survives_unrelated_refresh_and_revised_local_entry(self):
+  self.check(r'''
+world.a.reservation={token:'captured-token',entry_id:'one',revision:1,mode:'native',state:'unknown',text:'Captured original instruction\n\n'+block};await DeskFollowups.refresh();
+const read=sourceButton($('followup-review'));read.focus();await read.onclick();
+world.a.entries[0].text='Revised local preparation';world.a.entries[0].revision++;
+world.a.entries[1].text='Other tab changed second';await DeskFollowups.refresh();
+assert.strictEqual(sourceButton($('followup-review')),read);assert(readCalls[0].callbacks.valid());readCalls[0].callbacks.onReturn();
+assert.strictEqual(document.activeElement,read);
+''')
