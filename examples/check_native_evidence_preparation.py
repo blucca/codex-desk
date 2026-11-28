@@ -129,7 +129,8 @@ async def one(browser, width, root, evidence):
                 assert reviewed['reference']['quote'] == QUOTE and reviewed['reference']['native_home'] == namespace
                 assert reviewed['reference']['thread_id'] == SOURCE and reviewed['reference']['turn_id'] == TURN and reviewed['reference']['item_id'] == ITEM
                 projection = 'Command\nfixture inspect retry budget\nStatus: completed\nExit: 1\n' + OUTPUT
-                expected_start = projection.rfind(QUOTE)
+                expected_start = OUTPUT.rfind(QUOTE)
+                assert reviewed['reference']['projection'] == 'history-reader-command-output/v1'
                 assert reviewed['reference']['quote_start'] == expected_start
                 assert reviewed['reference']['quote_end'] == expected_start + len(QUOTE)
                 assert 'commandExecution' in await page.locator('#evidence-preparation-source').inner_text()
@@ -179,7 +180,7 @@ async def one(browser, width, root, evidence):
                 await page.locator('#draft-evidence-list button').press('Enter'); await ready()
                 assert await target().locator('mark').text_content() == QUOTE
                 target_start = int(await target().get_attribute('data-window-start'))
-                expected_utf16 = len(projection[:expected_start].encode('utf-16-le')) // 2
+                expected_utf16 = len(projection[:projection.rfind(QUOTE)].encode('utf-16-le')) // 2
                 assert expected_utf16 - 11000 <= target_start <= expected_utf16
                 assert await page.locator('#history-reader-saved-evidence-quote').text_content() == QUOTE
                 assert 'still at this exact' in await page.locator('#history-reader-response').inner_text()

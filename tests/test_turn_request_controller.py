@@ -111,7 +111,7 @@ assert(!calls.some(c=>c.data && /^\/api\/(followups|handoff|sessions|import)/.te
 process.stdout.write(JSON.stringify({passed:true}));
 })().catch(e=>{process.stderr.write(e.stack);process.exit(1);});
 '''
-        result = subprocess.run([NODE, '-e', code], text=True, capture_output=True, timeout=20)
+        result = subprocess.run([NODE], input=code, text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout), {'passed': True})
 

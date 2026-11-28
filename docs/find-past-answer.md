@@ -1,6 +1,6 @@
 # Find an earlier investigation and read its own evidence
 
-Before repeating a Codex investigation, find the original task’s decision and inspect what its command or tool actually reported. Start with a remembered phrase, title or native conversation ID.
+Before repeating a Codex investigation, find the original task’s decision and inspect what its supplied command or tool actually reported. Start with a remembered phrase, title or native conversation ID.
 
 [Try the interactive browser sample](https://blucca.github.io/codex-desk/demo/) — search `retry budget`, read the checkout task’s response, then inspect its `printf sample-checkout` command and reported result. Continuing, saving a next task and reloading to return are optional. No install is needed for this sample.
 
@@ -10,12 +10,21 @@ Choose one earlier issue or decision and the check you need to make now. For exa
 
 1. Search a remembered phrase using the steps below. If you know the native ID or title instead, use [the direct original lookup](find-original-by-id-or-instruction.md).
 2. In **Read original conversation**, inspect the matching response or tool item. Choose **Read containing task**, read its supplied instruction, then **Read this task’s evidence**.
-3. Open the relevant command or tool result with **Read full original item**. Compare that result with the task’s response; use **Read this task response** in the task context to read it directly.
-4. Decide which present-day investigation or check to change or avoid. **Copy full item text** and **Copy source reference** retain the exact result for your current work.
+3. When the native original supplies a relevant command or tool result, open it with **Read full original item**. Compare that result with the task’s response; use **Read this task response** in the task context to read it directly.
+4. Decide which present-day investigation or check to change or avoid. Select the relevant excerpt and choose **Copy excerpt with source** to paste that excerpt and its exact source into your IDE or notes.
 
-That original read can finish the task. To continue work, make the separate choice below. [Task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) asks for this one investigation, the step reached, and its evidence or first blocker.
+That original read can finish the task when it establishes the decision or result you need. To continue work, make the separate choice below. [Task help](https://github.com/blucca/codex-desk/issues/new?template=task-help.yml) asks for this one investigation, the step reached, and its evidence or first blocker.
 
 [Watch the 20-second first-task walkthrough](first-task.gif) — synthetic checkout history: remembered phrase → exact answer → its own command result → the present-day check to change or skip.
+
+## If the original supplies messages but no command result
+
+Some native originals supply user and assistant messages without command or tool
+items. In **Read containing task**, choose **Read this task response** and copy
+its exact text or **Copy source reference**. If that response contains the
+remembered decision you need, use it to choose your next step. If your decision
+depends on a command or tool result absent from **Read this task’s evidence**,
+keep that check in today’s task until you obtain the result.
 
 ## If your expected investigation is missing
 
@@ -63,7 +72,7 @@ Each item shows a window of up to **20,000 text characters**. For longer output,
 
 **Find in this original conversation** searches the complete readable text supplied by that native read, including other pages and text beyond the cached index prefix. Enter a literal phrase and choose **Find**; **Next match** / **Previous match** (F3 / Shift+F3 while the reader is open) visits occurrences and highlights the original characters. No new native read or task is started by finding text.
 
-**Copy full item text** copies the whole readable message/tool item, not just its visible 20,000-character window. **Copy source reference** copies the conversation, native thread/turn/item IDs and project folder for your current investigation. These actions leave your saved preparation unchanged.
+**Copy full item text** copies the whole readable message/tool item, not just its visible 20,000-character window. **Copy source reference** copies the conversation, native thread/turn/item IDs and project folder for your current investigation. **Copy excerpt with source** copies one selected excerpt plus its native home/thread/turn/item identity, reported state and exact quote span as a single readable evidence block. Select text in the original item, then click the button or Tab to it and press Enter. You can paste the block into ordinary IDE work or notes without choosing or resuming a Desk destination. These copy actions leave your saved preparation unchanged.
 
 **Previous items** and **Next items** move keyboard focus into the newly displayed page, including a final page without a saved-text match. Tab then reaches that page's item controls; F3 remains local to the original reader.
 

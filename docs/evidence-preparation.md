@@ -58,6 +58,34 @@ with the original `--codex-home` to read evidence from another native home.
 Reuse the same `--state-dir` when restarting Desk. The saved evidence remains in
 the draft; reopening the page restores preparation before you explicitly read A.
 
+### Keep a quoted command result through completion
+
+Select an excerpt wholly inside the command's reported output. New evidence blocks
+use `history-reader-command-output/v1`: the literal Unicode span is relative to
+that native item's output, rather than its changing Status/Exit header. Completing
+the command or appending later output keeps the exact saved quote addressable.
+The block retains the status you originally reviewed; the fresh reader shows the
+current native item. Reopening and Refresh preserve the same output occurrence.
+
+Header or header-plus-output selections, and existing `history-reader-text/v1`
+blocks, keep their original literal full-item spans. If the quoted output changes
+at its captured output offset, the saved excerpt stays in your preparation and
+no other occurrence replaces it.
+
+### Keep supplied tool-result evidence through native status updates
+
+Output-only quotes from supplied MCP or dynamic-tool results use
+`history-reader-tool-result/v1`. Their Unicode span is relative to the reader's
+exact readable result projection. Native Status/duration/success or Arguments
+updates keep the same result quote addressable; the saved block retains the
+reported state you reviewed. The fresh reader shows the current native state.
+
+Selections in Arguments, headers, Error or Progress, and selections across a
+result boundary, retain literal full-item spans. Existing evidence blocks keep
+their original projection. A changed quoted result at the captured result offset
+is reported without substituting another occurrence. The result projection uses
+the reader's existing text/media/resource representation.
+
 ## Read the task behind an excerpt
 
 In A's original reader, choose **Read containing task** beside the answer, command

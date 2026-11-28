@@ -308,6 +308,19 @@ Saved quotations remain explicit native source targets. A deliberate new Find,
 page or scroll during a held read stays the newer reading intent; changing only
 the layout width does not replace the prior output passage.
 
+To keep that output as evidence for B: select **HEADER OUTPUT PASSAGE**, choose
+**Review evidence for task** → **Append to draft**, then close the reader.
+Choose **Complete sample command**, reload, and use **Referenced originals in
+this draft → Read referenced original**. The sample completion control resets on
+reload: choose **Prepare sample command output** → **Complete sample command**
+before reading the saved reference again. Its native output stays identical.
+The saved readable block keeps the reviewed status and output-relative literal
+span; the fresh command shows its current status. **Refresh original** and
+containing-task return preserve the exact output quote and B's unsent Plan/queues.
+
+The maintained command below exercises both passage metadata and this saved-quote
+rehearsal, including a fresh source read after reload and exact editor return.
+
 Run all four existing builds, with both resize directions in every command:
 
 ```sh

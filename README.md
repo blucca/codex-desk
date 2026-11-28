@@ -1,11 +1,11 @@
 # Codex Desk
 
-**Find an earlier Codex investigation before repeating it.** Search your recent local history, read the exact task’s response and its own command or tool results, then decide which check to change or skip. Continue in the same native thread when you need to.
+**Find an earlier Codex investigation before repeating it.** Search your recent local history, read the exact task’s response and its own supplied command or tool results, then decide which check to change or skip. Continue in the same native thread when you need to.
 
 
 **[Try the browser sample — no install](https://blucca.github.io/codex-desk/demo/)**: search `retry budget`, read the checkout task’s response, then inspect its `printf sample-checkout` command and reported result. Optional: continue the sample conversation, save a draft, then reload to return. Sample preparation stays in this browser. Use the installer below for your own Codex history.
 
-![Find a remembered decision, read its exact answer and inspect that task’s own command result](docs/first-task.gif)
+![Find a remembered decision, read its exact answer and inspect that task’s own command result](https://raw.githubusercontent.com/blucca/codex-desk/4b0df6cb53748c7496ec1a9638ac8a879043297a/docs/first-task.gif)
 
 *20-second synthetic checkout walkthrough: search “retry budget” → read the exact answer → inspect its own command result. Decide which check to change or skip; continuing is optional.*
 
@@ -13,7 +13,7 @@
 
 ## Install the preview
 
-Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installation and sign-in. Check `codex --version` in the terminal where you will launch Desk; this reports the native Codex CLI version. On macOS, you can also [use the Codex bundled with Desktop](docs/find-desktop-answer.macos.md) through `--codex`, without installing another CLI. On Windows, [check the reader in your installed app](docs/find-desktop-answer.windows.md); use that bundled entry when its version check succeeds in your ordinary PowerShell terminal.
+Use your existing [Codex CLI](https://developers.openai.com/codex/cli) installation and sign-in. Check `codex --version` in the terminal where you will launch Desk; this reports the native Codex CLI version. On macOS, you can also [use the Codex bundled with Desktop](https://github.com/blucca/codex-desk/blob/main/docs/find-desktop-answer.macos.md) through `--codex`, without installing another CLI. On Windows, [check the reader in your installed app](https://github.com/blucca/codex-desk/blob/main/docs/find-desktop-answer.windows.md); use that bundled entry when its version check succeeds in your ordinary PowerShell terminal.
 
 With [uv](https://docs.astral.sh/uv/getting-started/installation/), **one command** installs and opens the free local workbench on Linux, macOS, Windows or WSL:
 
@@ -25,7 +25,7 @@ The current version is an alpha, so `--prerelease allow` selects the preview fro
 
 Keep that terminal running. Desk opens the **complete launch URL printed in that terminal** in your browser (normally at `http://127.0.0.1:8787`). Run the same command next time and open its newly printed URL; your saved conversations and drafts remain local.
 
-For your first task, pick one earlier investigation you would otherwise repeat. Choose **Find a decision in past work → Index existing Codex history**, enter a remembered phrase and choose **Search**, then **Read original conversation**. From the matching response or tool item, choose **Read containing task → Read this task’s evidence** to inspect that task’s own results. Decide which check to change or skip; continuing the conversation is optional. [First-task guide](docs/find-past-answer.md#first-task-read-the-decision-and-its-own-evidence). [Expected history missing?](docs/find-past-answer.md#if-your-expected-investigation-is-missing)
+For your first task, pick one earlier investigation you would otherwise repeat. Choose **Find a decision in past work → Index existing Codex history**, enter a remembered phrase and choose **Search**, then **Read original conversation**. From the matching response or tool item, choose **Read containing task → Read this task’s evidence** to inspect the results supplied for that task. If its original supplies only messages, read the response; keep any check that still needs the missing command or tool result. Decide which check to change or skip; continuing the conversation is optional. [First-task guide](https://github.com/blucca/codex-desk/blob/main/docs/find-past-answer.md#first-task-read-the-decision-and-its-own-evidence). [Expected history missing?](https://github.com/blucca/codex-desk/blob/main/docs/find-past-answer.md#if-your-expected-investigation-is-missing)
 
 If that address is already in use, use the complete URL in the existing Desk terminal to reopen that running server. To replace it with an updated version, stop its terminal with **Ctrl+C** before relaunching. To use a different port, append `--port 8788` to the launch command. An occupied port does not create or change Desk state.
 
@@ -79,7 +79,7 @@ your prompt; **Find in this original conversation** finds reply/tool text.
 **Show Find matches** lists occurrences within that loaded original; choose an
 exact duplicate directly, then **Return to Find matches** to choose another.
 F3 continues from the occurrence you selected.
-[Choose the entrance and carry its own response into your current draft — English / 中文](docs/find-original-by-id-or-instruction.md).
+[Choose the entrance and carry its own response into your current draft — English / 中文](https://github.com/blucca/codex-desk/blob/main/docs/find-original-by-id-or-instruction.md).
 
 1. Choose **Find a decision in past work** on the first screen, or **Search saved content** in the sidebar.
 2. Choose **Index existing Codex history** to read up to **200 recently updated native conversations** into a local cache, including work you have never opened in Desk. Indexing is explicit; it neither opens those conversations nor sends a task.
@@ -91,7 +91,7 @@ When one long conversation fills the results, check **Group matches by conversat
 
 Search is literal, case-insensitive and Unicode-normalized. It also covers Desk-cached activity, drafts, prepared follow-ups and current unconfirmed captured Work/Plan requests. On a captured-request hit, **Review captured request** reads the exact saved instruction and its original target without opening a task; **Return to results** keeps your submitted query and page. **Index coverage and text limits** shows cached coverage and shortened or omitted text; this is a bounded recent-history cache. Refresh recent history starts at the current top and skips unchanged snapshots. Choose **Index next older conversations** to continue explicitly beyond the recent window. Unread page progress survives cancellation and restart; **Continue indexing** resumes it without sending a task. Native title browsing remains available.
 
-[Short guide: find a past Codex answer and reopen its task](docs/find-past-answer.md)
+[Short guide: find a past Codex answer and reopen its task](https://github.com/blucca/codex-desk/blob/main/docs/find-past-answer.md)
 
 ### Skim the original by task, then inspect its evidence
 
@@ -107,7 +107,7 @@ reviewed quote. **Find in this task’s supplied evidence** searches that task;
 **Whole original conversation** searches the complete loaded source. Return
 through **Return to task evidence**, **Return to task overview** and
 **Return to original passage** without changing your current draft or queues.
-[Task-led original review — English / 中文](docs/skim-original-tasks-and-evidence.md).
+[Task-led original review — English / 中文](https://github.com/blucca/codex-desk/blob/main/docs/skim-original-tasks-and-evidence.md).
 
 ### Rehearse the linked-original return
 
@@ -116,7 +116,7 @@ child original. Expand collaboration → **Read linked agent original** → Find
 `Child decisive evidence — café🙂 项目 exact source.` → F3 → Copy/review the second
 quote → append once to the existing unsent Plan. The saved child reference returns
 to the same editor and parent passage; **Back to Changed work** restores its row
-and scope. [Build and check both hosting modes at 1250/390](examples/browser-preview.md#read-the-reported-linked-original-and-reuse-its-exact-quote).
+and scope. [Build and check both hosting modes at 1250/390](https://github.com/blucca/codex-desk/blob/main/examples/browser-preview.md#read-the-reported-linked-original-and-reuse-its-exact-quote).
 
 ### Follow newly supplied original items
 
@@ -132,9 +132,12 @@ narrower or wider width keeps the remembered literal character anchored through
 responsive reflow; an explicit
 saved quote, item or response target takes priority. A command's status/exit header
 can change while its output stays identical: reopening or refreshing retains the
-same output-relative character, including after a resize. [Rehearse that command
-return](examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes). [Rehearse with five deliberate
-sample additions](examples/browser-preview.md#follow-newly-supplied-original-items).
+same output-relative character, including after a resize. Newly reviewed
+output-only evidence quotes also keep their exact output-relative span when the
+command completes; read them from the saved draft without repeating discovery.
+[Save and revisit command output](https://github.com/blucca/codex-desk/blob/main/docs/evidence-preparation.md#keep-a-quoted-command-result-through-completion). [Rehearse that command
+return](https://github.com/blucca/codex-desk/blob/main/examples/browser-preview.md#keep-the-command-output-passage-when-its-status-header-changes). [Rehearse with five deliberate
+sample additions](https://github.com/blucca/codex-desk/blob/main/examples/browser-preview.md#follow-newly-supplied-original-items).
 
 
 ## Bring your existing work
@@ -143,7 +146,7 @@ sample additions](examples/browser-preview.md#follow-newly-supplied-original-ite
 2. Read the saved messages, command results and tool evidence. Write your next task and wait for **Draft saved locally**, or choose **Save as follow-up**. Choose **Run task** when ready; Work and Plan modes use native Codex. If its local reply is lost, **Check Run request** recovers the same admission instead of starting another task. Later edits stay unsent; prepared follow-ups stay paused.
 3. Close the page and return to the printed URL. Desk reopens your last saved conversation with its unsent draft and remembered activity reading place. After stopping Desk with **Ctrl+C**, relaunch with the same command and any original `--codex`, `--codex-home`, `--state-dir` and `--port` options to return.
 
-![Recent CLI conversations ready to resume in Codex Desk](docs/recent-work.png)
+![Recent CLI conversations ready to resume in Codex Desk](https://raw.githubusercontent.com/blucca/codex-desk/4b0df6cb53748c7496ec1a9638ac8a879043297a/docs/recent-work.png)
 
 *Example first screen. Listing recent work runs no task; Resume is an explicit choice.*
 
@@ -153,17 +156,17 @@ For native archived history, choose **Archived conversations** under **Native hi
 in **Browse all conversations** (sidebar **Browse existing Codex sessions**), then
 search its title and read the original without restoring or resuming it. Close and
 explicitly reopen that original to return to its browser-local reading passage in
-fresh native text. [Original lookup and revisit guide](docs/find-original-by-id-or-instruction.md).
+fresh native text. [Original lookup and revisit guide](https://github.com/blucca/codex-desk/blob/main/docs/find-original-by-id-or-instruction.md).
 
-[中文：打开已有会话并继续工作](docs/first-project.zh-CN.md) · [Illustrated walkthrough](docs/task-walkthrough.md)
+[中文：打开已有会话并继续工作](https://github.com/blucca/codex-desk/blob/main/docs/first-project.zh-CN.md) · [Illustrated walkthrough](https://github.com/blucca/codex-desk/blob/main/docs/task-walkthrough.md)
 
 ## Why use Desk?
 
-Choose Desk when you want to inspect existing Codex evidence and prepare the next task in the same local workbench. [Choose a history workflow](docs/choose-history-workflow.md) covers native terminal resume, multi-agent history browsers and agent-memory tools.
+Choose Desk when you want to inspect existing Codex evidence and prepare the next task in the same local workbench. [Choose a history workflow](https://github.com/blucca/codex-desk/blob/main/docs/choose-history-workflow.md) covers native terminal resume, multi-agent history browsers and agent-memory tools.
 
 - **Resume, don't reconstruct.** Reopen the actual saved CLI thread and its prior messages, commands, file changes and MCP results.
 - **Return to what you were reading.** Switch from saved task A to B and back: the same original activity, tool disclosures and scroll positions return. In the same browser, they also return after reload. Choose **Latest output ↓** to follow the end instead.
-- **Read what changed across projects.** [Read first new activity](docs/review-new-activity.md) opens the earliest recorded native item update since your review. Deliberately mark displayed updates reviewed or choose **Latest output ↓**; later arrivals remain new.
+- **Read what changed across projects.** [Read first new activity](https://github.com/blucca/codex-desk/blob/main/docs/review-new-activity.md) opens the earliest recorded native item update since your review. Deliberately mark displayed updates reviewed or choose **Latest output ↓**; later arrivals remain new.
 - **Keep several projects moving.** Active tasks and approvals stay visible while you read another project's results.
 - **Read the proposed plan.** Plan-mode output appears as native Codex streams it; the final native plan remains readable in activity, original history, content recall and reviewed handoffs. It stays separate from your unsent Plan draft and native task checklist.
 - **Review this turn's changes.** The latest native cumulative diff appears in **Turn changes**. Read or copy its full patch without losing your position as output continues; actual completion, interruption or failure keeps the last reported diff until the next turn.
@@ -172,11 +175,11 @@ Choose Desk when you want to inspect existing Codex evidence and prepare the nex
 - **Prepare tomorrow's work.** Session-bound drafts and ordered follow-ups persist across page and server restarts. **Prepared work** reviews saved drafts, queued instructions and unconfirmed Run requests across projects without starting native work, including removed folders. Edit, remove, reorder or clear saved queued instructions locally while leaving today's task and draft in place. Choose **Review task request** to inspect the original captured instruction and target independently of your current draft. Explicitly append or replace draft text to reuse an instruction; save locally, then choose when to open and send it.
 - **Read the last task response.** Expand **Last native task outcome** and choose **Read task response** to read the exact displayed parent turn’s supplied final answer, or its last assistant message with the reported phase. Reading does not continue or send a task.
 - **Find the preparation you already saved.** In **Prepared work**, enter a remembered phrase and choose **Search**. Results identify the saved draft, follow-up, captured instruction or Run request in the current project/archive scope. Read its retained original evidence and return to the same preparation.
-- **Carry original evidence into the next task.** [Review an exact excerpt from A, append it to B's existing unsent draft, then return to that original occurrence](docs/evidence-preparation.md). The saved quote and native source reference travel with ordinary preparation text.
+- **Carry original evidence into the next task.** [Review an exact excerpt from A, append it to B's existing unsent draft, then return to that original occurrence](https://github.com/blucca/codex-desk/blob/main/docs/evidence-preparation.md). The saved quote and native source reference travel with ordinary preparation text.
 - **Review before changing provider.** Carry editable visible task evidence into a distinct target-provider conversation, preserving the original.
 - **Find a saved decision.** Search readable history and inspect the original answer before deciding whether to continue the task.
 
-[Workflow reference: search, profiles, follow-ups, handoffs and usage](docs/workbench.md)
+[Workflow reference: search, profiles, follow-ups, handoffs and usage](https://github.com/blucca/codex-desk/blob/main/docs/workbench.md)
 
 ## Local by design
 
@@ -207,9 +210,9 @@ python3 -m codex_desk.server
 python3 -m unittest discover -s tests
 ```
 
-Browser regressions use controlled local HTTP/SQLite, with no provider calls. See [the first-use test](tests/browser_home.py) and [installed daily-workflow CI](.github/workflows/daily-workbench.yml). [Native MCP fixture and result walkthrough](docs/native-mcp-example.md).
+Browser regressions use controlled local HTTP/SQLite, with no provider calls. See [the first-use test](https://github.com/blucca/codex-desk/blob/main/tests/browser_home.py) and [installed daily-workflow CI](https://github.com/blucca/codex-desk/blob/main/.github/workflows/daily-workbench.yml). [Native MCP fixture and result walkthrough](https://github.com/blucca/codex-desk/blob/main/docs/native-mcp-example.md).
 
-The [original keyboard regression](tests/browser_original_keyboard.py) exercises
+The [original keyboard regression](https://github.com/blucca/codex-desk/blob/main/tests/browser_original_keyboard.py) exercises
 Unicode Find, backward pointer excerpts, Tab/Enter evidence review, selected-task
 pages, and return to the original passage and the exact unsent Plan. The daily
 workflow runs this bounded acceptance in Firefox, Chromium and WebKit at desktop and
@@ -229,7 +232,7 @@ viewport for a focused reproduction. `--installed-root` and `--expect-version`
 pin the package environment and version; `--executable` selects an explicit
 browser binary. `--help` lists the equivalent `DESK_*` environment settings.
 
-The [portable sample task-reader check](examples/check_browser_preview_task_review.py)
+The [portable sample task-reader check](https://github.com/blucca/codex-desk/blob/main/examples/check_browser_preview_task_review.py)
 uses the same supplied-task and evidence fixture in Chromium, Firefox or WebKit.
 Build a sample with `examples/build_browser_preview.py`, then pass its directory
 as `--site` and select `--engine`. `--embedded` checks a real iframe; `--rich`

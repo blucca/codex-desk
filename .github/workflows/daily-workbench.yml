@@ -132,6 +132,23 @@ jobs:
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-agent" python installed-fixtures/examples/check_native_linked_agent.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-evidence" python installed-fixtures/examples/check_native_linked_evidence.py
           DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/linked-pointer-return" python installed-fixtures/examples/check_native_linked_pointer_return.py
+      - name: Check installed saved command and tool output quotes
+        working-directory: temp
+        env:
+          DESK_USE_INSTALLED: '1'
+        run: |
+          cp ../examples/check_native_command_quote.py ../examples/check_native_tool_quote.py installed-fixtures/examples/
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/command-output-quote" python installed-fixtures/examples/check_native_command_quote.py
+          for kind in mcpToolCall dynamicToolCall; do
+            DESK_TEST_TOOL_KIND="$kind" DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/tool-result-quote-$kind" python installed-fixtures/examples/check_native_tool_quote.py
+          done
+      - name: Check installed selected excerpt and source clipboard artifact
+        working-directory: temp
+        env:
+          DESK_USE_INSTALLED: '1'
+        run: |
+          cp ../examples/check_copy_excerpt_artifact.py installed-fixtures/examples/
+          DESK_TEST_EVIDENCE="$GITHUB_WORKSPACE/temp/evidence/copy-excerpt-artifact" python installed-fixtures/examples/check_copy_excerpt_artifact.py --source "$GITHUB_WORKSPACE" --evidence "$GITHUB_WORKSPACE/temp/evidence/copy-excerpt-artifact"
       - name: Check installed native ID and supplied instruction source navigation
         working-directory: temp
         env:

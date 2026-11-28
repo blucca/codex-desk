@@ -28,6 +28,11 @@ captured turn’s supplied native items, up to **20 items per page**. Commands,
 messages, file changes, MCP/tool results and unsupported items retain their
 native order and identity. Use **Next task evidence** to reach later items.
 
+If the supplied list contains only messages, **Read this task response** still
+reads that task’s answer. Use its reported decision when that is what you need;
+keep any present-day check that depends on an absent command/tool result.
+[First-task steps for message-only originals](find-past-answer.md#if-the-original-supplies-messages-but-no-command-result).
+
 Choose **Read full original item** to use the existing original renderer and
 long-text windows. **Copy full item text** includes the full projection rather
 than the visible window. **Copy source reference** retains the exact thread,
@@ -81,6 +86,10 @@ stays unavailable rather than choosing a neighbouring task’s same text.
 在任务上下文选择 **Read this task’s evidence**。列表仅包含所选 turn 的已提供原生
 条目，每页最多 **20 个**。命令、消息、文件改动、MCP/工具结果和不支持的条目都保持
 原生顺序及身份。**Next task evidence** 可以继续到后面的条目。
+
+如果列表只提供消息，**Read this task response** 仍可阅读该任务自己的回答。
+所需的是回答中已报告的决策时，可据此准备下一步；依赖未提供的命令／工具结果的检查
+继续保留在今天的任务中。[首次任务步骤](first-project.zh-CN.md#首次任务读出决策再检查该任务自己的结果)。
 
 选择 **Read full original item**，使用原有全文渲染和长文本窗口。
 **Copy full item text** 复制完整投影；**Copy source reference** 保留准确的 thread、

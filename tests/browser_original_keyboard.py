@@ -188,7 +188,9 @@ async def run_case(browser, width, scratch, evidence):
             await page.wait_for_function("$('evidence-preparation').open&&!$('evidence-preparation-append').disabled")
             reference = await page.evaluate('DeskEvidencePreparation.state().reference')
             assert reference['quote'] == QUOTE and reference['thread_id'] == SOURCE and reference['turn_id'] == TURN and reference['item_id'] == ITEM
-            assert (reference['quote_start'], reference['quote_end']) == (point, point + len(QUOTE))
+            output_point = command['aggregatedOutput'].index(QUOTE)
+            assert reference['projection'] == 'history-reader-command-output/v1'
+            assert (reference['quote_start'], reference['quote_end']) == (output_point, output_point + len(QUOTE))
             await page.locator('#evidence-preparation-cancel').click()
             await frames()
             await selected('keyboard-Review-Cancel-return')

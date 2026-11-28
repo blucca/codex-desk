@@ -80,6 +80,11 @@ class EvidenceReferenceTests(unittest.TestCase):
                     thread_id='thread-A', turn_id='turn-A', item_id='item-A',
                     quote_start=case['codepoint_start'], quote_end=case['codepoint_end'],
                     expected_quote=case['quote'], text_for_item=reader_text)
+                if case['name'] == 'native_command':
+                    self.assertEqual(reference['projection'], 'history-reader-command-output/v1')
+                    self.assertEqual(reference['quote_start'], case['thread']['turns'][0]['items'][0]['aggregatedOutput'].index(case['quote']))
+                    # Frozen v1 artifact remains a literal, independently supported contract.
+                    reference = case['reference']
                 self.assertEqual(reference, case['reference'])
                 self.assertEqual(format_evidence_block(reference), case['block'])
                 self.assertEqual(parse_evidence_blocks(case['draft']), case['parsed'])

@@ -55,7 +55,7 @@ assert.equal(saves.length,0);process.stdout.write(JSON.stringify({passed:true}))
         self.run_js(r'''
 tab();scroll=260;for(let i=0;i<7;i++)tab();await enter();const reference=controller.state().reference;
 assert.equal(reference.quote,quote);assert.equal(reference.thread_id,'native-A');assert.equal(reference.turn_id,'turn-A');assert.equal(reference.item_id,'item-A');
-assert.equal(reference.quote_start,Array.from(text.slice(0,start)).length);assert.equal(reference.quote_end,Array.from(text.slice(0,end)).length);
+const prefix=textFor({...row.item,aggregatedOutput:''});assert.equal(reference.projection,E.COMMAND_OUTPUT_PROJECTION);assert.equal(reference.quote_start,Array.from(text.slice(prefix.length,start)).length);assert.equal(reference.quote_end,Array.from(text.slice(prefix.length,end)).length);
 controller.cancel();assert.equal(restored.length,1);assert.deepEqual(restored[0].view.selection,selection);assert.equal(restored[0].view.scroll,120);assert.equal(restored[0].view.focus.index,7);assert.equal(restored[0].ticket,4);
 ''')
 

@@ -13,6 +13,7 @@ from check_browser_preview import static_server
 from check_browser_preview_links import open_app, reload_app, reset_app
 from check_browser_preview_session_reading import B, frames
 from check_browser_preview_following_original import VISIBLE
+from check_browser_preview_command_quote import saved_output_quote
 
 QUOTE='HEADER OUTPUT PASSAGE — café🙂 项目.'
 DRAFT='Keep B exact unsent Plan while inspecting original command output.'
@@ -137,6 +138,8 @@ async def check(p,site,evidence,width,chromium,embedded,rich):
             assert not await app.locator('#history-reader').evaluate('n=>n.open')
             assert not await app.evaluate("DeskBrowserPreview.requests.some(r=>['/api/native/thread','/api/native/evidence-source','/api/native/task-response'].includes(r.path.split('?')[0]))")
             assert await app.evaluate('DeskBrowserPreview.snapshot()')==expected
+            app,quote_receipt=await saved_output_quote(page,app,embedded,evidence,prefix)
+            report['checks'].extend(quote_receipt['checks']);report['saved_output_quote']=quote_receipt
             report.update(passed=True,unchanged_native_output=True,initial_histories=4,initial_items=15 if rich else 13,source_only_existing_item=True,native_admissions=0,auto_original_reads=0,metadata=metadata,editor=editor)
         except Exception as error:
             import traceback

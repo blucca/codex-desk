@@ -61,8 +61,9 @@ delete view.item_views[0].command_output_start;store.put(owner,view);assert(!Obj
   self.check(r'''
 const home='a'.repeat(64),thread={id:'source',turns:[{id:'native-turn',status:'inProgress',items:[command]}]},start=textFor(command).indexOf('Café');
 const reference=E.capture(thread,{native_home:home,thread_id:'source',turn_id:'native-turn',item_id:command.id,start_utf16:start,end_utf16:start+4,textFor:textFor});
-assert.equal(E.resolve(reference,home,thread,textFor).available,true);
-const result=E.resolve(reference,home,{...thread,turns:[{...thread.turns[0],items:[fresh]}]},textFor);
-assert.equal(result.available,false);assert.equal(reference.projection,'history-reader-text/v1');assert.equal(reference.quote,'Café');
+const legacy={...reference,projection:E.PROJECTION,quote_start:Array.from(textFor(command).slice(0,start)).length,quote_end:Array.from(textFor(command).slice(0,start+4)).length};
+assert.equal(E.resolve(legacy,home,thread,textFor).available,true);
+const result=E.resolve(legacy,home,{...thread,turns:[{...thread.turns[0],items:[fresh]}]},textFor);
+assert.equal(result.available,false);assert.equal(legacy.projection,'history-reader-text/v1');assert.equal(reference.quote,'Café');
 ''')
 if __name__=='__main__':unittest.main()

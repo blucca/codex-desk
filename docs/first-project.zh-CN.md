@@ -2,9 +2,9 @@
 
 记得答案中的一句话，却忘了会话标题？用已有的 Codex CLI 和登录，索引本机历史、查找文字并阅读原会话；准备好后再续接同一个任务。界面目前使用英文，下面保留实际按钮名称。
 
-[免安装交互示例](https://blucca.github.io/codex-desk/demo/)：在合成会话中查找 `retry budget`、阅读原文、保存 Plan 草稿，再刷新回来。示例准备保存在当前浏览器；使用自己的 Codex 历史时按下方安装。
+[免安装交互示例](https://blucca.github.io/codex-desk/demo/)：在合成结账会话中查找 `retry budget`、阅读准确的任务回答，再检查该任务自己的 `printf sample-checkout` 命令和已报告结果。继续会话、保存 Plan 草稿和刷新回来是可选步骤。示例准备保存在当前浏览器；使用自己的 Codex 历史时按下方安装。
 
-[20 秒示例：索引 → 查找答案 → 阅读原会话](find-answer.gif)（合成的结账项目历史）
+[20 秒首次任务示例：查找决策 → 阅读准确回答 → 检查该任务自己的命令结果](first-task.gif)（合成的结账项目历史）
 
 ## 1. 安装并启动
 
@@ -57,6 +57,20 @@ uvx --refresh --prerelease allow codex-desk@latest
 长会话每页最多显示 **40 个条目**（原生内容项或未产生内容项的回合结果），用 **Previous items**／**Next items** 换页；含无内容项回合时按钮为 **Previous entries**／**Next entries**。没有内容项的回合仍显示原生 ID、状态和已报告的错误信息，计数与原始内容项分开。长输出用 **Earlier text**／**Later text** 阅读其他文字窗口，每个窗口最多 **20,000 个字符**。原匹配项已变化时，查看器显示实际定位状态；读取失败用 **Retry read** 重试。
 
 **Find in this original conversation** 查找本次读取提供的全部可读文字，包括其他条目页和超出缓存前缀的长输出。输入文字后点 **Find**，用 **Previous match**／**Next match**，或查看器中的 Shift+F3／F3 跳转。**Copy full item text** 复制整个可读内容项，**Copy source reference** 复制会话及原生 thread／turn／item／项目目录标识。正文结果的 **Previous matches**／**Next matches** 可查看后续匹配页；从原文返回后保留当前结果页。
+
+### 首次任务：读出决策，再检查该任务自己的结果
+
+选择一个原本要重新调查的问题。读到匹配回答或工具条目后，用 **Read containing task**
+核对原指令，再用 **Read this task’s evidence** 查看这个任务实际提供的证据。
+如果提供了相关命令或工具结果，用 **Read full original item** 阅读，并和
+**Read this task response** 中的回答对照；**Copy full item text** 和
+**Copy source reference** 保留准确文字和来源。决定今天改变或省去哪项检查；读到所需的
+决策或结果即可完成这次任务，不必续接会话。
+
+如果原生原文只提供用户和助手消息，用 **Read this task response** 阅读自己的回答。
+回答中已有所需决策时，可以据此准备下一步；如果决定取决于未提供的命令或工具结果，
+先保留今天的那项检查，取得结果后再决定是否省去。
+[英文首次任务与仅消息原文流程](find-past-answer.md#first-task-read-the-decision-and-its-own-evidence)。
 
 ### 已知标题，或会话不在近期索引里
 

@@ -12,6 +12,8 @@ import unicodedata
 VERSION = 1
 OFFSET_UNIT = 'unicode_codepoints'
 PROJECTION = 'history-reader-text/v1'
+COMMAND_OUTPUT_PROJECTION = 'history-reader-command-output/v1'
+TOOL_RESULT_PROJECTION = 'history-reader-tool-result/v1'
 MAX_DRAFT_CHARS = 200_000
 MAX_QUOTE_CHARS = 8_000
 MAX_SAFE_OFFSET = 2**53 - 1
@@ -110,8 +112,12 @@ def _validate(reference):
         if _label(reference[field], limit) != reference[field]:
             raise ValueError('Use stripped readable source labels')
     quote = _scalar_text(reference['quote'], MAX_QUOTE_CHARS, 'original quote')
-    if reference['projection'] != PROJECTION or reference['offset_unit'] != OFFSET_UNIT:
+    if reference['projection'] not in (PROJECTION, COMMAND_OUTPUT_PROJECTION, TOOL_RESULT_PROJECTION) or reference['offset_unit'] != OFFSET_UNIT:
         raise ValueError('Use the original reader projection and Unicode code-point offsets')
+    if reference['projection'] == COMMAND_OUTPUT_PROJECTION and reference['source_kind'] != 'commandExecution':
+        raise ValueError('Use the command output projection only for a native command')
+    if reference['projection'] == TOOL_RESULT_PROJECTION and reference['source_kind'] not in ('mcpToolCall', 'dynamicToolCall'):
+        raise ValueError('Use the tool result projection only for supplied native tool results')
     start, end = reference['quote_start'], reference['quote_end']
     if (type(start) is not int or type(end) is not int or
             not 0 <= start < end <= MAX_SAFE_OFFSET or end - start != len(quote)):
@@ -119,8 +125,32 @@ def _validate(reference):
     return reference
 
 
+def _command_output_prefix(item, text_for_item, text):
+    output = item.get('aggregatedOutput')
+    if item.get('type') != 'commandExecution' or not isinstance(output, str):
+        return None
+    prefix = text_for_item({**item, 'aggregatedOutput': ''})
+    if isinstance(prefix, str) and prefix.startswith('Command\n') and text == prefix + output:
+        return prefix
+    return None
+
+
+def _tool_result_parts(item, parts_for_item, text):
+    # Segments must come from the caller's actual reader renderer, not a search
+    # through raw/sanitized JSON or a second approximate projection.
+    if item.get('type') not in ('mcpToolCall', 'dynamicToolCall') or parts_for_item is None:
+        return None
+    parts = parts_for_item(item)
+    if not isinstance(parts, dict) or any(not isinstance(parts.get(k), str) for k in ('prefix', 'result', 'suffix')):
+        return None
+    prefix, result, suffix = (parts[k] for k in ('prefix', 'result', 'suffix'))
+    if result and text == '\n'.join(part for part in (prefix, result, suffix) if part):
+        return prefix + ('\n' if prefix else ''), result
+    return None
+
+
 def capture_reference(thread, *, native_home, thread_id, turn_id, item_id,
-                      quote_start, quote_end, text_for_item, expected_quote=None):
+                      quote_start, quote_end, text_for_item, expected_quote=None, parts_for_item=None):
     """Capture one native original's exact item/quote without changing it."""
     _home(native_home)
     for field, value in (('thread_id', thread_id), ('turn_id', turn_id), ('item_id', item_id)):
@@ -135,11 +165,21 @@ def capture_reference(thread, *, native_home, thread_id, turn_id, item_id,
     quote = _slice_quote(text, quote_start, quote_end)
     if expected_quote is not None and (not isinstance(expected_quote, str) or quote != expected_quote):
         raise ValueError('The selected quote does not match this exact original span')
+    projection = PROJECTION
+    prefix = _command_output_prefix(item, text_for_item, text)
+    if prefix is not None and quote_start >= len(prefix):
+        quote_start, quote_end = quote_start - len(prefix), quote_end - len(prefix)
+        projection = COMMAND_OUTPUT_PROJECTION
+    else:
+        parts = _tool_result_parts(item, parts_for_item, text)
+        if parts is not None and quote_start >= len(parts[0]) and quote_end <= len(parts[0]) + len(parts[1]):
+            quote_start, quote_end = quote_start - len(parts[0]), quote_end - len(parts[0])
+            projection = TOOL_RESULT_PROJECTION
     return _validate({'version': VERSION, 'native_home': native_home,
         'thread_id': thread_id, 'turn_id': turn_id, 'item_id': item_id,
         'source_kind': kind, 'phase': _reported(item.get('phase')),
         'status': _reported(item.get('status')), 'turn_status': _reported(turn.get('status')),
-        'projection': PROJECTION, 'offset_unit': OFFSET_UNIT,
+        'projection': projection, 'offset_unit': OFFSET_UNIT,
         'quote_start': quote_start, 'quote_end': quote_end,
         'quote': quote, 'title': _label(thread.get('name') or thread.get('title') or thread.get('preview'), 240),
         'cwd': _label(thread.get('cwd'), 4096)})
@@ -259,7 +299,7 @@ def reference_target(reference, native_home):
     return {key: reference[key] for key in ('thread_id', 'turn_id', 'item_id')}
 
 
-def resolve_reference(reference, native_home, thread, *, text_for_item):
+def resolve_reference(reference, native_home, thread, *, text_for_item, parts_for_item=None):
     """Compare the same item's exact span in a supplied fresh original snapshot."""
     _validate(reference)
     _home(native_home)
@@ -277,6 +317,15 @@ def resolve_reference(reference, native_home, thread, *, text_for_item):
         text = text_for_item(item)
         if not isinstance(text, str):
             raise ValueError('The original projection did not return text')
+        if reference['projection'] == COMMAND_OUTPUT_PROJECTION:
+            if _command_output_prefix(item, text_for_item, text) is None:
+                return {**result, 'status': 'quote_unavailable'}
+            text = item['aggregatedOutput']
+        elif reference['projection'] == TOOL_RESULT_PROJECTION:
+            parts = _tool_result_parts(item, parts_for_item, text)
+            if parts is None:
+                return {**result, 'status': 'quote_unavailable'}
+            text = parts[1]
         quote = _slice_quote(text, reference['quote_start'], reference['quote_end'])
     except (ValueError, TypeError, KeyError):
         return {**result, 'status': 'quote_unavailable'}
@@ -287,4 +336,4 @@ def resolve_reference(reference, native_home, thread, *, text_for_item):
     return {**result, 'available': True, 'status': 'available', 'current': current,
         'state_changed': any(current[key] != reference[key] for key in current),
         'quote_start': reference['quote_start'], 'quote_end': reference['quote_end'],
-        'offset_unit': OFFSET_UNIT, 'projection': PROJECTION}
+        'offset_unit': OFFSET_UNIT, 'projection': reference['projection']}
